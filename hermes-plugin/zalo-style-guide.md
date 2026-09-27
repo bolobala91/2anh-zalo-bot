@@ -20,19 +20,24 @@ Giống thể thức công văn hành chính Việt Nam — người đọc quen
 
 ## Màu chữ: đỏ, xanh, cam — đúng chỗ, đúng ngữ cảnh
 
+**Tin có nội dung thông tin** — tóm tắt tài liệu, thông báo, hướng dẫn, giới thiệu tính năng, danh sách, kết quả rà soát — **phải có từ 2 đến 5 chỗ tô màu** ở những điểm người đọc cần bắt ngay: ngày giờ/hạn chót, số tiền/con số chính, trạng thái (đã xong/còn thiếu), điều kiện bắt buộc, lưu ý dễ sót, điểm mới nổi bật. Chỉ tin chào hỏi, cảm ơn, trả lời một câu ngắn là không cần màu.
+
 Tô màu cho **cụm từ ngắn thật sự quan trọng**, để người đọc lướt là bắt được ý:
 
 - **Đỏ** `[red]…[/red]`: cảnh báo, sai/cấm, lỗi, hạn chót, việc bắt buộc, số liệu xấu.
   Vd: "Nộp bài [red]trước 17h thứ Sáu 15/10[/red]", "[red]Không[/red] dùng điện thoại trong phòng thi".
 - **Xanh** `[xanh]…[/xanh]`: đúng/đạt, đã xong, được duyệt, kết quả tốt, đáp án đúng.
   Vd: "Chi đoàn 11 Hoá [xanh]đã nộp đủ hồ sơ[/xanh]", "Đáp án: [xanh]B[/xanh]".
-- **Cam** `[cam]…[/cam]`: lưu ý, đang chờ, cần kiểm tra lại, mẹo — quan trọng nhưng chưa tới mức cảnh báo.
-  Vd: "[cam]Lưu ý:[/cam] mang theo thẻ học sinh", "Danh sách lớp 10A2 [cam]còn thiếu 3 bạn[/cam]".
+- **Cam** `[cam]…[/cam]`: lưu ý, đang chờ, cần kiểm tra lại, mẹo, thông tin còn trống — quan trọng nhưng chưa tới mức cảnh báo.
+  Vd: "[cam]Lưu ý:[/cam] mang theo thẻ học sinh", "Danh sách lớp 10A2 [cam]còn thiếu 3 bạn[/cam]", "MST: [cam]đang để trống[/cam]".
+
+Ví dụ một bản tóm tắt đúng mức:
+"Tổng giá trị: [xanh]5.000.000 đồng[/xanh] — lập [red]7h00 ngày 28/09/2026[/red]. Mã số thuế bên nhận [cam]đang để trống[/cam], cần bổ sung trước khi ký."
 
 Quy tắc:
-- Chỉ tô vài chữ, **không tô cả câu hay cả đoạn**. Mỗi tin khoảng **tối đa 5 chỗ** có màu — màu dùng nhiều thì mất tác dụng, tin nhìn rối.
-- **Không vừa in đậm vừa tô màu cùng một cụm** — màu một mình đã đủ nổi, chồng hai định dạng tốn gấp đôi dung lượng tin.
-- Chuyện trò, chào hỏi ngắn thì không cần màu.
+- Chỉ tô vài chữ, **không tô cả câu hay cả đoạn**. Tối đa khoảng **5 chỗ mỗi tin** — nhiều hơn thì mất tác dụng, tin nhìn rối.
+- Chỗ nào đã tô màu thì **bỏ in đậm ở chính cụm đó** — màu một mình đã đủ nổi, chồng hai định dạng tốn gấp đôi dung lượng tin. In đậm để dành cho nhãn mục và tiêu đề.
+- Thẻ màu dùng được ở mọi chỗ, kể cả trong câu in nghiêng hay trong danh sách.
 - Vàng `[vang]` khó đọc trên nền sáng — hạn chế dùng.
 
 Lưu ý chính tả: viết đúng `[red]`/`[do]`, `[green]`/`[xanh]`, `[orange]`/`[cam]`, `[yellow]`/`[vang]` (không dấu). Gõ có dấu (`[đỏ]`, `[vàng]`) sẽ không được nhận diện — thẻ ngoặc vuông lọt nguyên văn ra tin nhắn thay vì đổi màu. Nhớ đóng thẻ (`[/red]`…).

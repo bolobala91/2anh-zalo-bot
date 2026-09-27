@@ -2,6 +2,21 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.14.2] — 2026-09-27
+
+### Sửa
+
+- **Thẻ màu trong câu in nghiêng lộ nguyên văn.** Phần trong `*…*` / `_…_` bị chép thẳng, không
+  dịch markup bên trong — tin thật ngày 27/9 hiện "[orange]Hải Phòng[/orange]" và cả dấu ` quanh
+  chữ. Nay in nghiêng dịch màu, `mã`, liên kết bên trong như in đậm.
+
+### Đổi
+
+- **Hướng dẫn màu chữ chuyển từ "hạn chế" sang "phải có ở đúng chỗ":** tin có nội dung thông tin
+  (tóm tắt, thông báo, hướng dẫn, giới thiệu, danh sách) phải có 2–5 chỗ tô màu ở hạn chót, con số
+  chính, trạng thái, điều kiện, lưu ý; kèm ví dụ một bản tóm tắt đúng mức. Chỗ đã tô màu thì bỏ in
+  đậm ở chính cụm đó.
+
 ## [1.14.1] — 2026-09-27
 
 ### Sửa

@@ -370,9 +370,14 @@ function renderInline(line, base) {
     // các tên biến kiểu snake_case hay phép nhân a*b
     const italic = rest.match(/^([*_])([^\s*_][^*_\n]*?)\1/);
     if (italic && isWordBoundary(line, i)) {
+      // Dịch cả markup bên trong (màu, `mã`, liên kết) như in đậm vẫn làm — trước
+      // đây phần trong nghiêng bị chép nguyên văn nên "[orange]Hải Phòng[/orange]"
+      // và dấu ` lộ thẳng ra tin nhắn.
+      const inner = renderInline(italic[2], base + out.length);
       const start = out.length;
-      out += italic[2];
-      push(start, italic[2].length, ITALIC);
+      out += inner.text;
+      styles.push(...inner.styles);
+      push(start, inner.text.length, ITALIC);
       i += italic[0].length;
       continue;
     }

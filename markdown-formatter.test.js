@@ -20,6 +20,20 @@ function assertWithinBudget(chunks) {
   }
 }
 
+test('màu chữ và `mã` bên trong đoạn in nghiêng vẫn được dịch, không lộ thẻ', () => {
+  // Câu thật Lăng Tiêu gửi ngày 27/9: thẻ màu và backtick nằm trong *…* bị lộ nguyên văn.
+  const input = '*(Giờ em mới hiểu vì sao ban nãy chị Yến nhắc để địa danh [orange]Hải Phòng[/orange] — do hệ thống ghi thống nhất là `thành phố Hải Phòng`).*';
+  const { msg, styles } = formatZaloMarkdown(input);
+  assert.equal(msg, '(Giờ em mới hiểu vì sao ban nãy chị Yến nhắc để địa danh Hải Phòng — do hệ thống ghi thống nhất là thành phố Hải Phòng).');
+  assert.ok(!/[\[\]`*]/.test(msg), `còn sót ký hiệu markup: ${msg}`);
+  const orange = styles.find((s) => s.st === 'c_f27806');
+  assert.ok(orange, 'phải có style màu cam');
+  assert.equal(msg.slice(orange.start, orange.start + orange.len), 'Hải Phòng');
+  const italic = styles.find((s) => s.st === 'i');
+  assert.equal(italic.start, 0);
+  assert.equal(italic.len, msg.length);
+});
+
 test('ngân sách byte giữ chỗ cho tag @Tên gắn sau khi cắt, kể cả khi có màu chữ', () => {
   // Tin sát trần: chữ có dấu + màu đỏ/xanh/cam + in đậm, kèm 12 tag người.
   const line = (n) => `@Thành viên ${n} ơi, [red]hạn chót 15/10[/red] nộp **bài dự thi** và [xanh]đã duyệt[/xanh], [cam]lưu ý đọc kỹ thể lệ[/cam].`;
