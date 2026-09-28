@@ -10,6 +10,7 @@ import { pickSmartReaction } from './smart-reaction.js';
 import { RateLimiter, RateLimitedError, THROTTLED_METHODS } from './rate-limiter.js';
 import { openZaloStore } from './zalo-store.js';
 import { authorizeBridgeCommand } from './zalo-policy.js';
+import { readWelcomeConfig, updateWelcomeGroup } from './zalo-welcome.js';
 
 /**
  * Cầu nối Zalo ↔ Hermes Agent.
@@ -682,7 +683,7 @@ function rememberOutboundResult(result, threadId, threadType, content = '', msgT
   return true;
 }
 
-export async function sendSystemNotice({ api, threadId, threadType, text }) {
+export async function sendSystemNotice({ api, threadId, threadType, text, mentions = null }) {
   if (!activeStore) throw new Error('Zalo store is not ready');
   const requestId = `system-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   activeStore.beginAudit({
@@ -697,7 +698,16 @@ export async function sendSystemNotice({ api, threadId, threadType, text }) {
     targetSummary: { commandType: 'system_notice', threadId: String(threadId), threadType: Number(threadType) },
   });
   try {
-    const result = await api.sendMessage({ msg: String(text) }, String(threadId), threadType);
+    const content = { msg: String(text) };
+    if (mentions?.length) content.mentions = mentions;
+    let result;
+    try {
+      result = await api.sendMessage(content, String(threadId), threadType);
+    } catch (err) {
+      // Như tin thường: Zalo từ chối tag (có mã lỗi số) thì gửi lại chữ thường.
+      if (!content.mentions || !/^-?d+$/.test(String(err?.code ?? ''))) throw err;
+      result = await api.sendMessage({ msg: content.msg }, String(threadId), threadType);
+    }
     rememberOutboundResult(result, threadId, threadType, text);
     activeStore.finishAudit(requestId, 'succeeded');
     activeHealth?.markOutbound();
@@ -918,6 +928,22 @@ async function handleCommand(ws, cmd) {
       if (cmd.reqId) {
         send(ws, { type: 'ack', reqId: cmd.reqId, ok: true, result: { count: page.messages.length, ...page } });
       }
+      break;
+    }
+
+    case 'welcome_config': {
+      // Cấu hình chào thành viên mới (zalo-welcome.js). Chỉ chủ bot — xem zalo-policy.js.
+      let result;
+      try {
+        result = cmd.action === 'set'
+          ? updateWelcomeGroup(String(cmd.groupId || ''), cmd.patch || {})
+          : readWelcomeConfig().groups;
+      } catch (err) {
+        finishAudit('failed', 'invalid_welcome_config');
+        if (cmd.reqId) send(ws, { type: 'ack', reqId: cmd.reqId, ok: false, error: String(err?.message || err) });
+        break;
+      }
+      if (cmd.reqId) send(ws, { type: 'ack', reqId: cmd.reqId, ok: true, result });
       break;
     }
 

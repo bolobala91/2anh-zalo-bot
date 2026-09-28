@@ -38,7 +38,7 @@ function fakeHealth() {
   };
 }
 
-const LISTENER_EVENTS = ['message', 'error', 'connected', 'disconnected', 'closed'];
+const LISTENER_EVENTS = ['message', 'group_event', 'error', 'connected', 'disconnected', 'closed'];
 
 test('listener cleanup detaches handlers and stops exactly once', () => {
   const listener = new FakeListener();

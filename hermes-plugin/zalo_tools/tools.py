@@ -817,6 +817,30 @@ async def zalo_list_groups(args: Dict[str, Any], **_kw) -> str:
     return _ok({"count": len(groups), "groups": groups})
 
 
+async def zalo_group_welcome(args: Dict[str, Any], **_kw) -> str:
+    """Bật/tắt/sửa lời chào thành viên mới của một nhóm, hoặc xem cấu hình.
+
+    Sidecar tự gom người mới theo đợt và gửi một tin tag tất cả — xem
+    zalo-welcome.js. Ở đây chỉ chuyển cấu hình xuống.
+    """
+    adapter = _ACTIVE_ADAPTER
+    if adapter is None:
+        return _err("Zalo chưa kết nối")
+    group_id = str(args.get("group_id") or "").strip()
+    if not group_id:
+        ack = await adapter.welcome_config("get")
+    else:
+        fields = {"enabled": "enabled", "message": "message", "group_name": "name",
+                  "batch_size": "batchSize", "max_wait_minutes": "maxWaitMinutes"}
+        patch = {dst: args[src] for src, dst in fields.items() if args.get(src) is not None}
+        if not patch:
+            return _err("cần ít nhất một thay đổi (enabled, message, batch_size, max_wait_minutes)")
+        ack = await adapter.welcome_config("set", group_id, patch)
+    if not ack or not ack.get("ok"):
+        return _err((ack or {}).get("error", "sidecar không nhận cấu hình chào"))
+    return _ok(ack.get("result"))
+
+
 async def zalo_group_members(args: Dict[str, Any], **_kw) -> str:
     # getGroupMembersInfo của zca-js nhận ID THÀNH VIÊN, không nhận ID nhóm —
     # truyền ID nhóm vào là luôn ra rỗng. Sidecar lo cả hai bước qua lệnh
@@ -2638,6 +2662,24 @@ TOOLS = [
         "Liệt kê các nhóm Zalo mà tài khoản này đang tham gia.",
         {}, [],
     ), zalo_list_groups, TOOLSET_OWNER),
+
+    ("zalo_group_welcome", "👋", _schema(
+        "zalo_group_welcome",
+        "Bật, sửa hoặc tắt lời chào tự động khi có thành viên mới vào một nhóm. Sidecar gom người "
+        "mới theo đợt: đủ batch_size người thì gửi MỘT tin tag tên tất cả họ rồi kèm lời chào; chưa "
+        "đủ thì sau max_wait_minutes vẫn gửi cho những người đã vào. Tin chào là chữ cố định, bot "
+        "không tự viết thêm. Tìm group_id bằng zalo_list_groups. Bỏ trống group_id để xem cấu hình "
+        "hiện có của mọi nhóm.",
+        {
+            "group_id": {"type": "string", "description": "ID nhóm (từ zalo_list_groups). Bỏ trống để xem cấu hình."},
+            "enabled": {"type": "boolean", "description": "Bật (true) hoặc tắt (false)."},
+            "message": {"type": "string", "description": "Lời chào/lời nhắc đặt sau dòng tag tên. Không cần tự viết @tên."},
+            "group_name": {"type": "string", "description": "Tên nhóm, để ghi nhớ cho dễ đọc."},
+            "batch_size": {"type": "integer", "description": "Gom bao nhiêu người mới thì gửi một lần (1–20, mặc định 5)."},
+            "max_wait_minutes": {"type": "integer", "description": "Chờ tối đa bao nhiêu phút nếu chưa đủ người (mặc định 15)."},
+        },
+        [],
+    ), zalo_group_welcome, TOOLSET_OWNER),
 
     ("zalo_group_members", "🧑‍🤝‍🧑", _schema(
         "zalo_group_members",

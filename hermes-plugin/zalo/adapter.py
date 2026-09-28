@@ -1906,6 +1906,17 @@ class ZaloAdapter(BasePlatformAdapter):
             command["cursor"] = str(cursor)
         return await self._command(command, expect_ack=True)
 
+    async def welcome_config(
+        self, action: str, group_id: Optional[str] = None, patch: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Xem (``get``) hoặc sửa (``set``) cấu hình chào thành viên mới ở sidecar."""
+        command: Dict[str, Any] = {"type": "welcome_config", "action": action}
+        if group_id:
+            command["groupId"] = str(group_id)
+        if patch:
+            command["patch"] = patch
+        return await self._command(command, expect_ack=True)
+
     async def group_members(self, chat_id: str) -> Optional[Dict[str, Any]]:
         return await self._command(
             {"type": "group_members", "threadId": str(chat_id), "threadType": THREAD_TYPE_GROUP},

@@ -71,6 +71,7 @@ function classify(command) {
   // Đọc cả một khoảng thời gian (có thể hàng nghìn tin) chỉ dành cho chủ nhân.
   if (command.type === 'history_range') return { minimumRole: 'owner', category: 'read', dangerous: false };
   if (command.type === 'undo') return { minimumRole: 'owner', category: 'undo', dangerous: true };
+  if (command.type === 'welcome_config') return { minimumRole: 'owner', category: 'admin', dangerous: false };
   if (command.type !== 'invoke') return null;
 
   const method = String(command.method || '');

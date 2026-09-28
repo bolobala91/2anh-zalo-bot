@@ -1801,7 +1801,7 @@ class ZaloToolSchemaTest(unittest.TestCase):
             zalo_tools.TOOLSET_PUBLIC, zalo_tools.TOOLSET_OWNER, zalo_tools.TOOLSET_CRON,
         })
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_PUBLIC), 20)
-        self.assertEqual(assignments.count(zalo_tools.TOOLSET_OWNER), 34)
+        self.assertEqual(assignments.count(zalo_tools.TOOLSET_OWNER), 35)
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_CRON), 1)
 
     def test_zalo_ids_remain_strings_through_hermes_argument_coercion(self):
@@ -1958,6 +1958,31 @@ class ZaloToolContractTest(unittest.IsolatedAsyncioTestCase):
             zalo_tools._TURN.reset(token)
         self.assertTrue(json.loads(response)["success"], response)
         self.assertEqual(fake.calls, ["group-1"])
+
+    async def test_group_welcome_maps_fields_and_reads_config_without_group(self):
+        class FakeAdapter:
+            def __init__(self):
+                self.calls = []
+
+            async def welcome_config(self, action, group_id=None, patch=None):
+                self.calls.append((action, group_id, patch))
+                return {"ok": True, "result": {"enabled": True}}
+
+        fake = FakeAdapter()
+        zalo_tools._ACTIVE_ADAPTER = fake
+        response = await zalo_tools.zalo_group_welcome({
+            "group_id": "1893515820840681584", "enabled": True, "message": "Điểm danh nhé",
+            "batch_size": 5, "max_wait_minutes": 15, "group_name": "Vũ Đài",
+        })
+        self.assertTrue(json.loads(response)["success"], response)
+        await zalo_tools.zalo_group_welcome({})
+        missing = json.loads(await zalo_tools.zalo_group_welcome({"group_id": "1"}))
+        self.assertFalse(missing["success"])
+        self.assertEqual(fake.calls, [
+            ("set", "1893515820840681584", {"enabled": True, "message": "Điểm danh nhé", "name": "Vũ Đài",
+                                            "batchSize": 5, "maxWaitMinutes": 15}),
+            ("get", None, None),
+        ])
 
     async def test_fb_publish_can_schedule_a_post(self):
         from plugins.zalo_tools import facebook as zalo_fb

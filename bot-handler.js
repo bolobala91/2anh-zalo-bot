@@ -4,6 +4,7 @@ import {
 } from './hermes-bridge.js';
 import { ThreadType } from 'zca-js';
 import { createStickerDirectory, enrichSticker } from './zalo-stickers.js';
+import { createWelcomer } from './zalo-welcome.js';
 
 /**
  * Định tuyến tin nhắn Zalo sang Hermes Agent.
@@ -70,6 +71,19 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
     });
   };
 
+  // Chào thành viên mới ở các nhóm chủ bot đã bật (data/welcome.json).
+  const welcomer = createWelcomer({
+    selfUid,
+    send: (groupId, text, mentions) => sendSystemNotice({
+      api, threadId: groupId, threadType: ThreadType.Group, text, mentions,
+    }),
+  });
+  const onGroupEvent = (event) => {
+    try { welcomer.onGroupEvent(event); } catch (err) {
+      console.error('[bot] lỗi khi xử lý sự kiện nhóm:', err?.message || err);
+    }
+  };
+
   const onError = (err) => {
     console.error('[bot] listener error:', err?.message || err);
   };
@@ -95,6 +109,7 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
 
   const handlers = [
     ['message', onMessage],
+    ['group_event', onGroupEvent],
     ['error', onError],
     ['connected', onConnected],
     ['disconnected', onDisconnected],
@@ -133,6 +148,7 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
     stopped = true;
     clearTimeout(restartTimer);
     restartTimer = null;
+    welcomer.stop();
     for (const [event, handler] of handlers) api.listener.off?.(event, handler);
     health?.setListenerState(null);
     try { api.listener.stop?.(); } catch (err) {

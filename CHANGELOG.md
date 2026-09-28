@@ -2,6 +2,17 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.15.0] — 2026-09-28
+
+### Thêm
+
+- **Chào thành viên mới theo đợt, có tag tên.** Sidecar nghe sự kiện vào nhóm và, ở những nhóm
+  chủ bot đã bật, gom người mới lại: đủ `batchSize` người (mặc định 5) thì gửi một tin tag tên tất
+  cả kèm lời chào; chưa đủ thì sau `maxWaitMinutes` (mặc định 15) vẫn gửi cho những người đã vào.
+  Lời chào là chữ cố định chủ bot duyệt, không qua LLM. Cấu hình lưu ở `data/welcome.json`
+  (đổi chỗ bằng `ZALO_WELCOME_FILE`), sửa qua công cụ chỉ chủ nhân `zalo_group_welcome` — lệnh
+  bridge `welcome_config` cũng chỉ nhận vai chủ nhân. Zalo từ chối tag thì gửi lại chữ thường.
+
 ## [1.14.2] — 2026-09-27
 
 ### Sửa

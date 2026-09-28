@@ -132,3 +132,13 @@ test('đọc cả khoảng thời gian chỉ dành cho chủ nhân', () => {
     { allowed: true, role: 'owner', code: 'allowed', category: 'read' },
   );
 });
+
+test('cấu hình chào thành viên mới chỉ dành cho chủ nhân', () => {
+  const command = { type: 'welcome_config', action: 'set', groupId: '123', patch: { enabled: false } };
+  assert.equal(authorizeBridgeCommand({ ...command, auth: publicAuth }, policyOptions).code, 'owner_required');
+  assert.equal(authorizeBridgeCommand({ ...command, auth: { actorRole: 'system' } }, policyOptions).code, 'auth_required');
+  assert.deepEqual(
+    authorizeBridgeCommand({ ...command, auth: ownerAuth }, policyOptions),
+    { allowed: true, role: 'owner', code: 'allowed', category: 'admin' },
+  );
+});
