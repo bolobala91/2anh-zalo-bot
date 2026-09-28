@@ -3,6 +3,18 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'url';
 import { Zalo } from 'zca-js';
+import { imageMetadataGetter } from './image-metadata.js';
+
+/**
+ * Options chung cho mọi `new Zalo(...)`.
+ *
+ * zca-js bắt buộc có hàm đọc metadata ảnh (width/height/size) khi gửi ảnh;
+ * thiếu nó thì gửi ảnh nổ ZaloApiMissingImageMetadataGetter trước khi kịp
+ * gọi API Zalo.
+ */
+export function zaloOptions(extra = {}) {
+  return { logging: false, selfListen: true, imageMetadataGetter, ...extra };
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SESSION_FILE = join(__dirname, 'data', 'session.json');
@@ -90,7 +102,7 @@ export async function tryReconnect() {
   if (!data?.credentials?.cookie) return null;
 
   console.log('[auth] đang kết nối lại bằng phiên đã lưu...');
-  const zalo = new Zalo({ logging: false, selfListen: true });
+  const zalo = new Zalo(zaloOptions());
   try {
     const api = await zalo.login({
       cookie: data.credentials.cookie,

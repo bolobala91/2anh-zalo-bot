@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.15.2] — 2026-09-29
+
+### Sửa
+
+- **Bot không gửi được ảnh.** zca-js bắt buộc có `imageMetadataGetter` trong options của
+  `new Zalo(...)`; sidecar chưa truyền nên mọi lần gửi ảnh nổ `ZaloApiMissingImageMetadataGetter`
+  trước khi kịp gọi Zalo. Thêm `image-metadata.js` đọc kích thước PNG/JPEG/GIF/BMP/WebP từ header
+  (không thêm dependency), truyền vào qua `zaloOptions()` ở cả đăng nhập QR lẫn kết nối lại.
+
 ## [1.15.1] — 2026-09-28
 
 ### Sửa

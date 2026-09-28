@@ -7,7 +7,7 @@ import { mkdirSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { loadEnvFile } from 'node:process';
 import { loadRepoEnv, loadHermesEnv } from './scripts/setup-env.js';
 import { Zalo, LoginQRCallbackEventType } from 'zca-js';
-import { tryReconnect, saveSession, clearSession, fetchProfile } from './auth.js';
+import { tryReconnect, saveSession, clearSession, fetchProfile, zaloOptions } from './auth.js';
 import { setupBotListener } from './bot-handler.js';
 import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached } from './hermes-bridge.js';
 import { openZaloStore } from './zalo-store.js';
@@ -148,7 +148,7 @@ app.post('/api/qr/start', async (req, res) => {
 
   try {
     const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0';
-    zalo = new Zalo({ logging: false, selfListen: true });
+    zalo = new Zalo(zaloOptions());
     
     // Bắt sự kiện GotLoginInfo để lưu credentials chuẩn xác
     let capturedCredentials = null;
