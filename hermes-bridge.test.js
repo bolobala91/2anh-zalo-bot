@@ -1074,6 +1074,33 @@ test('Hermes-unavailable system notice is audited outside the WebSocket command 
   }
 });
 
+test('lời chào có tag bị Zalo từ chối (mã số) thì gửi lại chữ thường, lỗi mạng thì không', async (t) => {
+  const store = testStore(t);
+  const calls = [];
+  let failures = [Object.assign(new Error('Lỗi không xác định'), { code: -1 })];
+  const api = {
+    sendMessage: (...args) => {
+      calls.push(args);
+      const err = failures.shift();
+      return err ? Promise.reject(err) : Promise.resolve({ message: { msgId: `w-${calls.length}` } });
+    },
+  };
+  const server = startHermesBridge({ api, profile: { user_id: 'bot' }, port: 0, store });
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const mentions = [{ pos: 0, len: 3, uid: 'u1' }];
+    await sendSystemNotice({ api, threadId: 'g1', threadType: 1, text: '@An chào', mentions });
+    assert.deepEqual(calls.map(([content]) => content), [{ msg: '@An chào', mentions }, { msg: '@An chào' }]);
+
+    calls.length = 0;
+    failures = [new Error('ECONNRESET')];
+    await assert.rejects(sendSystemNotice({ api, threadId: 'g1', threadType: 1, text: '@An', mentions }));
+    assert.equal(calls.length, 1);
+  } finally {
+    stopHermesBridge();
+  }
+});
+
 test('tin sticker đã tra nhãn đi sang Hermes thành chữ kèm ảnh nhãn dán', async (t) => {
   const server = startHermesBridge({ api: {}, profile: { user_id: 'bot-uid' }, port: 0, store: testStore(t) });
   await new Promise((resolve) => server.once('listening', resolve));

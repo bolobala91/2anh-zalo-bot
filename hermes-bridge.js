@@ -705,7 +705,7 @@ export async function sendSystemNotice({ api, threadId, threadType, text, mentio
       result = await api.sendMessage(content, String(threadId), threadType);
     } catch (err) {
       // Như tin thường: Zalo từ chối tag (có mã lỗi số) thì gửi lại chữ thường.
-      if (!content.mentions || !/^-?d+$/.test(String(err?.code ?? ''))) throw err;
+      if (!content.mentions || !/^-?\d+$/.test(String(err?.code ?? ''))) throw err;
       result = await api.sendMessage({ msg: content.msg }, String(threadId), threadType);
     }
     rememberOutboundResult(result, threadId, threadType, text);

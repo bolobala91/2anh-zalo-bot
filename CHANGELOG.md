@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.15.1] — 2026-09-28
+
+### Sửa
+
+- **Lời chào có tag bị Zalo từ chối không được gửi lại dạng chữ thường.** Biểu thức kiểm mã lỗi
+  trong `sendSystemNotice` thiếu dấu `\` (`/^-?d+$/`) nên không bao giờ khớp mã số của Zalo.
+
 ## [1.15.0] — 2026-09-28
 
 ### Thêm
