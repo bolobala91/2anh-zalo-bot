@@ -1,10 +1,11 @@
 import {
   isHermesAttached, forwardToHermes, extractMediaUrls, extractText, rememberZaloMessage,
-  sendSystemNotice,
+  sendSystemNotice, acquireSendQuota,
 } from './hermes-bridge.js';
 import { ThreadType } from 'zca-js';
 import { createStickerDirectory, enrichSticker } from './zalo-stickers.js';
 import { createWelcomer } from './zalo-welcome.js';
+import { createFriendManager, friendToolsEnabled, setActiveFriendManager } from './zalo-friends.js';
 
 /**
  * Định tuyến tin nhắn Zalo sang Hermes Agent.
@@ -84,6 +85,23 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
     }
   };
 
+  // Kết bạn theo lệnh chủ bot, kết bạn xong thì tạo nhóm (ZALO_FRIEND_TOOLS).
+  const friends = friendToolsEnabled() ? createFriendManager({
+    api,
+    selfUid,
+    ownerUids,
+    acquire: () => acquireSendQuota(),
+    notify: (threadId, threadType, text) => sendSystemNotice({ api, threadId, threadType, text }),
+  }) : null;
+  setActiveFriendManager(friends);
+  // Ai đồng ý trong lúc sidecar tắt thì bắt ngay, không đợi 10 phút.
+  friends?.poll().catch((err) => console.error('[bot] lỗi khi kiểm tra kế hoạch kết bạn:', err?.message || err));
+  const onFriendEvent = (event) => {
+    friends?.onFriendEvent(event).catch((err) => {
+      console.error('[bot] lỗi khi xử lý sự kiện kết bạn:', err?.message || err);
+    });
+  };
+
   const onError = (err) => {
     console.error('[bot] listener error:', err?.message || err);
   };
@@ -110,6 +128,7 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
   const handlers = [
     ['message', onMessage],
     ['group_event', onGroupEvent],
+    ['friend_event', onFriendEvent],
     ['error', onError],
     ['connected', onConnected],
     ['disconnected', onDisconnected],
@@ -149,6 +168,8 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
     clearTimeout(restartTimer);
     restartTimer = null;
     welcomer.stop();
+    friends?.stop();
+    setActiveFriendManager(null);
     for (const [event, handler] of handlers) api.listener.off?.(event, handler);
     health?.setListenerState(null);
     try { api.listener.stop?.(); } catch (err) {

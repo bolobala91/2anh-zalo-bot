@@ -1917,6 +1917,15 @@ class ZaloAdapter(BasePlatformAdapter):
             command["patch"] = patch
         return await self._command(command, expect_ack=True)
 
+    async def friend_group(
+        self, action: str, *, confirmed: bool = False, **fields: Any,
+    ) -> Optional[Dict[str, Any]]:
+        """Kết bạn rồi tạo nhóm (``create`` / ``list`` / ``cancel``) — xem zalo-friends.js."""
+        return await self._command(
+            {"type": "friend_group", "action": action, "_confirmed": confirmed, **fields},
+            expect_ack=True,
+        )
+
     async def group_members(self, chat_id: str) -> Optional[Dict[str, Any]]:
         return await self._command(
             {"type": "group_members", "threadId": str(chat_id), "threadType": THREAD_TYPE_GROUP},

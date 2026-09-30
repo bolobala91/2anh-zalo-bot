@@ -11,6 +11,9 @@ import { RateLimiter, RateLimitedError, THROTTLED_METHODS } from './rate-limiter
 import { openZaloStore } from './zalo-store.js';
 import { authorizeBridgeCommand } from './zalo-policy.js';
 import { readWelcomeConfig, updateWelcomeGroup } from './zalo-welcome.js';
+import { friendToolsEnabled, getActiveFriendManager } from './zalo-friends.js';
+
+const FRIEND_TOOLS_OFF = 'Tính năng kết bạn đang tắt — bật ZALO_FRIEND_TOOLS=true trong .env của Hermes';
 
 /**
  * Cầu nối Zalo ↔ Hermes Agent.
@@ -144,7 +147,12 @@ const ALLOWED_METHODS = new Set([
   'setPinnedConversations', 'setMute',
   // Lịch sự
   'sendSeenEvent', 'sendTypingEvent', 'addReaction',
+  // Kết bạn — chỉ chạy khi bật ZALO_FRIEND_TOOLS (xem FRIEND_METHODS)
+  'sendFriendRequest', 'acceptFriendRequest',
 ]);
+
+/** Hàm kết bạn: gửi hàng loạt dễ bị Zalo khoá tính năng, nên mặc định đóng. */
+const FRIEND_METHODS = new Set(['sendFriendRequest', 'acceptFriendRequest']);
 
 /**
  * Nhịp gửi mặc định: bắn liền tối đa 5 tin, sau đó giãn về 20 tin/phút.
@@ -683,6 +691,24 @@ function rememberOutboundResult(result, threadId, threadType, content = '', msgT
   return true;
 }
 
+/**
+ * Xin một lượt gửi mức thường cho việc sidecar tự làm ngoài lệnh cầu nối
+ * (lời mời kết bạn, tạo/thêm nhóm của zalo-friends.js) — để không có đường
+ * vòng nào lách qua bộ giới hạn nhịp. Chờ tới khi có lượt thay vì báo lỗi.
+ */
+export async function acquireSendQuota() {
+  for (;;) {
+    if (!limiter) return;
+    try {
+      await limiter.acquire('normal');
+      return;
+    } catch (err) {
+      if (!(err instanceof RateLimitedError)) throw err;
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
+  }
+}
+
 export async function sendSystemNotice({ api, threadId, threadType, text, mentions = null }) {
   if (!activeStore) throw new Error('Zalo store is not ready');
   const requestId = `system-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -802,6 +828,13 @@ async function handleCommand(ws, cmd) {
   }
 
   const threadType = cmd.threadType === 1 ? ThreadType.Group : ThreadType.User;
+
+  // Công tắc kết bạn kiểm trước khi trừ lượt gửi: lệnh bị tắt không được ăn hạn mức.
+  if (cmd.type === 'invoke' && FRIEND_METHODS.has(String(cmd.method || '')) && !friendToolsEnabled()) {
+    finishAudit('failed', 'friend_tools_disabled');
+    if (cmd.reqId) send(ws, { type: 'ack', reqId: cmd.reqId, ok: false, error: FRIEND_TOOLS_OFF });
+    return;
+  }
 
   // Giãn nhịp trước khi gửi bất cứ thứ gì người khác nhìn thấy được.
   //
@@ -940,6 +973,37 @@ async function handleCommand(ws, cmd) {
           : readWelcomeConfig().groups;
       } catch (err) {
         finishAudit('failed', 'invalid_welcome_config');
+        if (cmd.reqId) send(ws, { type: 'ack', reqId: cmd.reqId, ok: false, error: String(err?.message || err) });
+        break;
+      }
+      if (cmd.reqId) send(ws, { type: 'ack', reqId: cmd.reqId, ok: true, result });
+      break;
+    }
+
+    case 'friend_group': {
+      // Kết bạn rồi tạo nhóm (zalo-friends.js). Chỉ chủ bot — xem zalo-policy.js.
+      const manager = getActiveFriendManager();
+      let result;
+      try {
+        if (!friendToolsEnabled()) throw new Error(FRIEND_TOOLS_OFF);
+        if (!manager) throw new Error('Bộ quản lý kết bạn chưa sẵn sàng (Zalo chưa kết nối)');
+        if (cmd.action === 'create') {
+          result = await manager.startPlan({
+            memberIds: Array.isArray(cmd.memberIds) ? cmd.memberIds : [],
+            memberNames: Array.isArray(cmd.memberNames) ? cmd.memberNames : [],
+            name: cmd.name,
+            message: cmd.message,
+            ownerUid: String(cmd.auth?.actorUid || ''),
+            threadId: String(cmd.auth?.sourceThreadId || ''),
+            threadType: Number(cmd.auth?.sourceThreadType) === 1 ? 1 : 0,
+          });
+        } else if (cmd.action === 'cancel') {
+          result = await manager.cancelPlan(String(cmd.planId || ''));
+        } else {
+          result = manager.listPlans({ includeClosed: Boolean(cmd.includeClosed) });
+        }
+      } catch (err) {
+        finishAudit('failed', 'friend_group_failed');
         if (cmd.reqId) send(ws, { type: 'ack', reqId: cmd.reqId, ok: false, error: String(err?.message || err) });
         break;
       }

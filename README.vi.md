@@ -80,6 +80,7 @@ Trước đây *có* một bộ não Node dự phòng gọi thẳng LLM. Đã b�
 | Riêng của Zalo | `zalo_create_poll` `zalo_poll_detail` `zalo_lock_poll` `zalo_create_note` `zalo_create_reminder` `zalo_list_reminders` `zalo_remove_reminder` `zalo_pin_conversation` `zalo_mute` `zalo_group_welcome` |
 | Sửa sai & quản trị | `zalo_undo` `zalo_rename_group` `zalo_group_member_change` `zalo_group_deputy` `zalo_pending_members` `zalo_review_member` |
 | Lập nhóm & lời mời | `zalo_create_group` `zalo_invite_to_groups` `zalo_group_link` `zalo_join_group_link` |
+| Kết bạn (chỉ khi bật `ZALO_FRIEND_TOOLS`) | `zalo_send_friend_request` `zalo_accept_friend_request` `zalo_friend_group` |
 | Hồ sơ bot | `zalo_set_bio` `zalo_set_active_status` |
 | Kho tài liệu | `zalo_kb_list` `zalo_kb_read` |
 | Tra cứu Internet | `zalo_web_search` `zalo_web_read` (cả Google Docs/Sheets/Slides công khai) `zalo_academic_search` (PubMed, Crossref, trích dẫn) |
@@ -89,7 +90,7 @@ Trước đây *có* một bộ não Node dự phòng gọi thẳng LLM. Đã b�
 
 Ví dụ: *"Tạo bình chọn trong nhóm Tổ Hoá hỏi thứ mấy họp được, ba phương án thứ 3, 5, 7"* — agent tự gọi `zalo_list_groups` rồi `zalo_create_poll`.
 
-Cầu nối chỉ chấp nhận các hàm zca-js nằm trong **danh sách trắng**. Những hàm dễ làm khoá tài khoản (gửi lời mời kết bạn hàng loạt, chặn người, giải tán nhóm) hay chạm tới tiền bạc cố tình bị bỏ ra ngoài.
+Cầu nối chỉ chấp nhận các hàm zca-js nằm trong **danh sách trắng**. Những hàm dễ làm khoá tài khoản (chặn người, giải tán nhóm) hay chạm tới tiền bạc cố tình bị bỏ ra ngoài. Gửi/đồng ý kết bạn có trong danh sách nhưng **mặc định đóng** — xem [Kết bạn rồi lập nhóm](#kết-bạn-rồi-lập-nhóm).
 
 ### Hai mức quyền
 
@@ -122,6 +123,16 @@ Ai trong nhóm cũng nhờ bot hẹn giờ được: *"7h sáng thứ Hai hằng
 - Ai trong nhóm cũng xem được danh sách; chỉ **người tạo hoặc chủ nhân** được xoá.
 
 Cron chủ nhân tạo bằng công cụ cron gốc của Hermes vẫn giữ nguyên quyền chủ nhân với công cụ Zalo khi job gửi kết quả về Zalo, và nay gửi được vào mọi nhóm.
+
+### Kết bạn rồi lập nhóm
+
+Tắt sẵn. Bật bằng `ZALO_FRIEND_TOOLS=true` trong `.env` của Hermes rồi khởi động lại sidecar và gateway. Chỉ chủ nhân dùng được, nhắn riêng hay trong nhóm đều được.
+
+- *"Gửi kết bạn cho anh Minh"* — `zalo_send_friend_request`.
+- *"Gửi kết bạn cho Minh, Lan, Hùng rồi lập nhóm Dự án X"* — `zalo_friend_group`. Zalo không cho kéo người chưa là bạn vào nhóm, nên sidecar giữ kế hoạch lại (`data/friend-groups.json`, đổi chỗ bằng `ZALO_FRIEND_PLANS_FILE`): **người đầu tiên đồng ý** thì tạo nhóm ngay gồm người đó và chủ nhân, ai đồng ý sau được thêm vào nhóm. Kết quả báo lại đúng cuộc trò chuyện đã ra lệnh. Người đã là bạn sẵn tính là đồng ý ngay; ai từ chối thì báo; kế hoạch tự hết hạn sau 30 ngày. Sidecar nghe sự kiện kết bạn của Zalo và cứ 10 phút hỏi lại một lần, phòng lúc sidecar tắt đúng khi người ta bấm đồng ý.
+- **Người lạ tự gửi lời mời cho bot thì bot không đồng ý** — chỉ nhắn riêng báo chủ nhân (mỗi người tối đa một lần trong 12 giờ). Chủ nhân muốn nhận thì bảo bot, bot gọi `zalo_accept_friend_request`.
+
+Lời mời gửi cách nhau, đi chung hạn mức với tin nhắn và lời mời vào nhóm — gửi dồn là cách nhanh nhất để Zalo khoá tính năng kết bạn của tài khoản. Bật `ZALO_CONFIRM_DANGEROUS` thì lập kế hoạch cũng cần mã xác nhận như tạo nhóm.
 
 ### Tra cứu Internet
 
@@ -367,6 +378,7 @@ Sidecar không còn tệp cấu hình nào. Ai được dùng bot, trả lời k
 | Ai là chủ nhân | `ZALO_ALLOWED_USERS` trong `.env` của Hermes |
 | Ai được nhắn riêng | `ZALO_DM_POLICY` |
 | Trong nhóm chỉ trả lời khi được tag | `ZALO_GROUP_REPLY_ONLY_TAGGED` |
+| Bật công cụ kết bạn (mặc định tắt) | `ZALO_FRIEND_TOOLS` |
 | Tính cách | `platform_hints.zalo.append` trong `config.yaml` |
 | Công cụ mỗi mức quyền được dùng | `known_plugin_toolsets.zalo` + `toolsets_for_source()` |
 

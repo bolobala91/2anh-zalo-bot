@@ -1251,3 +1251,54 @@ test('history_range đọc cả khoảng thời gian từ kho, lật trang khôn
     stopHermesBridge();
   }
 });
+
+test('kết bạn qua cầu nối chỉ chạy khi bật ZALO_FRIEND_TOOLS; friend_group chuyển xuống bộ quản lý kế hoạch', async (t) => {
+  const { setActiveFriendManager } = await import('./zalo-friends.js');
+  const requests = [];
+  const plans = [];
+  const api = { sendFriendRequest: async (msg, uid) => { requests.push([msg, uid]); return ''; } };
+  setActiveFriendManager({
+    startPlan: async (options) => { plans.push(options); return { id: 'fg-1', ...options }; },
+    listPlans: () => plans,
+    cancelPlan: (id) => ({ id, closed: true }),
+  });
+  const server = startHermesBridge({ api, profile: { user_id: 'bot' }, port: 0, store: testStore(t), ownerUids: ['owner'] });
+  await new Promise((resolve) => server.once('listening', resolve));
+  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}`);
+  t.after(() => { ws.close(); stopHermesBridge(); setActiveFriendManager(null); delete process.env.ZALO_FRIEND_TOOLS; });
+  const hello = onceMessage(ws, (msg) => msg.type === 'hello');
+  await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+  await hello;
+
+  const call = async (frame) => {
+    const ack = onceMessage(ws, (msg) => msg.type === 'ack' && msg.reqId === frame.reqId);
+    ws.send(JSON.stringify(frame));
+    return ack;
+  };
+
+  delete process.env.ZALO_FRIEND_TOOLS;
+  const off = await call({ type: 'invoke', reqId: 'fr-off', method: 'sendFriendRequest', args: ['Chào', '123'], auth: auth('g', 1) });
+  assert.equal(off.ok, false);
+  assert.match(off.error, /ZALO_FRIEND_TOOLS/);
+  const planOff = await call({ type: 'friend_group', reqId: 'fg-off', action: 'list', auth: auth('g', 1) });
+  assert.equal(planOff.ok, false);
+  assert.equal(requests.length, 0);
+
+  process.env.ZALO_FRIEND_TOOLS = 'true';
+  const on = await call({ type: 'invoke', reqId: 'fr-on', method: 'sendFriendRequest', args: ['Chào', '123'], auth: auth('g', 1) });
+  assert.equal(on.ok, true, on.error);
+  assert.deepEqual(requests, [['Chào', '123']]);
+
+  const created = await call({
+    type: 'friend_group', reqId: 'fg-create', action: 'create', memberIds: ['1', '2'], memberNames: ['An'],
+    name: 'Nhóm X', message: 'Chào bạn', auth: auth('g-origin', 1, { confirmed: true }),
+  });
+  assert.equal(created.ok, true, created.error);
+  assert.deepEqual(plans[0], {
+    memberIds: ['1', '2'], memberNames: ['An'], name: 'Nhóm X', message: 'Chào bạn',
+    ownerUid: 'owner', threadId: 'g-origin', threadType: 1,
+  });
+
+  const stranger = await call({ type: 'friend_group', reqId: 'fg-public', action: 'list', auth: auth('g', 1, { actorUid: 'someone' }) });
+  assert.equal(stranger.ok, false);
+});

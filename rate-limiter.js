@@ -143,5 +143,5 @@ export const THROTTLED_METHODS = new Set([
   'createPoll', 'createNote', 'createReminder',
   // Mời và thêm người hàng loạt là con đường dẫn tới khoá tài khoản không kém
   // gì nhắn tin hàng loạt.
-  'addUserToGroup', 'inviteUserToGroups',
+  'addUserToGroup', 'inviteUserToGroups', 'sendFriendRequest',
 ]);

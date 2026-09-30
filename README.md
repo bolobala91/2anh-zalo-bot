@@ -170,6 +170,7 @@ The installer also ships a default message style guide (`hermes-plugin/zalo-styl
 | Zalo-specific | `zalo_create_poll` `zalo_poll_detail` `zalo_lock_poll` `zalo_create_note` `zalo_create_reminder` `zalo_list_reminders` `zalo_remove_reminder` `zalo_pin_conversation` `zalo_mute` `zalo_group_welcome` |
 | Fix mistakes & administration | `zalo_undo` `zalo_rename_group` `zalo_group_member_change` `zalo_group_deputy` `zalo_pending_members` `zalo_review_member` |
 | Create groups & invites | `zalo_create_group` `zalo_invite_to_groups` `zalo_group_link` `zalo_join_group_link` |
+| Friends (only with `ZALO_FRIEND_TOOLS=true`) | `zalo_send_friend_request` `zalo_accept_friend_request` `zalo_friend_group` |
 | Bot profile | `zalo_set_bio` `zalo_set_active_status` |
 | Knowledge base | `zalo_kb_list` `zalo_kb_read` |
 | Web lookup | `zalo_web_search` `zalo_web_read` (incl. public Google Docs/Sheets/Slides) `zalo_academic_search` (PubMed, Crossref, citations) |
@@ -177,7 +178,9 @@ The installer also ships a default message style guide (`hermes-plugin/zalo-styl
 | People notebook | `zalo_remember_person` `zalo_recall_person` `zalo_list_people` `zalo_forget_person` |
 | Group cron jobs | `zalo_group_cron` `zalo_group_history` |
 
-The bridge accepts only allowlisted `zca-js` operations. High-risk automation such as bulk friend requests, blocking users, dissolving groups, or money-related operations is deliberately excluded.
+The bridge accepts only allowlisted `zca-js` operations. High-risk automation such as blocking users, dissolving groups, or money-related operations is deliberately excluded.
+
+Friend tools are off by default. With `ZALO_FRIEND_TOOLS=true` the owner can send or accept a friend request, or run `zalo_friend_group`: the sidecar sends the requests, and as soon as the **first** person accepts it creates the group with that person and the owner, adding later accepters to it and reporting back to the chat the command came from (plans live in `data/friend-groups.json`, expire after 30 days, and are re-checked every 10 minutes in case an event was missed). Friend requests that strangers send to the bot are never accepted automatically; the owner gets a direct message instead.
 
 ### Group cron jobs
 

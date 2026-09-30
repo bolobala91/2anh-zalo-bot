@@ -841,6 +841,46 @@ async def zalo_group_welcome(args: Dict[str, Any], **_kw) -> str:
     return _ok(ack.get("result"))
 
 
+async def zalo_friend_group(args: Dict[str, Any], **_kw) -> str:
+    """Kết bạn rồi tạo nhóm: lập, xem hoặc huỷ kế hoạch.
+
+    Sidecar gửi lời mời, chờ người được mời đồng ý rồi tự tạo nhóm / thêm
+    người và báo lại đúng cuộc trò chuyện đã ra lệnh — xem zalo-friends.js.
+    """
+    adapter = _ACTIVE_ADAPTER
+    if adapter is None:
+        return _err("Zalo chưa kết nối")
+    action = str(args.get("action") or "list").lower()
+    if action == "create":
+        # Ghép tên với UID trước khi lọc phần tử rỗng, để tên không lệch sang người khác.
+        ids = list(args.get("member_ids") or [])
+        names = list(args.get("member_names") or [])
+        pairs = [(str(m).strip(), str(names[i]) if i < len(names) else "")
+                 for i, m in enumerate(ids) if str(m).strip()]
+        if not pairs:
+            return _err("cần `member_ids` — ít nhất một người để kết bạn")
+        fields: Dict[str, Any] = {
+            "memberIds": [uid for uid, _name in pairs],
+            "memberNames": [name for _uid, name in pairs],
+            "name": str(args.get("group_name") or "").strip(),
+            "message": str(args.get("message") or "").strip(),
+        }
+    elif action == "cancel":
+        plan_id = str(args.get("plan_id") or "").strip()
+        if not plan_id:
+            return _err("cần `plan_id` (xem bằng action=list)")
+        fields = {"planId": plan_id}
+    elif action == "list":
+        fields = {"includeClosed": True} if args.get("include_closed") else {}
+    else:
+        return _err("action phải là create, list hoặc cancel")
+    # Sidecar kiểm lại xác nhận cho action=create như với createGroup.
+    ack = await adapter.friend_group(action, confirmed=bool(_CONFIRMED.get()), **fields)
+    if not ack or not ack.get("ok"):
+        return _err((ack or {}).get("error", "sidecar không nhận lệnh kết bạn rồi tạo nhóm"))
+    return _ok(ack.get("result"))
+
+
 async def zalo_group_members(args: Dict[str, Any], **_kw) -> str:
     # getGroupMembersInfo của zca-js nhận ID THÀNH VIÊN, không nhận ID nhóm —
     # truyền ID nhóm vào là luôn ra rỗng. Sidecar lo cả hai bước qua lệnh
@@ -876,6 +916,22 @@ async def zalo_user_info(args: Dict[str, Any], **_kw) -> str:
 
 async def zalo_list_friends(args: Dict[str, Any], **_kw) -> str:
     return await _invoke("getAllFriends", [])
+
+
+async def zalo_send_friend_request(args: Dict[str, Any], **_kw) -> str:
+    user_id = str(args.get("user_id") or "").strip()
+    if not user_id:
+        return _err("cần `user_id`")
+    msg = str(args.get("msg") or "Xin chào, mình kết bạn nhé!").strip()
+    # zca-js: sendFriendRequest(msg, userId) — lời nhắn đứng trước.
+    return await _invoke("sendFriendRequest", [msg, user_id])
+
+
+async def zalo_accept_friend_request(args: Dict[str, Any], **_kw) -> str:
+    user_id = str(args.get("user_id") or "").strip()
+    if not user_id:
+        return _err("cần `user_id`")
+    return await _invoke("acceptFriendRequest", [user_id])
 
 
 # =====================================================================
@@ -2681,6 +2737,25 @@ TOOLS = [
         [],
     ), zalo_group_welcome, TOOLSET_OWNER),
 
+    ("zalo_friend_group", "🧩", _schema(
+        "zalo_friend_group",
+        "Kết bạn rồi tạo nhóm. action=create: gửi lời mời kết bạn cho member_ids; người ĐẦU TIÊN "
+        "đồng ý thì sidecar tự tạo nhóm group_name gồm người đó và chủ nhân, ai đồng ý sau được thêm "
+        "vào nhóm; kết quả được báo lại chính cuộc trò chuyện này (không cần hẹn giờ kiểm tra). "
+        "Người đã là bạn sẵn được tính là đồng ý ngay. action=list: xem các kế hoạch đang chờ. "
+        "action=cancel: huỷ một kế hoạch theo plan_id. Kế hoạch tự hết hạn sau 30 ngày.",
+        {
+            "action": {"type": "string", "enum": ["create", "list", "cancel"], "description": "Mặc định list."},
+            "member_ids": {"type": "array", "items": _ZALO_ID, "description": "UID những người cần kết bạn và đưa vào nhóm."},
+            "member_names": {"type": "array", "items": {"type": "string"}, "description": "Tên hiển thị, cùng thứ tự member_ids — dùng trong thông báo."},
+            "group_name": {"type": "string", "description": "Tên nhóm sẽ tạo."},
+            "message": {"type": "string", "description": "Lời nhắn kèm lời mời kết bạn."},
+            "plan_id": {"type": "string", "description": "Mã kế hoạch khi huỷ."},
+            "include_closed": {"type": "boolean", "description": "list: xem cả kế hoạch đã xong/huỷ."},
+        },
+        [],
+    ), zalo_friend_group, TOOLSET_OWNER),
+
     ("zalo_group_members", "🧑‍🤝‍🧑", _schema(
         "zalo_group_members",
         "Xem danh sách thành viên một nhóm, kèm tên hiển thị.",
@@ -2710,6 +2785,25 @@ TOOLS = [
         "Liệt kê danh bạ bạn bè Zalo.",
         {}, [],
     ), zalo_list_friends, TOOLSET_OWNER),
+
+    ("zalo_send_friend_request", "🤝", _schema(
+        "zalo_send_friend_request",
+        "Gửi lời mời kết bạn tới một người dùng Zalo theo UID (tìm UID bằng zalo_find_user hoặc "
+        "zalo_group_members). Muốn kết bạn XONG rồi lập nhóm với họ thì dùng zalo_friend_group.",
+        {
+            "user_id": _ZALO_ID,
+            "msg": {"type": "string", "description": "Lời nhắn kèm lời mời (mặc định: Xin chào, mình kết bạn nhé!)."},
+        },
+        ["user_id"],
+    ), zalo_send_friend_request, TOOLSET_OWNER),
+
+    ("zalo_accept_friend_request", "🫱", _schema(
+        "zalo_accept_friend_request",
+        "Đồng ý lời mời kết bạn mà một người đã gửi tới bot. Bot không bao giờ tự đồng ý — "
+        "chỉ gọi khi chủ nhân bảo nhận người đó.",
+        {"user_id": _ZALO_ID},
+        ["user_id"],
+    ), zalo_accept_friend_request, TOOLSET_OWNER),
 
     # --- Nhóm 3: tính năng riêng của Zalo ---
     ("zalo_create_poll", "🗳️", _schema(
@@ -3111,8 +3205,16 @@ DANGEROUS_TOOL_NAMES = frozenset({
     "zalo_rename_group", "zalo_group_member_change", "zalo_group_deputy",
     "zalo_review_member", "zalo_create_group", "zalo_invite_to_groups",
     "zalo_group_link", "zalo_join_group_link", "zalo_set_bio",
-    "zalo_set_active_status",
+    "zalo_set_active_status", "zalo_friend_group",
 })
+
+# Kết bạn: gửi hàng loạt dễ bị Zalo khoá tính năng, nên chỉ đăng ký khi chủ bot
+# bật ZALO_FRIEND_TOOLS=true (sidecar cũng kiểm lại công tắc này).
+FRIEND_TOOL_NAMES = frozenset({"zalo_send_friend_request", "zalo_accept_friend_request", "zalo_friend_group"})
+
+
+def _friend_tools_enabled() -> bool:
+    return str(os.getenv("ZALO_FRIEND_TOOLS") or "").strip().lower() in {"1", "true", "yes", "on"}
 
 _CONFIRM_SCHEMA = {
     "type": "string",
@@ -3144,6 +3246,9 @@ DM_ONLY_TOOLS = frozenset({"zalo_fb_draft", "zalo_fb_publish"})
 def _confirmation_required(tool_name: str, args: Dict[str, Any]) -> bool:
     if tool_name == "zalo_group_link":
         return str(args.get("action") or "detail").lower() in {"enable", "disable"}
+    if tool_name == "zalo_friend_group":
+        # Chỉ lập kế hoạch mới dẫn tới tạo nhóm; xem/huỷ thì không.
+        return str(args.get("action") or "list").lower() == "create"
     return tool_name in DANGEROUS_TOOL_NAMES
 
 
@@ -3480,7 +3585,10 @@ def define_cron_member_toolset() -> None:
 def register_tools(ctx) -> None:
     """Đăng ký công cụ Zalo, chia làm hai mức quyền."""
     counts = {TOOLSET_PUBLIC: 0, TOOLSET_OWNER: 0, TOOLSET_CRON: 0}
+    friend_tools = _friend_tools_enabled()
     for name, emoji, schema, handler, toolset in TOOLS:
+        if name in FRIEND_TOOL_NAMES and not friend_tools:
+            continue
         guarded = handler
         if toolset == TOOLSET_OWNER:
             guarded = _owner_only(

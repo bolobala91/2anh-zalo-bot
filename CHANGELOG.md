@@ -2,6 +2,27 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.16.0] — 2026-09-30
+
+### Thêm
+
+- **Kết bạn theo lệnh chủ bot, và "kết bạn xong thì lập nhóm".** Ba công cụ chỉ chủ nhân, nằm sau
+  công tắc `ZALO_FRIEND_TOOLS` (mặc định tắt): `zalo_send_friend_request`,
+  `zalo_accept_friend_request` và `zalo_friend_group`. Với `zalo_friend_group`, sidecar
+  (`zalo-friends.js`) gửi lời mời rồi giữ kế hoạch ở `data/friend-groups.json`: người đầu tiên đồng
+  ý thì tạo nhóm ngay gồm người đó và chủ nhân, ai đồng ý sau được thêm vào, kết quả báo lại đúng
+  cuộc trò chuyện đã ra lệnh. Nghe sự kiện `friend_event` của zca-js và cứ 10 phút hỏi lại
+  `getFriendRequestStatus`; kế hoạch hết hạn sau 30 ngày. Lập kế hoạch cần mã xác nhận khi bật
+  `ZALO_CONFIRM_DANGEROUS`.
+- **Lời mời kết bạn người lạ gửi tới bot không bao giờ tự đồng ý** — khi bật công tắc, bot nhắn riêng
+  báo chủ nhân (mỗi người một lần trong 12 giờ).
+
+### Đổi
+
+- Lời mời kết bạn, tạo nhóm và thêm người của kế hoạch đều xin lượt từ bộ giới hạn nhịp như lệnh
+  thường (`acquireSendQuota`); lệnh kết bạn bị tắt không trừ hạn mức. Kế hoạch được lưu trước rồi
+  gửi lời mời nền, nên danh sách dài không làm quá hạn ack và bị lập lại; kế hoạch trùng bị từ chối.
+
 ## [1.15.2] — 2026-09-29
 
 ### Sửa

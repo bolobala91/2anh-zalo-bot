@@ -133,6 +133,21 @@ test('đọc cả khoảng thời gian chỉ dành cho chủ nhân', () => {
   );
 });
 
+test('kết bạn và kế hoạch kết bạn rồi tạo nhóm chỉ dành cho chủ nhân', () => {
+  const commands = [
+    { type: 'friend_group', action: 'create', memberIds: ['1'] },
+    { type: 'invoke', method: 'sendFriendRequest', args: ['Chào', '1'] },
+    { type: 'invoke', method: 'acceptFriendRequest', args: ['1'] },
+  ];
+  for (const command of commands) {
+    assert.equal(authorizeBridgeCommand({ ...command, auth: publicAuth }, policyOptions).code, 'owner_required');
+    assert.equal(authorizeBridgeCommand({ ...command, auth: { ...ownerAuth, confirmed: true } }, policyOptions).allowed, true);
+  }
+  // Lập kế hoạch dẫn tới tạo nhóm nên cần xác nhận như createGroup; xem danh sách thì không.
+  assert.equal(authorizeBridgeCommand({ ...commands[0], auth: ownerAuth }, policyOptions).allowed, false);
+  assert.equal(authorizeBridgeCommand({ type: 'friend_group', action: 'list', auth: ownerAuth }, policyOptions).allowed, true);
+});
+
 test('cấu hình chào thành viên mới chỉ dành cho chủ nhân', () => {
   const command = { type: 'welcome_config', action: 'set', groupId: '123', patch: { enabled: false } };
   assert.equal(authorizeBridgeCommand({ ...command, auth: publicAuth }, policyOptions).code, 'owner_required');

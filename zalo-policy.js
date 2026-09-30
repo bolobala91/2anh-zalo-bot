@@ -23,6 +23,8 @@ const OWNER_SIDE_EFFECT_METHODS = new Set([
   'reviewPendingMemberRequest', 'enableGroupLink', 'disableGroupLink',
   'createGroup', 'inviteUserToGroups', 'joinGroupLink', 'updateProfileBio',
   'updateActiveStatus',
+  // Chỉ mở khi ZALO_FRIEND_TOOLS bật — cầu nối kiểm công tắc.
+  'sendFriendRequest', 'acceptFriendRequest',
 ]);
 
 const DANGEROUS_METHODS = new Set([
@@ -72,6 +74,11 @@ function classify(command) {
   if (command.type === 'history_range') return { minimumRole: 'owner', category: 'read', dangerous: false };
   if (command.type === 'undo') return { minimumRole: 'owner', category: 'undo', dangerous: true };
   if (command.type === 'welcome_config') return { minimumRole: 'owner', category: 'admin', dangerous: false };
+  // Kết bạn rồi tạo nhóm (zalo-friends.js): chủ bot duyệt lúc ra lệnh, sidecar tự tạo nhóm sau.
+  // Lập kế hoạch dẫn tới gửi lời mời và tạo nhóm, nên cần xác nhận như createGroup; xem/huỷ thì không.
+  if (command.type === 'friend_group') {
+    return { minimumRole: 'owner', category: 'admin', dangerous: command.action === 'create' };
+  }
   if (command.type !== 'invoke') return null;
 
   const method = String(command.method || '');

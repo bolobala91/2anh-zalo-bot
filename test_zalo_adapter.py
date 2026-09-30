@@ -1801,7 +1801,7 @@ class ZaloToolSchemaTest(unittest.TestCase):
             zalo_tools.TOOLSET_PUBLIC, zalo_tools.TOOLSET_OWNER, zalo_tools.TOOLSET_CRON,
         })
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_PUBLIC), 20)
-        self.assertEqual(assignments.count(zalo_tools.TOOLSET_OWNER), 35)
+        self.assertEqual(assignments.count(zalo_tools.TOOLSET_OWNER), 38)
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_CRON), 1)
 
     def test_zalo_ids_remain_strings_through_hermes_argument_coercion(self):
@@ -3103,6 +3103,91 @@ class ZaloKbScopeTest(unittest.IsolatedAsyncioTestCase):
         zalo_tools._KB_CACHE.update(root=None, at=0.0, files=None, skipped=0)
         with patch.dict(os.environ, {"ZALO_KB_PUBLIC_DIRS": ""}):
             self.assertEqual(len(self.paths(await zalo_tools.zalo_kb_list({}))), 3)
+
+
+class ZaloFriendToolsTest(unittest.IsolatedAsyncioTestCase):
+    FRIEND_TOOLS = {"zalo_send_friend_request", "zalo_accept_friend_request", "zalo_friend_group"}
+
+    def tearDown(self):
+        zalo_tools._ACTIVE_ADAPTER = None
+
+    def test_friend_tools_are_owner_only_and_registered_only_when_enabled(self):
+        toolsets = {name: toolset for name, _e, _s, _h, toolset in zalo_tools.TOOLS}
+        for name in self.FRIEND_TOOLS:
+            self.assertEqual(toolsets[name], zalo_tools.TOOLSET_OWNER)
+
+        with patch.dict(os.environ, {"ZALO_FRIEND_TOOLS": ""}):
+            ctx = FakeToolContext()
+            zalo_tools.register_tools(ctx)
+            self.assertFalse(self.FRIEND_TOOLS & set(ctx.handlers))
+        with patch.dict(os.environ, {"ZALO_FRIEND_TOOLS": "true"}):
+            ctx = FakeToolContext()
+            zalo_tools.register_tools(ctx)
+            self.assertEqual(self.FRIEND_TOOLS & set(ctx.handlers), self.FRIEND_TOOLS)
+
+    def test_only_creating_a_friend_group_plan_needs_a_confirmation_code(self):
+        self.assertTrue(zalo_tools._confirmation_required("zalo_friend_group", {"action": "create"}))
+        self.assertFalse(zalo_tools._confirmation_required("zalo_friend_group", {"action": "list"}))
+        self.assertFalse(zalo_tools._confirmation_required("zalo_friend_group", {}))
+
+    async def test_send_and_accept_friend_request_pass_string_ids_in_zca_order(self):
+        class FakeAdapter:
+            def __init__(self):
+                self.calls = []
+
+            async def invoke(self, method, args):
+                self.calls.append((method, args))
+                return {"ok": True, "result": ""}
+
+        fake = FakeAdapter()
+        zalo_tools._ACTIVE_ADAPTER = fake
+        await zalo_tools.zalo_send_friend_request({"user_id": 1234567890123456789, "msg": "Chào anh"})
+        await zalo_tools.zalo_send_friend_request({"user_id": "1234567890123456789"})
+        await zalo_tools.zalo_accept_friend_request({"user_id": 1234567890123456789})
+        missing = json.loads(await zalo_tools.zalo_send_friend_request({}))
+
+        self.assertFalse(missing["success"])
+        self.assertEqual(fake.calls, [
+            ("sendFriendRequest", ["Chào anh", "1234567890123456789"]),
+            ("sendFriendRequest", ["Xin chào, mình kết bạn nhé!", "1234567890123456789"]),
+            ("acceptFriendRequest", ["1234567890123456789"]),
+        ])
+
+    async def test_friend_group_maps_actions_to_the_sidecar_command(self):
+        class FakeAdapter:
+            def __init__(self):
+                self.calls = []
+
+            async def friend_group(self, action, *, confirmed=False, **fields):
+                self.calls.append((action, fields))
+                self.confirmed = confirmed
+                return {"ok": True, "result": {"id": "fg-1"}}
+
+        fake = FakeAdapter()
+        zalo_tools._ACTIVE_ADAPTER = fake
+        token = zalo_tools._CONFIRMED.set(True)
+        try:
+            created = await zalo_tools.zalo_friend_group({
+                "action": "create", "member_ids": [1234567890123456789, "", "222"],
+                "member_names": ["An", "Không ai", "Bình"], "group_name": "Nhóm X", "message": "Chào bạn",
+            })
+        finally:
+            zalo_tools._CONFIRMED.reset(token)
+        self.assertTrue(fake.confirmed, "cờ xác nhận phải được chuyển xuống sidecar")
+        await zalo_tools.zalo_friend_group({})
+        await zalo_tools.zalo_friend_group({"action": "cancel", "plan_id": "fg-1"})
+        empty = json.loads(await zalo_tools.zalo_friend_group({"action": "create", "member_ids": []}))
+        no_plan = json.loads(await zalo_tools.zalo_friend_group({"action": "cancel"}))
+
+        self.assertTrue(json.loads(created)["success"], created)
+        self.assertFalse(empty["success"])
+        self.assertFalse(no_plan["success"])
+        self.assertEqual(fake.calls, [
+            ("create", {"memberIds": ["1234567890123456789", "222"], "memberNames": ["An", "Bình"],
+                        "name": "Nhóm X", "message": "Chào bạn"}),
+            ("list", {}),
+            ("cancel", {"planId": "fg-1"}),
+        ])
 
 
 if __name__ == "__main__":
