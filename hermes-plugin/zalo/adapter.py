@@ -96,6 +96,7 @@ from plugins.zalo_tools.tools import TOOLSET_OWNER, TOOLSET_PUBLIC
 from .flood import JUST_MUTED as FLOOD_JUST_MUTED
 from .flood import MUTED as FLOOD_MUTED
 from .flood import FloodGuard
+from . import model_command as _model_command
 
 
 def _transcode_to_m4a(audio_path: str) -> Optional[str]:
@@ -548,6 +549,14 @@ class ZaloAdapter(BasePlatformAdapter):
         if isinstance(owner_only, (list, tuple, set)):
             owner_only = ",".join(str(gid) for gid in owner_only)
         self._owner_only_groups = set(_split_ids(str(owner_only or "")))
+        # Lệnh /model của chủ nhân: danh sách chọn nhanh và model để /model default quay về.
+        choices = extra.get("model_choices", _get_scoped_secret("ZALO_MODEL_CHOICES", ""))
+        if isinstance(choices, (list, tuple)):
+            choices = ",".join(str(model) for model in choices)
+        self._model_choices: List[str] = _model_command.split_choices(str(choices or ""))
+        self._model_default: str = str(
+            extra.get("model_default", _get_scoped_secret("ZALO_MODEL_DEFAULT", "")) or ""
+        ).strip()
         # (chat, tệp, cỡ, giờ sửa) -> (lúc gửi, kết quả), chặn một đoạn thoại đi hai lần.
         self._sent_voices: Dict[tuple, tuple] = {}
         # Mỗi hội thoại một khoá riêng: tin trong cùng một chat vẫn xử lý lần
@@ -870,6 +879,27 @@ class ZaloAdapter(BasePlatformAdapter):
         }
         self._remember_turn(turn)
         _zalo_tools().set_turn_context(**turn)
+
+        # /model đổi model cho cả bot nên chỉ chủ nhân dùng được. Plugin tự trả
+        # lời và không chuyển tiếp, để lệnh /model gốc của Hermes (đổi theo phiên)
+        # không bao giờ chạy từ Zalo — kể cả khi người lạ trong nhóm gõ.
+        model_args = _model_command.parse(turn["text"])
+        if model_args is not None:
+            if not turn["is_owner"]:
+                logger.info("[zalo] bỏ qua /model từ %s (%s) — không phải chủ nhân",
+                            sender_name, sender_uid)
+                return
+            from hermes_constants import get_hermes_home
+            reply = await asyncio.to_thread(
+                _model_command.handle,
+                model_args,
+                config_path=get_hermes_home() / "config.yaml",
+                choices=self._model_choices,
+                default=self._model_default,
+            )
+            await self.send(thread_id, reply,
+                            metadata={"chat_type": "group" if is_group else "dm"})
+            return
 
         # Chặn nhắn dồn dập. Đặt sau cổng kiểm quyền (chỉ đếm tin thật sự
         # dành cho bot) nhưng TRƯỚC cả thả cảm xúc lẫn gọi mô hình — người

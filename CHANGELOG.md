@@ -2,6 +2,22 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.17.0] — 2026-10-05
+
+### Thêm
+
+- **Lệnh `/model` cho chủ nhân, gõ ngay trong Zalo.** `/model` cho xem model đang dùng; `/model list`
+  hiện danh sách chọn nhanh (`ZALO_MODEL_CHOICES`), `/model list all` hoặc `/model list <chữ>` lấy từ
+  `<base_url>/models`; `/model <tên>` đổi model, `/model default` quay về `ZALO_MODEL_DEFAULT`.
+  Lệnh đổi model cho cả bot bằng cách chỉ sửa dòng `model.default` trong `config.yaml`, giữ nguyên
+  chú thích. Gateway tự đọc lại config, nên mọi nhóm chạy model mới từ tin tiếp theo. Tên model
+  không có trên endpoint, hoặc endpoint không trả lời, thì bot từ chối và không sửa gì.
+
+### Đổi
+
+- `/model` gõ trong Zalo không còn tới lệnh `/model` gốc của Hermes (lệnh đó đổi theo phiên).
+  Người không phải chủ nhân gõ `/model` thì bot bỏ qua.
+
 ## [1.16.0] — 2026-09-30
 
 ### Thêm
