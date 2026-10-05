@@ -173,7 +173,7 @@ The installer also ships a default message style guide (`hermes-plugin/zalo-styl
 | Friends (only with `ZALO_FRIEND_TOOLS=true`) | `zalo_send_friend_request` `zalo_accept_friend_request` `zalo_friend_group` |
 | Bot profile | `zalo_set_bio` `zalo_set_active_status` |
 | Knowledge base | `zalo_kb_list` `zalo_kb_read` |
-| Web lookup | `zalo_web_search` `zalo_web_read` (incl. public Google Docs/Sheets/Slides) `zalo_academic_search` (PubMed, Crossref, citations) |
+| Web lookup | `zalo_web_search` `zalo_web_read` (incl. public Google Docs/Sheets/Slides) `zalo_academic_search` (PubMed, OpenAlex, CORE, Crossref; open-access PDF by DOI, PubMed Central full text, DOAJ journal check, citations) |
 | Video | `zalo_video_info` (title, description, transcript) `zalo_video_download` (Full HD, only when asked) |
 | People notebook | `zalo_remember_person` `zalo_recall_person` `zalo_list_people` `zalo_forget_person` |
 | Group cron jobs | `zalo_group_cron` `zalo_group_history` |

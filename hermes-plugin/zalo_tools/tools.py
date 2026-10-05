@@ -1797,24 +1797,47 @@ def _take_quota(book: Dict[str, List[float]], uid: str, limit: int, what: str) -
     return None
 
 
+def _academic_key(name: str) -> str:
+    try:
+        from agent.secret_scope import UnscopedSecretError, get_secret
+        try:
+            return str(get_secret(name, "") or "")
+        except UnscopedSecretError:
+            return os.getenv(name, "")
+    except Exception:
+        return os.getenv(name, "")
+
+
 async def zalo_academic_search(args: Dict[str, Any], **_kw) -> str:
-    """Tìm bài báo khoa học (PubMed/Crossref) hoặc tạo trích dẫn theo DOI. Chỉ đọc."""
+    """Tìm bài báo khoa học, tìm PDF mở, đọc toàn văn PMC, tra tạp chí DOAJ, tạo trích dẫn. Chỉ đọc."""
     from . import academic
 
     action = str(args.get("action") or "search")
+    core_key, openalex_key = _academic_key("CORE_API_KEY"), _academic_key("OPENALEX_API_KEY")
     try:
         if action == "cite":
             return _ok({"citation": await asyncio.to_thread(
                 academic.cite, args.get("doi") or "", args.get("style") or "apa")})
+        if action == "find_pdf":
+            return _ok(await asyncio.to_thread(academic.find_pdf, args.get("doi") or "", core_key, openalex_key))
+        if action == "fulltext":
+            return _ok(await asyncio.to_thread(academic.pmc_fulltext, args.get("doi") or args.get("query") or ""))
+        if action == "journal":
+            return _ok(await asyncio.to_thread(academic.journal, args.get("query") or ""))
         query = str(args.get("query") or "").strip()
         if not query:
             return _err("cần `query` (từ khoá tiếng Anh cho kết quả tốt nhất)")
         source = str(args.get("source") or "pubmed")
         limit = args.get("limit") or 5
+        abstracts = args.get("abstracts") is not False
         if source == "crossref":
             results = await asyncio.to_thread(academic.crossref, query, limit)
+        elif source == "openalex":
+            results = await asyncio.to_thread(academic.openalex, query, limit, openalex_key, abstracts)
+        elif source == "core":
+            results = await asyncio.to_thread(academic.core, query, limit, core_key, abstracts)
         else:
-            results = await asyncio.to_thread(academic.pubmed, query, limit, args.get("abstracts") is not False)
+            results = await asyncio.to_thread(academic.pubmed, query, limit, abstracts)
     except academic.AcademicError as exc:
         return _err(str(exc))
     if not results:
@@ -3114,18 +3137,25 @@ TOOLS = [
     ("zalo_academic_search", "🔬", _schema(
         "zalo_academic_search",
         "Tra bài báo khoa học đã bình duyệt. Câu hỏi về y tế, sức khoẻ, thuốc, bệnh, dinh dưỡng, "
-        "sinh học → dùng công cụ này TRƯỚC web search (source=pubmed). Giáo dục, xã hội, kỹ thuật, "
-        "mọi ngành → source=crossref. Dịch câu hỏi sang 2–4 từ khoá tiếng Anh. Trả lời bằng tiếng "
-        "Việt, dẫn tác giả (năm) và link cho từng ý; chỉ dẫn bài công cụ trả về, không tự bịa. "
-        "action=cite để tạo trích dẫn chuẩn (APA, Vancouver…) từ DOI. Thông tin y tế chỉ để tham "
-        "khảo — nhắc người hỏi gặp bác sĩ khi cần.",
+        "sinh học → dùng công cụ này TRƯỚC web search (source=pubmed). Hoá học, môi trường, giáo dục, "
+        "kỹ thuật, mọi ngành → source=openalex (phủ rộng, có số trích dẫn và link PDF mở); cần bài có "
+        "sẵn PDF toàn văn → source=core; crossref để tra theo thông tin thư mục. Dịch câu hỏi sang "
+        "2–4 từ khoá tiếng Anh. action=find_pdf tìm bản PDF miễn phí hợp pháp của một DOI; "
+        "action=fulltext đọc toàn văn bài trên PubMed Central (DOI hoặc PMCID); action=journal tra "
+        "tạp chí trên DOAJ theo ISSN hoặc tên (không có trong DOAJ không có nghĩa là tạp chí kém — "
+        "tạp chí thu phí, hybrid không vào DOAJ); action=cite tạo trích dẫn chuẩn (APA, Vancouver…) "
+        "từ DOI. Trả lời bằng tiếng Việt, dẫn tác giả (năm) và link cho từng ý; chỉ dẫn bài công cụ "
+        "trả về, không tự bịa. Thông tin y tế chỉ để tham khảo — nhắc người hỏi gặp bác sĩ khi cần.",
         {
-            "action": {"type": "string", "enum": ["search", "cite"], "description": "Mặc định search."},
-            "query": {"type": "string", "description": "Từ khoá tiếng Anh, vd. 'e-cigarette adolescents lung'."},
-            "source": {"type": "string", "enum": ["pubmed", "crossref"], "description": "Mặc định pubmed."},
+            "action": {"type": "string", "enum": ["search", "cite", "find_pdf", "fulltext", "journal"],
+                       "description": "Mặc định search."},
+            "query": {"type": "string", "description": "search: từ khoá tiếng Anh, vd. 'biochar cadmium soil'. "
+                                                      "journal: ISSN hoặc tên tạp chí. fulltext: PMCID."},
+            "source": {"type": "string", "enum": ["pubmed", "openalex", "core", "crossref"],
+                       "description": "Mặc định pubmed."},
             "limit": {"type": "integer", "description": "Số bài, 1–10. Mặc định 5."},
-            "abstracts": {"type": "boolean", "description": "PubMed: kèm tóm tắt. Mặc định có."},
-            "doi": {"type": "string", "description": "Cho action=cite, vd. 10.1038/s41586-020-2649-2."},
+            "abstracts": {"type": "boolean", "description": "PubMed/OpenAlex/CORE: kèm tóm tắt. Mặc định có."},
+            "doi": {"type": "string", "description": "Cho action=cite/find_pdf/fulltext, vd. 10.1038/s41586-020-2649-2."},
             "style": {"type": "string", "enum": ["apa", "ieee", "vancouver", "harvard", "chicago", "mla"],
                       "description": "Cho action=cite. Mặc định apa."},
         },

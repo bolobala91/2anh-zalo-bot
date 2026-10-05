@@ -37,7 +37,49 @@ CROSSREF = json.dumps({"message": {"items": [{
     "type": "journal-article", "is-referenced-by-count": 42}]}}).encode()
 
 
-def fake_get(url, accept="application/json"):
+OPENALEX_WORK = {
+    "id": "https://openalex.org/W1", "doi": "https://doi.org/10.3/bio", "title": "Biochar removes cadmium",
+    "authorships": [{"author": {"display_name": "Mai Le"}}], "publication_year": 2023, "cited_by_count": 7,
+    "primary_location": {"source": {"display_name": "Water"}},
+    "open_access": {"oa_status": "gold"},
+    "best_oa_location": {"pdf_url": "https://mdpi.com/bio.pdf", "landing_page_url": "https://mdpi.com/bio"},
+    "abstract_inverted_index": {"removes": [1], "Biochar": [0], "cadmium.": [2]},
+    "locations": [
+        {"is_oa": True, "pdf_url": "https://mdpi.com/bio.pdf", "version": "publishedVersion",
+         "source": {"display_name": "Water"}},
+        {"is_oa": False, "landing_page_url": "https://paywalled.example/bio"},
+    ],
+}
+CORE_HITS = json.dumps({"results": [{
+    "id": 99, "doi": "10.3/bio", "title": "Biochar removes cadmium", "authors": [{"name": "Le, Mai"}],
+    "publisher": "MDPI", "yearPublished": 2023, "downloadUrl": "https://core.ac.uk/download/99.pdf",
+    "abstract": "Biochar works."}]}).encode()
+DOAJ_HIT = json.dumps({"results": [{"created_date": "2009-03-02T00:00:00Z", "admin": {"ticked": True}, "bibjson": {
+    "title": "Energies", "eissn": "1996-1073", "publisher": {"name": "MDPI AG"},
+    "editorial": {"review_process": ["Single anonymous peer review"]},
+    "apc": {"has_apc": True, "max": [{"price": 2600, "currency": "CHF"}]},
+    "license": [{"type": "CC BY"}], "ref": {"journal": "http://www.mdpi.com/journal/energies"}}}]}).encode()
+PMC_SEARCH = json.dumps({"esearchresult": {"idlist": ["7792979"]}}).encode()
+PMC_XML = b"""<pmc-articleset><article><front><article-meta><title-group>
+<article-title>Biochar <italic>in</italic> soil</article-title></title-group></article-meta></front>
+<body><sec><title>Introduction</title><p>Cadmium is   toxic.</p></sec></body></article></pmc-articleset>"""
+SEEN_HEADERS = []
+
+
+def fake_get(url, accept="application/json", headers=None):
+    SEEN_HEADERS.append((url, headers))
+    if "esearch" in url and "db=pmc" in url:
+        return PMC_SEARCH
+    if "efetch" in url and "db=pmc" in url:
+        return PMC_XML
+    if "api.openalex.org/works/doi:" in url:
+        return json.dumps(OPENALEX_WORK).encode()
+    if "api.openalex.org/works" in url:
+        return json.dumps({"results": [OPENALEX_WORK]}).encode()
+    if "api.core.ac.uk" in url:
+        return CORE_HITS
+    if "doaj.org" in url:
+        return DOAJ_HIT
     if "esearch" in url:
         return ESEARCH
     if "esummary" in url:
@@ -95,6 +137,66 @@ class AcademicTest(unittest.TestCase):
         with self.assertRaises(academic.AcademicError):
             academic.cite("10.2/xyz", "made-up")
 
+    def test_openalex_rebuilds_abstract_and_oa_links(self):
+        got = academic.openalex("biochar", 1, api_key="oa-key")[0]
+        self.assertEqual(got["doi"], "10.3/bio")
+        self.assertEqual(got["venue"], "Water")
+        self.assertEqual(got["pdf"], "https://mdpi.com/bio.pdf")
+        self.assertEqual(got["abstract"], "Biochar removes cadmium.")
+        self.assertIn("api_key=oa-key", self.get.call_args.args[0])
+
+    def test_core_sends_key_as_bearer_only_when_set(self):
+        SEEN_HEADERS.clear()
+        got = academic.core("biochar", 1, api_key="core-key")[0]
+        self.assertEqual(got["pdf"], "https://core.ac.uk/download/99.pdf")
+        self.assertEqual(SEEN_HEADERS[-1][1], {"Authorization": "Bearer core-key"})
+        academic.core("biochar", 1)
+        self.assertIsNone(SEEN_HEADERS[-1][1])
+
+    def test_find_pdf_merges_openalex_and_core_skipping_closed_copies(self):
+        got = academic.find_pdf("https://doi.org/10.3/bio")
+        self.assertEqual(got["open_access"], "gold")
+        self.assertEqual([link["url"] for link in got["links"]],
+                         ["https://mdpi.com/bio.pdf", "https://core.ac.uk/download/99.pdf"])
+        self.assertIn('doi%3A%2210.3%2Fbio%22', SEEN_HEADERS[-1][0])
+
+    def test_find_pdf_survives_one_source_failing(self):
+        def openalex_down(url, accept="application/json", headers=None):
+            if "openalex" in url:
+                raise academic.AcademicError("down")
+            return fake_get(url, accept, headers)
+
+        with mock.patch.object(academic, "_get", side_effect=openalex_down):
+            got = academic.find_pdf("10.3/bio")
+        self.assertEqual(got["title"], "Biochar removes cadmium")
+        self.assertEqual(len(got["links"]), 1)
+
+    def test_pmc_fulltext_by_doi_and_pmcid(self):
+        got = academic.pmc_fulltext("10.3/bio")
+        self.assertEqual(got["pmcid"], "PMC7792979")
+        self.assertEqual(got["title"], "Biochar in soil")
+        self.assertEqual(got["text"], "## Introduction\nCadmium is toxic.")
+        self.assertIn("%22%5BDOI%5D", self.get.call_args_list[-2].args[0])
+        self.assertEqual(academic.pmc_fulltext("PMC7792979")["pmcid"], "PMC7792979")
+
+    def test_pmc_fulltext_explains_when_missing(self):
+        empty = json.dumps({"esearchresult": {"idlist": []}}).encode()
+        with mock.patch.object(academic, "_get", return_value=empty):
+            with self.assertRaisesRegex(academic.AcademicError, "find_pdf"):
+                academic.pmc_fulltext("10.3/bio")
+
+    def test_journal_by_issn_and_by_name(self):
+        got = academic.journal("1996-1073")
+        self.assertTrue(got["in_doaj"])
+        self.assertEqual(got["journals"][0]["apc"], ["2600 CHF"])
+        self.assertIn("issn%3A1996-1073", self.get.call_args.args[0])
+        self.assertTrue(academic.journal("energies")["journals"][0]["exact_title"])
+        self.assertIn("bibjson.title%3A%22energies%22", self.get.call_args.args[0])
+        # Tên gần giống không tính là có trong DOAJ.
+        self.assertFalse(academic.journal("Water")["in_doaj"])
+        with self.assertRaises(academic.AcademicError):
+            academic.journal(" ")
+
 
 class ZaloAcademicToolTest(unittest.TestCase):
     def call(self, **args):
@@ -109,6 +211,17 @@ class ZaloAcademicToolTest(unittest.TestCase):
     def test_crossref_and_cite(self):
         self.assertEqual(self.call(query="x", source="crossref")["result"]["results"][0]["doi"], "10.2/xyz")
         self.assertIn("Tran", self.call(action="cite", doi="10.2/xyz")["result"]["citation"])
+
+    def test_new_sources_and_actions_read_keys_from_env(self):
+        with mock.patch.dict(os.environ, {"CORE_API_KEY": "k1", "OPENALEX_API_KEY": "k2"}):
+            SEEN_HEADERS.clear()
+            self.assertEqual(self.call(query="biochar", source="core")["result"]["source"], "core")
+            self.assertEqual(SEEN_HEADERS[-1][1], {"Authorization": "Bearer k1"})
+            self.assertEqual(self.call(query="biochar", source="openalex")["result"]["results"][0]["year"], 2023)
+            self.assertIn("api_key=k2", SEEN_HEADERS[-1][0])
+        self.assertEqual(len(self.call(action="find_pdf", doi="10.3/bio")["result"]["links"]), 2)
+        self.assertEqual(self.call(action="fulltext", doi="10.3/bio")["result"]["pmcid"], "PMC7792979")
+        self.assertTrue(self.call(action="journal", query="1996-1073")["result"]["in_doaj"])
 
     def test_empty_query_and_service_errors(self):
         self.assertFalse(self.call(query=" ")["success"])

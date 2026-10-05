@@ -2,6 +2,25 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.18.0] — 2026-10-06
+
+### Thêm
+
+- **`zalo_academic_search` có thêm nguồn và việc mới, ai trong nhóm cũng dùng được.**
+  - `source=openalex`: phủ rộng mọi ngành, có số trích dẫn, link PDF mở và tóm tắt.
+  - `source=core`: bài toàn văn từ kho lưu trữ của các trường đại học.
+  - `action=find_pdf`: tìm bản PDF miễn phí hợp pháp của một DOI, lấy từ OpenAlex (cùng dữ liệu
+    Unpaywall, không cần email) và CORE; bỏ qua các bản phải trả phí.
+  - `action=fulltext`: đọc toàn văn bài trên PubMed Central theo DOI hoặc PMCID.
+  - `action=journal`: tra tạp chí trên DOAJ theo ISSN hoặc tên, gồm phí đăng bài, giấy phép và
+    hình thức bình duyệt. Tra theo tên chỉ tính là có trong DOAJ khi trùng đúng tên.
+- Khoá tuỳ chọn `CORE_API_KEY`, `OPENALEX_API_KEY` trong `.env` của Hermes. Không có khoá vẫn chạy,
+  chỉ ít lượt hơn. Bị giới hạn lượt (HTTP 429) thì báo người dùng thử lại sau.
+
+### Sửa
+
+- DOAJ chặn mọi User-Agent có chữ "bot", nên lời gọi DOAJ dùng User-Agent riêng.
+
 ## [1.17.0] — 2026-10-05
 
 ### Thêm
