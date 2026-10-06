@@ -12,12 +12,15 @@ export function securityHeaders() {
   };
 }
 
+// So theo origin chuẩn hoá (chữ thường, bỏ cổng mặc định, bỏ đường dẫn) — publicUrl có thể là "https://D.vn:443/".
+const originOf = (url) => { try { return new URL(url).origin; } catch { return null; } };
+
 export function checkOrigin({ publicUrl, port }) {
-  const allowed = new Set([publicUrl, `http://localhost:${port}`, `http://127.0.0.1:${port}`]);
+  const allowed = new Set([publicUrl, `http://localhost:${port}`, `http://127.0.0.1:${port}`].map(originOf).filter((o) => o && o !== 'null'));
   return (req, res, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
     const origin = req.get('origin');
-    if (origin ? allowed.has(origin) : req.get('x-requested-with') === 'zalo-dashboard') return next();
+    if (origin ? allowed.has(originOf(origin)) : req.get('x-requested-with') === 'zalo-dashboard') return next();
     return res.status(403).json({ ok: false, error: 'Yêu cầu không hợp lệ — tải lại trang rồi thử lại.' });
   };
 }

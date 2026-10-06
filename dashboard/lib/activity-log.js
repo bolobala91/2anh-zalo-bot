@@ -15,7 +15,7 @@ export function createActivityLog(path, { maxBytes = 5 * 1024 * 1024, now = Date
     append({ actor, action, detail = '', ok = true }) {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
       rotate();
-      const entry = { at: now(), actor: String(actor), action: String(action), detail: String(detail).slice(0, 500), ok: Boolean(ok) };
+      const entry = { at: now(), actor: String(actor).slice(0, 64), action: String(action), detail: String(detail).slice(0, 500), ok: Boolean(ok) };
       appendFileSync(path, `${JSON.stringify(entry)}\n`, { encoding: 'utf8', mode: 0o600 });
       return entry;
     },

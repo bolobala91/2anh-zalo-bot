@@ -16,6 +16,15 @@ test('ghi và đọc mới nhất trước, phân trang theo before', (t) => {
   assert.deepEqual(log.list({ before: all[0].at }).map((e) => e.actor), ['anh']);
 });
 
+test('actor bị cắt ở 64 ký tự như detail ở 500', (t) => {
+  const d = mkdtempSync(join(tmpdir(), 'zd-act-')); t.after(() => rmSync(d, { recursive: true, force: true }));
+  const log = createActivityLog(join(d, 'a.jsonl'));
+  const e = log.append({ actor: 'x'.repeat(5000), action: 'login', detail: 'y'.repeat(900) });
+  assert.equal(e.actor.length, 64);
+  assert.equal(e.detail.length, 500);
+  assert.equal(log.list({})[0].actor.length, 64);
+});
+
 test('xoay vòng khi vượt dung lượng, vẫn đọc được bản cũ', (t) => {
   const d = mkdtempSync(join(tmpdir(), 'zd-act-')); t.after(() => rmSync(d, { recursive: true, force: true }));
   const p = join(d, 'a.jsonl');

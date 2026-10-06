@@ -117,6 +117,17 @@ test('yêu cầu ghi từ Origin lạ bị chặn', async (t) => {
   assert.equal(res.status, 403);
 });
 
+test('Origin so theo dạng chuẩn hoá: publicUrl có đường dẫn/cổng mặc định/chữ hoa vẫn khớp', async (t) => {
+  const deps = makeDeps(t, { config: { port: 3880, publicUrl: 'https://Dash.Example.vn:443/quan-tri' } });
+  deps.users.create({ username: 'anh', role: 'admin', password: 'matkhau-dai' });
+  const { call } = await startApp(t, deps);
+  const body = { username: 'anh', password: 'matkhau-dai' };
+  assert.equal((await call('/api/auth/verify', { method: 'POST', body, headers: { Origin: 'https://dash.example.vn' } })).status, 200);
+  assert.equal((await call('/api/auth/verify', { method: 'POST', body, headers: { Origin: 'http://localhost:3880' } })).status, 200);
+  assert.equal((await call('/api/auth/verify', { method: 'POST', body, headers: { Origin: 'https://dash.example.vn.evil.example' } })).status, 403);
+  assert.equal((await call('/api/auth/verify', { method: 'POST', body, headers: { Origin: 'null' } })).status, 403);
+});
+
 test('header bảo mật có mặt', async (t) => {
   const { call } = await startApp(t, makeDeps(t));
   const res = await call('/api/me');

@@ -61,6 +61,21 @@ test('nối người dùng bằng /start <mã> dùng một lần', async (t) => 
   assert.equal(String(bot.sent.at(-1).chat_id), '555'); // chatId lưu dạng chuỗi (Telegram nhận cả hai)
 });
 
+test('broadcast bỏ qua người dùng đã bị khoá hoặc xoá', async (t) => {
+  const bot = fakeBot(); const active = new Set(['anh']);
+  const { linker } = mk(t, bot, { t: 0 }, { isActive: (u) => active.has(u) });
+  await linker.setToken('1:tok');
+  let id = 20;
+  for (const [user, chat] of [['anh', 1], ['khach', 2], ['da-xoa', 3]]) {
+    const code = new URL(linker.linkUrl(user)).searchParams.get('start');
+    bot.push({ update_id: id++, message: { text: `/start ${code}`, chat: { id: chat, type: 'private' } } });
+  }
+  await linker.pollOnce();
+  bot.sent.length = 0;
+  await linker.broadcast('⚠️ thử');
+  assert.deepEqual(bot.sent.map((m) => String(m.chat_id)), ['1']);
+});
+
 test('mã nối hết hạn sau 10 phút', async (t) => {
   const bot = fakeBot(); const clock = { t: 0 }; const { linker } = mk(t, bot, clock);
   await linker.setToken('1:tok');

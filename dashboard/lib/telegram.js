@@ -27,7 +27,8 @@ export function createTelegramApi({ token, fetchImpl = fetch, base = 'https://ap
   };
 }
 
-export function createTelegramLinker({ file, apiFactory = (token) => createTelegramApi({ token }), now = Date.now, codeTtlMs = 10 * 60_000, hermesTelegramToken = '' }) {
+// isActive(username): người dùng còn tồn tại và chưa bị khoá — người bị khoá/xoá không nhận cảnh báo nữa.
+export function createTelegramLinker({ file, apiFactory = (token) => createTelegramApi({ token }), now = Date.now, codeTtlMs = 10 * 60_000, hermesTelegramToken = '', isActive = () => true }) {
   const load = () => readJson(file, { token: '', botUsername: '', offset: 0, links: {}, pending: {} });
   const save = (d) => writeJsonAtomic(file, d);
   const api = () => { const d = load(); return d.token ? apiFactory(d.token) : null; };
@@ -93,6 +94,12 @@ export function createTelegramLinker({ file, apiFactory = (token) => createTeleg
     isLinked: (username) => Boolean(load().links[username]),
     chatIds: () => Object.values(load().links),
     async sendTo(username, text) { const tg = api(); const chat = load().links[username]; if (!tg || !chat) throw new Error('Chưa nối Telegram'); await tg.sendMessage(chat, text); },
-    async broadcast(text) { const tg = api(); if (!tg) return; for (const chat of Object.values(load().links)) await tg.sendMessage(chat, text).catch((e) => console.warn('[telegram]', e.message)); },
+    async broadcast(text) {
+      const tg = api(); if (!tg) return;
+      for (const [username, chat] of Object.entries(load().links)) {
+        if (!isActive(username)) continue;
+        await tg.sendMessage(chat, text).catch((e) => console.warn('[telegram]', e.message));
+      }
+    },
   };
 }

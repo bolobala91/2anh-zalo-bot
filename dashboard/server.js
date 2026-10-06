@@ -29,12 +29,16 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..') } 
   const config = loadDashboardConfig(env);
   const sidecarPort = Number(env.ZCA_PORT) || 3872;
   const sidecar = createSidecarClient({ token: env.ZALO_BRIDGE_TOKEN, baseUrl: `http://127.0.0.1:${sidecarPort}` });
-  const linker = createTelegramLinker({ file: paths.telegramFile, hermesTelegramToken: String(env.TELEGRAM_BOT_TOKEN || '').trim() });
+  const users = createUserStore(paths.usersFile);
+  const linker = createTelegramLinker({
+    file: paths.telegramFile, hermesTelegramToken: String(env.TELEGRAM_BOT_TOKEN || '').trim(),
+    isActive: (username) => { const u = users.get(username); return Boolean(u && !u.disabled); },
+  });
   let botName = 'Bot Zalo';
   const watchedSidecar = { health: async () => { const h = await sidecar.health(); if (h?.zalo?.displayName) botName = h.zalo.displayName; return h; } };
   return {
     paths, config, sidecar, linker,
-    users: createUserStore(paths.usersFile),
+    users,
     sessions: createSessionStore(paths.sessionsFile),
     guard: createLoginGuard(),
     setupToken: createSetupToken(paths.setupFile),

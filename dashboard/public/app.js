@@ -30,7 +30,11 @@ function App() {
   }
   if (me === undefined) return html`<div class="center muted"><span class="spinner" aria-hidden="true"></span> Đang tải…</div>`;
   if (!me) {
-    return html`<${Login} brand=${brand} onDone=${() => api('/api/me').then((r) => { setMe(r.user); location.hash = '#/'; })} />`;
+    // Giữ trang người dùng mở lúc đầu (vd. #/zalo từ link cảnh báo Telegram); chỉ #/login mới về Tổng quan.
+    return html`<${Login} brand=${brand} onDone=${() => api('/api/me').then((r) => {
+      setMe(r.user);
+      if (route() === '/login') location.hash = '#/';
+    })} />`;
   }
   return html`<${Shell} me=${me} brand=${brand} path=${path === '/login' ? '/' : path} />`;
 }
