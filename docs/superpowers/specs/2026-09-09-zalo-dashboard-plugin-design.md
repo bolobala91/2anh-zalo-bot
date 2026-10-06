@@ -1,5 +1,9 @@
 # Dashboard quản trị Zalo — plugin trong Hermes Dashboard
 
+> **ĐÃ THAY THẾ (2026-10-07)** bởi `2026-10-07-zalo-dashboard-v2-design.md`:
+> dashboard thành dịch vụ riêng có đăng nhập, vai trò, cảnh báo Telegram và phân
+> quyền theo nhóm. Giữ tệp này làm tư liệu.
+
 **Ngày:** 2026-09-09 · **Cập nhật:** 2026-09-10
 **Trạng thái:** Thiết kế đã duyệt, điều kiện tiên quyết đã xong, sẵn sàng lập kế hoạch
 **Dự án:** 2anh-zalo-bot
