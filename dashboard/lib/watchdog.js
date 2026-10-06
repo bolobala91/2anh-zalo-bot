@@ -21,7 +21,9 @@ export function createWatchdog({
     if (!active) {
       if (s) {
         delete state[kind]; save();
-        if (s.alertedAt) await notify(`✅ ${botName()}: ${recovered[kind]} đã hoạt động lại.`).catch(() => {});
+        if (s.alertedAt) {
+          try { await notify(`✅ ${botName()}: ${recovered[kind]} đã hoạt động lại.`); } catch { /* bỏ qua */ }
+        }
       }
       return;
     }
@@ -33,8 +35,10 @@ export function createWatchdog({
       return;
     }
     if (!s.alertedAt || t - s.alertedAt >= remindAfterMs) {
-      s.alertedAt = t; save();
-      await notify(messages[kind](botName())).catch((e) => console.warn('[watchdog] không gửi được cảnh báo:', e.message));
+      try {
+        await notify(messages[kind](botName()));
+        s.alertedAt = t; save();
+      } catch (e) { console.warn('[watchdog] không gửi được cảnh báo:', e.message); }
     }
   }
 

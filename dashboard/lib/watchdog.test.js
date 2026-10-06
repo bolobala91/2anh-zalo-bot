@@ -78,3 +78,28 @@ test('sidecar tắt: giữ nguyên sự cố zalo cũ, lời báo không dùng t
   assert.ok(sent.length >= 1);
   for (const s of sent) assert.doesNotMatch(s, /sidecar|bridge|toolset/i);
 });
+
+test('notify lỗi lúc tới ngưỡng: tick sau thử gửi lại', async (t) => {
+  const healthRef = { h: kicked }; const clock = { t: 0 }; let fail = true; const attempts = [];
+  const { make, sent } = mk(t, healthRef, clock, { notify: async (x) => { attempts.push(x); if (fail) throw new Error('telegram down'); sent.push(x); } });
+  const wd = make();
+  await wd.tick(); clock.t = 121_000; await wd.tick();
+  assert.equal(attempts.length, 1); assert.equal(wd.incidents().zalo.alertedAt, 0);
+  fail = false; clock.t = 151_000; await wd.tick();
+  assert.equal(attempts.length, 2); assert.equal(sent.length, 1);
+});
+
+test('notify ném đồng bộ cũng được xử lý như bị từ chối', async (t) => {
+  const healthRef = { h: kicked }; const clock = { t: 0 };
+  const { make } = mk(t, healthRef, clock, { notify: () => { throw new Error('sync'); } });
+  const wd = make(); await wd.tick(); clock.t = 121_000; await wd.tick();
+  assert.equal(wd.incidents().zalo.alertedAt, 0);
+});
+
+test('notify lỗi rồi hồi phục: không gửi thông báo hồi phục', async (t) => {
+  const healthRef = { h: kicked }; const clock = { t: 0 }; const attempts = [];
+  const { make } = mk(t, healthRef, clock, { notify: async (x) => { attempts.push(x); throw new Error('down'); } });
+  const wd = make(); await wd.tick(); clock.t = 121_000; await wd.tick();
+  healthRef.h = ok; clock.t = 200_000; await wd.tick();
+  assert.equal(attempts.length, 1);
+});
