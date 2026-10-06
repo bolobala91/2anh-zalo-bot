@@ -7,6 +7,7 @@ import { Users } from './users.js';
 import { Alerts } from './alerts.js';
 import { Profile } from './profile.js';
 import { Chats } from './chats.js';
+import { Audit } from './audit.js';
 
 const STATUS_MS = 3000;
 
@@ -14,6 +15,7 @@ const ROUTES = {
   '/': { view: Overview },
   '/chats': { view: Chats },
   '/zalo': { view: Zalo },
+  '/audit': { view: Audit },
   '/users': { view: Users, admin: true },
   '/alerts': { view: Alerts, admin: true },
   '/profile': { view: Profile },
@@ -22,7 +24,10 @@ const ROUTES = {
 const GROUPS = [
   { label: 'Tổng quan', items: [{ path: '/', text: 'Tổng quan', icon: 'home' }] },
   { label: 'Hội thoại', items: [{ path: '/chats', text: 'Phiên chat', icon: 'chat' }] },
-  { label: 'Hệ thống', items: [{ path: '/zalo', text: 'Tài khoản Zalo', icon: 'phone' }] },
+  { label: 'Hệ thống', items: [
+    { path: '/zalo', text: 'Tài khoản Zalo', icon: 'phone' },
+    { path: '/audit', text: 'Nhật ký', icon: 'list' },
+  ] },
   { label: 'Quản trị', admin: true, items: [
     { path: '/users', text: 'Người dùng', icon: 'users' },
     { path: '/alerts', text: 'Cảnh báo Telegram', icon: 'bell' },

@@ -57,6 +57,12 @@ test('tô sáng kết quả tìm: tách chữ thành đoạn, không phân biệ
   assert.deepEqual(markMatches('abc', ''), [{ text: 'abc', hit: false }]);
 });
 
+test('Nhật ký: mã kỹ thuật cho Quản trị gọn một dòng, bỏ trường rỗng', async () => {
+  const { codeText } = await import('./views/audit.js');
+  assert.equal(codeText({ action: 'send', category: 'send', actorUid: '555', threadId: '', error: null }), 'action=send · category=send · actorUid=555');
+  assert.equal(codeText(undefined), '');
+});
+
 test('giao diện không dùng innerHTML và không có style nội tuyến (CSP)', () => {
   for (const f of files(root).filter((x) => x.endsWith('.js') && !x.endsWith('.test.js'))) {
     const src = readFileSync(f, 'utf8');
