@@ -13,7 +13,7 @@ Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 ### Sửa
 
 - Nhật ký hoạt động của dashboard bỏ qua dòng hỏng thay vì báo lỗi.
-- Nhật ký kiểm toán ẩn các lần đăng nhập thất bại của người lạ.
+- Nhật ký kiểm toán ghi lần đăng nhập thất bại bằng tên tài khoản không có thật là "Người lạ", không hiện chữ đã gõ.
 - Mã đăng nhập không bao giờ hiện ra trên dashboard.
 
 ## [1.19.0] — 2026-10-07

@@ -19,7 +19,10 @@ export function createThreadNames({ loadGroups, ttlMs = 10 * 60_000, retryMs = 6
     inflight ??= Promise.resolve()
       .then(loadGroups)
       .then((groups) => {
-        map = new Map((Array.isArray(groups) ? groups : []).filter((g) => g?.id && g?.name).map((g) => [String(g.id), String(g.name)]));
+        // Bot trả name = id khi Zalo không cho tên nhóm — coi như chưa có tên để hiện "Nhóm …1234".
+        map = new Map((Array.isArray(groups) ? groups : [])
+          .filter((g) => g?.id && g?.name && String(g.name).trim() !== String(g.id))
+          .map((g) => [String(g.id), String(g.name)]));
         loadedAt = now();
       }, (err) => {
         failedAt = now();

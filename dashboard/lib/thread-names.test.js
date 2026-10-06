@@ -46,6 +46,13 @@ test('cached() trả ngay và làm mới ngầm', async () => {
   assert.equal(names.cached().get('200'), 'Tổ Hoá');
 });
 
+test('bot trả tên nhóm chính là ID (Zalo không cho tên) → coi như chưa có tên, dùng tên dự phòng', async () => {
+  const names = createThreadNames({ loadGroups: async () => [{ id: '200', name: 'Tổ Hoá' }, { id: '987654', name: '987654' }, { id: '555', name: ' 555 ' }] });
+  const map = await names.load();
+  assert.deepEqual([...map], [['200', 'Tổ Hoá']]);
+  assert.equal(map.get('987654') || fallbackName('987654', 1), 'Nhóm …7654');
+});
+
 test('tên dự phòng', () => {
   assert.equal(fallbackName('987654', 1), 'Nhóm …7654');
   assert.equal(fallbackName('123456789', 0), 'Người dùng …6789');

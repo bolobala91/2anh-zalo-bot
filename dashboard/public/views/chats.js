@@ -177,7 +177,7 @@ function Thread({ conv, onBack }) {
       ${group ? html`<span class="tag">Nhóm</span>` : null}
     </header>
     <${Live} error=${error} />
-    ${msgs === null ? html`<${Spinner} />` : html`
+    ${msgs === null ? (error ? null : html`<${Spinner} />`) : html`
       <ol class="msgs" ref=${box} tabindex="0" onScroll=${onScroll} aria-label=${`Tin nhắn với ${conv.name}`}>
         <li class="msgs-top">
           ${older
