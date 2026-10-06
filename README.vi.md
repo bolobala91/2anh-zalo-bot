@@ -394,6 +394,8 @@ Dashboard là một trang web để xem bot đang chạy ra sao và xử lý vi�
 * Máy cá nhân: mở `http://localhost:3880`.
 * Trên VPS: mở địa chỉ tên miền đã khai ở `ZALO_DASHBOARD_URL` (ví dụ `https://dashboard.ten-mien.vn`). Dashboard chỉ nghe ở `127.0.0.1`, nên phải có Caddy đứng trước (xem bên dưới) thì mới vào được từ ngoài.
 
+`ZALO_DASHBOARD_URL` và `ZALO_DASHBOARD_PORT` (mặc định `3880`) ghi vào tệp `.env` nằm trong thư mục của bot này (cùng chỗ với `server.js`, nơi đã có `ZALO_BRIDGE_TOKEN`) — không phải `.env` của Hermes. Trình cài đặt và dashboard đọc tệp đó; sửa xong thì chạy lại `npm run install:hermes` để link thiết lập, khối Caddy và dịch vụ dùng giá trị mới. Hai biến `ZALO_SIDECAR_RESTART_CMD` / `ZALO_ASSISTANT_RESTART_CMD` (lệnh khởi động lại riêng khi máy không dùng dịch vụ systemd `zalo-bridge` / `hermes-gateway`) cũng đặt ở đây.
+
 ### Tạo tài khoản Quản trị đầu tiên
 
 Cuối lần cài, trình cài in dòng `Mở dashboard: <link>`. Mở link đó (dùng một lần, hết hạn sau 24 giờ), đặt tên đăng nhập và mật khẩu. Lỡ mất link thì chạy:
