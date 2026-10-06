@@ -2,9 +2,10 @@ import express from 'express';
 import { requireAuth } from '../lib/http-guards.js';
 import { parseCursor } from '../lib/store-reader.js';
 import { fallbackName } from '../lib/thread-names.js';
-import { failStore } from '../lib/route-errors.js';
+import { failSidecar, failStore } from '../lib/route-errors.js';
 
 const THREAD_ID = /^\d{1,32}$/;
+const MAX_TEXT = 2000;
 const READ_FAIL = 'Chưa đọc được lịch sử trò chuyện — tải lại trang, nếu vẫn lỗi hãy báo người cài đặt.';
 const BAD_THREAD = 'Hội thoại không hợp lệ — chọn lại từ danh sách.';
 const BAD_CURSOR = 'Vị trí trang không hợp lệ — tải lại trang rồi thử lại.';
@@ -12,7 +13,7 @@ const BAD_CURSOR = 'Vị trí trang không hợp lệ — tải lại trang rồ
 export const parseType = (v) => (v === 0 || v === '0' ? 0 : v === 1 || v === '1' ? 1 : null);
 const cursorOk = (v) => v === undefined || v === '' || (typeof v === 'string' && parseCursor(v) !== null);
 
-export function chatRoutes({ store, threadNames }) {
+export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10, windowMs: 60_000 }, now = Date.now }) {
   const r = express.Router();
   const bad = (res, error) => res.status(400).json({ ok: false, error });
   const nameOf = (groups, id, type, peerName = '') => (type === 1 ? groups.get(id) : peerName) || fallbackName(id, type);
@@ -48,6 +49,39 @@ export function chatRoutes({ store, threadNames }) {
     try {
       res.json({ ok: true, ...store.getMessages(req.params.threadId, type, { before: req.query.before || null }) });
     } catch (err) { failStore(res, err, READ_FAIL); }
+  });
+
+  // Gửi tay đi qua sendSystemNotice của bot — đường này không qua bộ giãn nhịp của trợ lý,
+  // nên dashboard tự chặn: mỗi người tối đa sendLimit.max tin trong sendLimit.windowMs.
+  const recent = new Map(); // username → mốc thời gian các lần gửi còn trong cửa sổ
+  function allowSend(username) {
+    const t = now();
+    const kept = (recent.get(username) || []).filter((x) => t - x < sendLimit.windowMs);
+    const ok = kept.length < sendLimit.max;
+    if (ok) kept.push(t);
+    recent.set(username, kept);
+    return ok;
+  }
+
+  r.post('/chats/:threadId/send', requireAuth, async (req, res) => {
+    const { text, threadType } = req.body || {};
+    const type = parseType(threadType);
+    if (!THREAD_ID.test(req.params.threadId) || type === null) return bad(res, BAD_THREAD);
+    const body = typeof text === 'string' ? text.trim() : '';
+    if (!body) return bad(res, 'Nội dung đang trống — gõ tin nhắn rồi gửi.');
+    if (body.length > MAX_TEXT) return bad(res, `Tin nhắn dài quá ${MAX_TEXT} ký tự — rút gọn hoặc chia làm nhiều tin.`);
+    try {
+      if (!store.hasThread(req.params.threadId, type)) {
+        return res.status(404).json({ ok: false, error: 'Không thấy hội thoại này trong lịch sử — chọn lại từ danh sách.' });
+      }
+    } catch (err) { return failStore(res, err, READ_FAIL); }
+    if (!allowSend(req.user.username)) {
+      return res.status(429).json({ ok: false, error: 'Bạn đang gửi quá nhanh — đợi một phút rồi gửi tiếp.' });
+    }
+    try {
+      await sidecar.send({ threadId: req.params.threadId, threadType: type, text: body, actor: req.user.username });
+      res.json({ ok: true });
+    } catch (err) { failSidecar(res, err); }
   });
 
   return r;
