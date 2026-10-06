@@ -7,6 +7,7 @@ import { createSessionStore } from './lib/sessions.js';
 import { createLoginGuard } from './lib/login-guard.js';
 import { createSetupToken } from './lib/setup-token.js';
 import { createActivityLog } from './lib/activity-log.js';
+import { createTelegramApi, createTelegramLinker } from './lib/telegram.js';
 
 export function fakeSidecar(overrides = {}) {
   const calls = [];
@@ -22,10 +23,30 @@ export function fakeSidecar(overrides = {}) {
   };
 }
 
+export function fakeBot({ failGetMe = false } = {}) {
+  const sent = []; const updates = [];
+  const fetchImpl = async (url, opts) => {
+    const method = url.split('/').pop();
+    const body = opts?.body ? JSON.parse(opts.body) : {};
+    const reply = (result) => ({ ok: true, json: async () => ({ ok: true, result }) });
+    if (method === 'getMe') {
+      if (failGetMe) return { ok: true, json: async () => ({ ok: false, description: 'Unauthorized' }) };
+      return reply({ username: 'canhbao_bot' });
+    }
+    if (method === 'sendMessage') { sent.push(body); return reply({ message_id: 1 }); }
+    if (method === 'getUpdates') return reply(updates.filter((x) => x.update_id >= (body.offset || 0)));
+    throw new Error(method);
+  };
+  return { sent, fetchImpl, push: (u) => { updates.push(u); } };
+}
+
 export function makeDeps(t, overrides = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'zd-app-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bot = overrides.bot || fakeBot();
   return {
+    bot,
+    linker: createTelegramLinker({ file: join(dir, 'telegram.json'), apiFactory: (token) => createTelegramApi({ token, fetchImpl: bot.fetchImpl }) }),
     config: { port: 3880, publicUrl: 'http://localhost:3880', restartCmd: null },
     users: createUserStore(join(dir, 'users.json')),
     sessions: createSessionStore(join(dir, 'sessions.json')),
