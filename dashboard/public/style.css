@@ -247,6 +247,9 @@ input:focus-visible, select:focus-visible { outline: none; border-color: var(--b
 .table tbody tr:last-child td { border-bottom: 0; }
 .table .actions { display: flex; gap: 8px; justify-content: flex-end; }
 
+.subhead { font-size: 14px; font-weight: 650; margin: 16px 0 6px; }
+.list .push { margin-left: auto; white-space: nowrap; }
+
 /* ---------- Điện thoại ---------- */
 @media (max-width: 760px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
