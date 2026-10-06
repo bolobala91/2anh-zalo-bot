@@ -567,18 +567,25 @@ export async function installHermes({
   if (noDashboard) return diagnosis;
 
   // Dashboard không bao giờ làm hỏng bản cài chính: lỗi nào cũng chỉ thành cảnh báo.
-  const dashboard = dashboardInstaller({ sidecarRoot: root });
-  let setupLink = null;
-  let publicUrl = '';
+  let config = null;
+  let paths = null;
   try {
     const env = { ...process.env, HERMES_HOME: layout.home };
-    const config = loadDashboardConfig(env);
-    publicUrl = config.publicUrl;
-    setupLink = issueSetupLink({ paths: resolveDashboardPaths({ env, sidecarRoot: root }), config });
-  } catch (error) {
-    dashboard.detail = `${dashboard.detail} (không tạo được link thiết lập: ${error.message})`;
+    config = loadDashboardConfig(env);
+    paths = resolveDashboardPaths({ env, sidecarRoot: root });
+  } catch { /* dùng mặc định bên dưới */ }
+  const dashboard = await dashboardInstaller({ sidecarRoot: root, ...(config ? { port: config.port } : {}) });
+  let setupLink = null;
+  let caddy = '';
+  if (config && paths) {
+    try {
+      setupLink = issueSetupLink({ paths, config });
+      caddy = caddySnippet(config.publicUrl, config.port);
+    } catch (error) {
+      dashboard.detail = `${dashboard.detail} (không tạo được link thiết lập: ${error.message})`;
+    }
   }
-  return { ...diagnosis, dashboard, setupLink, caddy: caddySnippet(publicUrl, loadDashboardConfig().port) };
+  return { ...diagnosis, dashboard, setupLink, caddy };
 }
 
 export function uninstallHermes({ hermesHome, noDashboard = false, dashboardUninstaller = uninstallDashboardService } = {}) {

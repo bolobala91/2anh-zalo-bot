@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { freeListenerPort } from '../dashboard/lib/restart.js';
 
 const SERVICE = 'zalo-dashboard';
 const UNIT_FILE = `${SERVICE}.service`;
@@ -14,6 +15,11 @@ const defaultRunner = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', wi
 const defaultWriteFile = (path, content) => {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content, 'utf8');
+};
+const defaultProbe = async (port) => {
+  try {
+    return (await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(1500) })).ok;
+  } catch { return false; }
 };
 const defaultRemoveFile = (path) => rmSync(path, { force: true });
 const defaultIsRoot = () => typeof process.getuid === 'function' && process.getuid() === 0;
@@ -34,7 +40,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${root}
-ExecStart=${posix(nodePath)} ${root}/dashboard/server.js
+ExecStart="${posix(nodePath)}" "${root}/dashboard/server.js"
 Restart=always
 RestartSec=5
 
@@ -57,7 +63,7 @@ function manualHelp() {
   return 'Chưa cài được dịch vụ tự chạy. Chạy tay bằng: npm run dashboard (hoặc nhờ người cài đặt chạy lại bước này bằng quyền root trên máy có systemd).';
 }
 
-export function installDashboardService({
+export async function installDashboardService({
   sidecarRoot,
   platform = process.platform,
   nodePath = process.execPath,
@@ -67,11 +73,16 @@ export function installDashboardService({
   unitDir = DEFAULT_UNIT_DIR,
   isRoot = defaultIsRoot(),
   hasSystemd = platform === 'win32' ? false : defaultHasSystemd(),
+  port = 3880,
+  probe = defaultProbe,
+  freePort = (p) => freeListenerPort({ port: p }),
 } = {}) {
   try {
     if (platform === 'win32') {
       const path = join(startupDir, VBS_FILE);
       writeFile(path, renderWindowsStartup({ sidecarRoot, nodePath }));
+      // Nâng cấp: bản cũ còn đang chạy thì dừng đúng tiến trình giữ cổng để bản mới thế chỗ.
+      if (await probe(port)) await freePort(port);
       // wscript (không phải cscript) + windowsHide: không bật cửa sổ nào lúc cài.
       const run = runner('wscript', [path]);
       if (run?.error || (run?.status ?? 0) !== 0) {
@@ -85,7 +96,7 @@ export function installDashboardService({
     }
     const unitPath = `${posix(unitDir)}/${UNIT_FILE}`;
     writeFile(unitPath, renderSystemdUnit({ sidecarRoot, nodePath }));
-    for (const args of [['daemon-reload'], ['enable', '--now', SERVICE]]) {
+    for (const args of [['daemon-reload'], ['enable', SERVICE], ['restart', SERVICE]]) {
       const run = runner('systemctl', args);
       if (run?.error || (run?.status ?? 0) !== 0) {
         return { installed: false, detail: `systemctl ${args.join(' ')} thất bại: ${String(run?.stderr || run?.error?.message || `exit ${run?.status}`).trim()}` };
@@ -134,5 +145,5 @@ export function caddySnippet(publicUrl, port = 3880) {
   let url;
   try { url = new URL(String(publicUrl || '')); } catch { return ''; }
   if (url.protocol !== 'https:') return '';
-  return `${url.host} {\n    reverse_proxy 127.0.0.1:${port}\n}\n`;
+  return `${url.hostname} {\n    reverse_proxy 127.0.0.1:${port}\n}\n`;
 }
