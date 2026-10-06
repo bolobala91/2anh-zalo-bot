@@ -1,6 +1,6 @@
 {
   "name": "2anh-zalo-bot",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "description": "Cầu nối Zalo cho Hermes Agent — đăng nhập bằng QR, chạy như một nền tảng đầy đủ của Hermes (tools, memory, skills), kèm dashboard quản trị cục bộ.",
   "type": "module",
   "main": "server.js",
@@ -9,6 +9,9 @@
     "test": "npm run test:js && npm run test:py",
     "test:js": "node --test",
     "test:py": "node scripts/run-python-tests.js",
+    "dashboard": "node dashboard/server.js",
+    "dashboard:setup-link": "node dashboard/cli/setup-link.js",
+    "dashboard:reset-admin": "node dashboard/cli/reset-admin.js",
     "setup": "node scripts/setup.js",
     "install:hermes": "node scripts/install-hermes.js",
     "doctor": "node scripts/doctor.js",

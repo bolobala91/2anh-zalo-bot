@@ -85,3 +85,14 @@ test('database failure marks health unhealthy without throwing from snapshot', (
   assert.equal(snapshot.status, 'unhealthy');
   assert.equal(snapshot.database.ready, false);
 });
+
+test('needsRelogin bật/tắt và tự xoá khi đăng nhập lại', () => {
+  const store = { getHealth: () => ({ ready: true, databaseSizeBytes: 0, messageCount: 0, auditCount: 0 }) };
+  const health = createRuntimeHealth({ store });
+  assert.equal(health.snapshot().zalo.needsRelogin, false);
+  health.setNeedsRelogin(true);
+  assert.equal(health.snapshot().zalo.needsRelogin, true);
+  assert.equal(health.snapshot().status, 'degraded');
+  health.setZaloState('logged-in', { userId: '1', displayName: 'Bot' });
+  assert.equal(health.snapshot().zalo.needsRelogin, false);
+});

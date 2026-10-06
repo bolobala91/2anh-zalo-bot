@@ -134,6 +134,15 @@ Public tools are removed before the model sees the tool list, scoped to the curr
 
 Identity is re-bound on every agent turn from the message that started it, so a member's message queued behind the owner's turn never inherits owner rights. Because a group shares one session, an owner message that was still waiting while a non-owner spoke in the same conversation runs with public tools — Hermes may have merged their text into it.
 
+## Admin dashboard
+
+The installer also sets up a separate web dashboard (service `zalo-dashboard`, listens on `127.0.0.1` only; default `http://localhost:3880`). It shows bot status, lets you re-scan the Zalo QR code after a logout, manages customer accounts (password or one-time code sent over Zalo), and sends alerts through a Telegram bot you create with @BotFather.
+
+- On Linux (root + systemd) the installer writes `zalo-dashboard.service`; on Windows it adds a hidden `zalo-dashboard.vbs` to the Startup folder. Without root/systemd it prints how to run `npm run dashboard` manually. Skip it entirely with `--no-dashboard`.
+- The installer prints a one-time setup link (`<ZALO_DASHBOARD_URL>/#/setup/<token>`, valid 24 h) to create the first admin. Re-issue it with `npm run dashboard:setup-link`; reset a lost admin password with `npm run dashboard:reset-admin -- --username <name> --password <new>`.
+- For a public domain set `ZALO_DASHBOARD_URL=https://dashboard.<domain>` and put Caddy in front; the installer prints the `reverse_proxy 127.0.0.1:3880` block. Other variables: `ZALO_DASHBOARD_PORT`, `ZALO_SIDECAR_RESTART_CMD`, `ZALO_ASSISTANT_RESTART_CMD`.
+- `npm run doctor` reports `dashboard-running`, `dashboard-admin` and `dashboard-telegram` as warnings only. `npm run uninstall:hermes` removes the dashboard service but keeps its data. See `README.vi.md` for the full walkthrough.
+
 ## Configuration
 
 The installer manages these Hermes configuration areas without overwriting explicit customer values:

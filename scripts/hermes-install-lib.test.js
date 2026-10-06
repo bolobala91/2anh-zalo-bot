@@ -12,10 +12,14 @@ import {
   resolveHermesLayout,
   mergeHermesConfig,
   renderPlatformManifest,
-  installHermes,
+  installHermes as installHermesReal,
   doctorHermes,
-  uninstallHermes,
+  uninstallHermes as uninstallHermesReal,
 } from './hermes-install-lib.js';
+
+// Mặc định không đụng systemd / thư mục Startup thật khi kiểm thử.
+const installHermes = (options) => installHermesReal({ noDashboard: true, ...options });
+const uninstallHermes = (options) => uninstallHermesReal({ noDashboard: true, ...options });
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 
@@ -323,4 +327,76 @@ test('doctor báo đúng mục style-guide: đã ghi bản mặc định rồi b
   check = diagnosis.checks.find((c) => c.name === 'style-guide');
   assert.equal(check.ok, true);
   assert.match(check.detail, /riêng/);
+});
+
+test('installHermes wires the dashboard service, setup link and Caddy block without touching the system', async (t) => {
+  const fx = fixture(t);
+  const calls = [];
+  const prev = { url: process.env.ZALO_DASHBOARD_URL, port: process.env.ZALO_DASHBOARD_PORT };
+  process.env.ZALO_DASHBOARD_URL = 'https://dashboard.example.vn/';
+  delete process.env.ZALO_DASHBOARD_PORT;
+  t.after(() => {
+    if (prev.url === undefined) delete process.env.ZALO_DASHBOARD_URL; else process.env.ZALO_DASHBOARD_URL = prev.url;
+    if (prev.port !== undefined) process.env.ZALO_DASHBOARD_PORT = prev.port;
+  });
+  const result = await installHermesReal({
+    sidecarRoot: fx.sidecar,
+    hermesHome: fx.hermesHome,
+    skipPython: true,
+    dashboardInstaller: (opts) => { calls.push(opts.sidecarRoot); return { installed: false, detail: 'giả lập' }; },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(result.dashboard.installed, false);
+  assert.match(result.setupLink, /^https:\/\/dashboard\.example\.vn\/#\/setup\/[\w-]+$/);
+  assert.match(result.caddy, /dashboard\.example\.vn \{/);
+  assert.equal(existsSync(join(fx.hermesHome, 'zalo', 'dashboard', 'setup.json')), true);
+});
+
+test('doctorHermes reports dashboard checks as warnings, never failures', (t) => {
+  const fx = fixture(t);
+  const probe = (cmd, args) => ({ status: args?.[0] === '-e' ? 1 : 0 });
+  return installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true }).then(() => {
+    const diagnosis = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, commandProbe: probe });
+    assert.equal(diagnosis.ok, true, JSON.stringify(diagnosis.checks));
+    const byName = Object.fromEntries(diagnosis.checks.map((c) => [c.name, c]));
+    assert.match(byName['dashboard-running'].detail, /^chưa chạy — /);
+    assert.match(byName['dashboard-admin'].detail, /npm run dashboard:setup-link/);
+    assert.match(byName['dashboard-telegram'].detail, /chưa cài bot cảnh báo/);
+  });
+});
+
+test('doctorHermes trên Linux: thiếu dịch vụ systemd cho nút khởi động lại chỉ là cảnh báo kèm cách sửa', async (t) => {
+  const fx = fixture(t);
+  await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  const prev = { s: process.env.ZALO_SIDECAR_RESTART_CMD, a: process.env.ZALO_ASSISTANT_RESTART_CMD };
+  delete process.env.ZALO_SIDECAR_RESTART_CMD; delete process.env.ZALO_ASSISTANT_RESTART_CMD;
+  t.after(() => {
+    if (prev.s !== undefined) process.env.ZALO_SIDECAR_RESTART_CMD = prev.s; else delete process.env.ZALO_SIDECAR_RESTART_CMD;
+    if (prev.a !== undefined) process.env.ZALO_ASSISTANT_RESTART_CMD = prev.a; else delete process.env.ZALO_ASSISTANT_RESTART_CMD;
+  });
+  const seen = [];
+  const probe = (have) => (cmd, args) => {
+    if (cmd === 'systemctl') { seen.push(args.join(' ')); return { status: have.includes(args[1]) ? 0 : 1 }; }
+    return { status: 1 };
+  };
+  const check = (have) => {
+    const d = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, commandProbe: probe(have), hostPlatform: 'linux' });
+    assert.equal(d.ok, true, JSON.stringify(d.checks));
+    return d.checks.find((c) => c.name === 'dashboard-restart');
+  };
+  const missingBridge = check(['hermes-gateway']);
+  assert.equal(missingBridge.ok, true);
+  assert.match(missingBridge.detail, /chưa có dịch vụ zalo-bridge — đặt ZALO_SIDECAR_RESTART_CMD/);
+  assert.doesNotMatch(missingBridge.detail, /hermes-gateway/);
+  assert.deepEqual(seen, ['cat zalo-bridge', 'cat hermes-gateway']);
+  assert.match(check([]).detail, /zalo-bridge, hermes-gateway — đặt ZALO_SIDECAR_RESTART_CMD\/ZALO_ASSISTANT_RESTART_CMD/);
+  assert.doesNotMatch(check(['zalo-bridge', 'hermes-gateway']).detail, /chưa có/);
+  // Đã khai lệnh riêng thì không cần dịch vụ systemd.
+  process.env.ZALO_SIDECAR_RESTART_CMD = 'my-restart'; process.env.ZALO_ASSISTANT_RESTART_CMD = 'my-restart-2';
+  seen.length = 0;
+  assert.doesNotMatch(check([]).detail, /chưa có/);
+  assert.deepEqual(seen, []);
+  // Windows không có kiểm tra này.
+  const win = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, commandProbe: probe([]), hostPlatform: 'win32' });
+  assert.equal(win.checks.find((c) => c.name === 'dashboard-restart'), undefined);
 });

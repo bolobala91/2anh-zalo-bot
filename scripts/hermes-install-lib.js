@@ -8,6 +8,12 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isMap, isSeq, parse, parseDocument } from 'yaml';
+import { installDashboardService, uninstallDashboardService, caddySnippet } from './dashboard-service.js';
+import { resolveDashboardPaths } from '../dashboard/lib/paths.js';
+import { loadDashboardConfig } from '../dashboard/lib/config.js';
+import { createUserStore } from '../dashboard/lib/users.js';
+import { issueSetupLink } from '../dashboard/lib/setup-link.js';
+import { readJson } from '../dashboard/lib/json-store.js';
 
 const PLATFORM_KEY = 'platforms/zalo';
 const TOOLS_KEY = 'zalo-tools';
@@ -26,6 +32,7 @@ export function parseCliArgs(argv) {
     else if (value === '--sidecar-root') options.sidecarRoot = argv[++index];
     else if (value === '--skip-python') options.skipPython = true;
     else if (value === '--vieneu-tts') options.vieneuTts = true;
+    else if (value === '--no-dashboard') options.noDashboard = true;
     else throw new Error(`Tham số không hỗ trợ: ${value}`);
   }
   if (!options.sidecarRoot) options.sidecarRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -385,7 +392,9 @@ export function doctorHermes({
   sidecarRoot,
   hermesHome,
   skipPython = false,
+  noDashboard = false,
   commandProbe = spawnSync,
+  hostPlatform = platform(),
 } = {}) {
   const checks = [];
   const add = (name, ok, detail = '') => checks.push({ name, ok: Boolean(ok), detail });
@@ -481,7 +490,47 @@ export function doctorHermes({
       ? 'có — bot đọc và tải được video YouTube/TikTok/Facebook'
       : 'thiếu — bot chưa đọc/tải được video; cài: uv pip install --python <venv Hermes> "yt-dlp[default,curl-cffi]" youtube-transcript-api, và cài ffmpeg');
   }
+  if (!noDashboard) addDashboardChecks(add, { layout, root, commandProbe, hostPlatform });
   return { ok: checks.every((check) => check.ok), checks };
+}
+
+// Dashboard là phần tuỳ chọn: thiếu/chưa chạy chỉ là cảnh báo (ok:true + chi tiết).
+function addDashboardChecks(add, { layout, root, commandProbe, hostPlatform }) {
+  let paths; let config;
+  try {
+    const env = { ...process.env, HERMES_HOME: layout.home };
+    paths = resolveDashboardPaths({ env, sidecarRoot: root });
+    config = loadDashboardConfig(env);
+  } catch (error) {
+    add('dashboard-running', true, `chưa kiểm tra được — ${error.message}`);
+    return;
+  }
+  const script = `fetch('http://127.0.0.1:${config.port}/healthz',{signal:AbortSignal.timeout(2000)}).then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))`;
+  let up = false;
+  try {
+    up = commandProbe(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 5000, windowsHide: true })?.status === 0;
+  } catch { /* coi như chưa chạy */ }
+  add('dashboard-running', true, up
+    ? `đang chạy ở cổng ${config.port}`
+    : `chưa chạy — chạy lại install:hermes (hoặc npm run dashboard) để bật; mở ở ${config.publicUrl}`);
+  let hasAdmin = false;
+  try { hasAdmin = createUserStore(paths.usersFile).hasAdmin(); } catch { /* chưa có */ }
+  add('dashboard-admin', true, hasAdmin ? 'đã có tài khoản Quản trị' : 'chưa có — chạy npm run dashboard:setup-link');
+  const hasTelegram = Boolean(readJson(paths.telegramFile, {})?.token);
+  add('dashboard-telegram', true, hasTelegram ? 'đã cài bot cảnh báo' : 'chưa cài bot cảnh báo');
+  // Nút "khởi động lại" trên Linux mặc định gọi systemctl restart zalo-bridge / hermes-gateway.
+  if (hostPlatform !== 'win32') {
+    const missing = [['zalo-bridge', 'ZALO_SIDECAR_RESTART_CMD', config.restartCmd], ['hermes-gateway', 'ZALO_ASSISTANT_RESTART_CMD', config.assistantRestartCmd]]
+      .filter(([service, , custom]) => {
+        if (custom) return false;
+        try {
+          return commandProbe('systemctl', ['cat', service], { encoding: 'utf8', timeout: 5000, windowsHide: true })?.status !== 0;
+        } catch { return true; }
+      });
+    add('dashboard-restart', true, missing.length
+      ? `chưa có dịch vụ ${missing.map(([s]) => s).join(', ')} — đặt ${missing.map(([, v]) => v).join('/')} trong .env của bot để nút khởi động lại chạy được`
+      : 'khởi động lại được kết nối Zalo và trợ lý từ dashboard');
+  }
 }
 
 export async function installHermes({
@@ -489,7 +538,9 @@ export async function installHermes({
   hermesHome,
   skipPython = false,
   vieneuTts = false,
+  noDashboard = false,
   commandProbe = spawnSync,
+  dashboardInstaller = installDashboardService,
 } = {}) {
   if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Cần Node.js 22 trở lên');
   const root = resolve(sidecarRoot);
@@ -523,13 +574,35 @@ export async function installHermes({
     sidecarRoot: root,
     hermesHome: layout.home,
     skipPython,
+    noDashboard: true,
     commandProbe,
   });
   if (!diagnosis.ok) throw new Error(`Cài đặt chưa hoàn chỉnh: ${JSON.stringify(diagnosis.checks)}`);
-  return diagnosis;
+  if (noDashboard) return diagnosis;
+
+  // Dashboard không bao giờ làm hỏng bản cài chính: lỗi nào cũng chỉ thành cảnh báo.
+  let config = null;
+  let paths = null;
+  try {
+    const env = { ...process.env, HERMES_HOME: layout.home };
+    config = loadDashboardConfig(env);
+    paths = resolveDashboardPaths({ env, sidecarRoot: root });
+  } catch { /* dùng mặc định bên dưới */ }
+  const dashboard = await dashboardInstaller({ sidecarRoot: root, ...(config ? { port: config.port } : {}) });
+  let setupLink = null;
+  let caddy = '';
+  if (config && paths) {
+    try {
+      setupLink = issueSetupLink({ paths, config });
+      caddy = caddySnippet(config.publicUrl, config.port);
+    } catch (error) {
+      dashboard.detail = `${dashboard.detail} (không tạo được link thiết lập: ${error.message})`;
+    }
+  }
+  return { ...diagnosis, dashboard, setupLink, caddy };
 }
 
-export function uninstallHermes({ hermesHome } = {}) {
+export function uninstallHermes({ hermesHome, noDashboard = false, dashboardUninstaller = uninstallDashboardService } = {}) {
   const layout = resolveHermesLayout({ hermesHome });
   const pluginRoot = join(layout.repoRoot, 'plugins');
   const targets = [join(pluginRoot, 'platforms', 'zalo'), join(pluginRoot, 'zalo_tools')];
@@ -537,5 +610,6 @@ export function uninstallHermes({ hermesHome } = {}) {
     if (!within(pluginRoot, target)) throw new Error(`Đích gỡ cài đặt không an toàn: ${target}`);
     if (existsSync(target)) rmSync(target, { recursive: true, force: true });
   }
-  return { ok: true, removed: targets };
+  const dashboard = noDashboard ? { removed: [], detail: '' } : dashboardUninstaller();
+  return { ok: true, removed: [...targets, ...dashboard.removed], dashboardDetail: dashboard.detail };
 }

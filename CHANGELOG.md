@@ -2,6 +2,21 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.19.0] — 2026-10-07
+
+### Thêm
+
+- **Dashboard quản trị (giai đoạn 1).** Trang web riêng, chỉ nghe `127.0.0.1` (mặc định cổng 3880): xem tình trạng bot, quét lại mã QR Zalo, tạo tài khoản cho khách, đăng nhập bằng mã gửi qua Zalo, cảnh báo qua Telegram.
+- **Bộ cài tự cài dịch vụ dashboard.** Linux có root và systemd: ghi `zalo-dashboard.service` rồi bật ngay. Windows: thêm `zalo-dashboard.vbs` chạy ẩn vào thư mục Startup. Không cài được thì in hướng dẫn chạy tay, không làm hỏng lần cài. Bỏ qua bằng `--no-dashboard`.
+- Bộ cài in link thiết lập tài khoản Quản trị đầu tiên (dùng một lần, 24 giờ) và khối Caddy khi `ZALO_DASHBOARD_URL` là `https://…`.
+- `npm run doctor` thêm ba mục cảnh báo: `dashboard-running`, `dashboard-admin`, `dashboard-telegram`.
+- `npm run uninstall:hermes` gỡ cả dịch vụ dashboard (giữ nguyên dữ liệu).
+- Biến tuỳ chọn mới trong `.env`: `ZALO_DASHBOARD_PORT`, `ZALO_DASHBOARD_URL`, `ZALO_SIDECAR_RESTART_CMD`, `ZALO_ASSISTANT_RESTART_CMD`.
+
+### Sửa
+
+- Giãn nhịp tự nối lại kết nối Zalo khi nó chết, tránh khởi động lại dồn dập.
+
 ## [1.18.0] — 2026-10-06
 
 ### Thêm

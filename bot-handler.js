@@ -51,7 +51,13 @@ const NOTIFY_COOLDOWN_MS = 5 * 60 * 1000;
  */
 const RESTART_DELAYS_MS = [5_000, 15_000, 30_000, 60_000, 120_000, 300_000];
 
-export function setupBotListener(api, profile = null, { health = null, restartDelaysMs = RESTART_DELAYS_MS } = {}) {
+const KICK_CODES = new Set([3000, 3003]); // 3000: phiên khác mở; 3003: bị đá (zca-js CloseReason)
+
+export function setupBotListener(api, profile = null, {
+  health = null, restartDelaysMs = RESTART_DELAYS_MS,
+  stableAfterMs = 120_000, flapWindowMs = 10_000, now = Date.now,
+  onScheduleRestart = null,
+} = {}) {
   if (!api?.listener) {
     console.warn('[bot] ❌ api.listener không tồn tại — bot sẽ không nhận được tin nhắn');
     return () => {};
@@ -61,6 +67,9 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
   let stopped = false;
   let restartTimer = null;
   let restartAttempt = 0;
+  let connectedAt = 0;
+  let stableTimer = null;
+  let kicked = false;
 
   const stickers = createStickerDirectory({
     fetchDetail: (id) => api.getStickersDetail(id),
@@ -107,18 +116,40 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
   };
 
   const onConnected = () => {
-    restartAttempt = 0;
+    connectedAt = now();
     health?.setListenerState('connected');
     console.log('[bot] 🔌 Zalo listener đã kết nối');
+    clearTimeout(stableTimer);
+    // Chỉ coi là đã ổn khi giữ được kết nối đủ lâu — nối được rồi rớt ngay
+    // không được xoá nhịp chờ (sự cố 01/10/2026: 17.414 lần thử trong 24 giờ).
+    stableTimer = setTimeout(() => {
+      restartAttempt = 0;
+      kicked = false;
+      health?.setNeedsRelogin?.(false);
+    }, stableAfterMs);
+    stableTimer.unref?.();
+  };
+
+  // Bị đá có thể chỉ đến dưới dạng `closed` mà không có `disconnected` trước.
+  const noteKick = (code) => {
+    if (!KICK_CODES.has(Number(code))) return;
+    kicked = true;
+    health?.setNeedsRelogin?.(true);
   };
 
   const onDisconnected = (code, reason) => {
+    clearTimeout(stableTimer);
     health?.setListenerState('reconnecting');
-    console.warn(`[bot] ⚠️ Zalo listener mất kết nối (mã ${code}${reason ? `: ${reason}` : ''})`);
+    noteKick(code);
+    const heldMs = connectedAt ? now() - connectedAt : null;
+    const flap = heldMs != null && heldMs < flapWindowMs ? ` (rớt sau ${heldMs}ms)` : '';
+    console.warn(`[bot] ⚠️ Zalo listener mất kết nối (mã ${code}${reason ? `: ${reason}` : ''})${flap}`);
   };
 
   const onClosed = (code, reason) => {
     if (stopped) return;
+    clearTimeout(stableTimer);
+    noteKick(code);
     health?.setListenerState('closed');
     health?.recordError('zalo_listener_closed', `code ${code}`);
     console.error(`[bot] ❌ Zalo listener đã đóng (mã ${code}${reason ? `: ${reason}` : ''}) — không nhận được tin cho tới khi mở lại`);
@@ -138,8 +169,11 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
 
   function scheduleRestart() {
     if (stopped || restartTimer) return;
-    const delay = restartDelaysMs[Math.min(restartAttempt, restartDelaysMs.length - 1)];
+    const delay = kicked
+      ? restartDelaysMs[restartDelaysMs.length - 1]
+      : restartDelaysMs[Math.min(restartAttempt, restartDelaysMs.length - 1)];
     restartAttempt += 1;
+    onScheduleRestart?.(delay);
     console.warn(`[bot] 🔁 thử mở lại Zalo listener sau ${Math.round(delay / 1000)}s (lần ${restartAttempt})`);
     restartTimer = setTimeout(() => {
       restartTimer = null;
@@ -166,6 +200,7 @@ export function setupBotListener(api, profile = null, { health = null, restartDe
     if (stopped) return;
     stopped = true;
     clearTimeout(restartTimer);
+    clearTimeout(stableTimer);
     restartTimer = null;
     welcomer.stop();
     friends?.stop();
