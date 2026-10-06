@@ -15,8 +15,8 @@ export function Profile({ me, status }) {
   const link = () => run('link', async () => {
     const r = await api('/api/telegram/link', { method: 'POST' });
     setLinkUrl(r.url);
-    window.open(r.url, '_blank', 'noopener');
-    setTg({ ok: 'Đã mở Telegram — bấm "Start" (Bắt đầu) trong cuộc trò chuyện với bot để hoàn tất. Link dùng được trong 10 phút.' });
+    try { window.open(r.url, '_blank', 'noopener'); } catch { /* trình duyệt chặn cửa sổ mới — đã có link bên dưới */ }
+    setTg({ ok: 'Đã tạo link nối — mở Telegram, bấm "Start" (Bắt đầu) trong cuộc trò chuyện với bot để hoàn tất. Link dùng được trong 10 phút.' });
   }, setTg);
   const test = () => run('test', async () => {
     await api('/api/telegram/test', { method: 'POST' });
@@ -56,7 +56,8 @@ export function Profile({ me, status }) {
             ${linked ? 'Nối lại Telegram' : 'Nối Telegram của tôi'}</button>
           <button class="btn btn-secondary" disabled=${!!busy || !linked} onClick=${test}><${Icon} name="send" size=${16} /> Gửi thử</button>
         </div>
-        ${linkUrl && !linked ? html`<p class="small muted">Telegram chưa mở? <a href=${linkUrl} target="_blank" rel="noopener noreferrer">Bấm vào đây để mở</a>.</p>` : null}
+        ${linkUrl ? html`<p class="link-out"><a class="btn btn-secondary btn-sm" href=${linkUrl} target="_blank" rel="noopener">
+          <${Icon} name="external" size=${16} /> Mở Telegram để nối</a> <span class="small muted">nếu Telegram chưa tự mở.</span></p>` : null}
         <${Live} error=${tg.error} ok=${tg.ok} />
       </section>
     </div>`;

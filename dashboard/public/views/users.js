@@ -1,4 +1,4 @@
-import { useEffect, useState } from '../vendor/hooks.mjs';
+import { useEffect, useRef, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Live, PageHead, Spinner, fmtTime, roleLabel } from '../ui.js';
 
@@ -55,6 +55,40 @@ function AddUser({ onAdded }) {
   </section>`;
 }
 
+/** Dòng phụ dưới người dùng: ô mật khẩu mới (che) + Lưu/Huỷ, lỗi hiện ngay tại chỗ. */
+function ResetRow({ user, onCancel, onDone }) {
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const id = `reset-${user.username}`;
+  const inputRef = useRef(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  async function save(e) {
+    e.preventDefault();
+    if (pw.length < 8) { setError('Mật khẩu cần ít nhất 8 ký tự — nhập mật khẩu dài hơn.'); return; }
+    setBusy(true); setError('');
+    try {
+      await api(`/api/admin/users/${encodeURIComponent(user.username)}`, { method: 'PATCH', body: { password: pw } });
+      onDone(`Đã đặt mật khẩu mới cho ${user.username}. Người này cần đăng nhập lại.`);
+    } catch (err) { setError(err.message); setBusy(false); }
+  }
+  return html`<tr class="reset-row"><td colspan="6">
+    <form class="reset-form" onSubmit=${save} novalidate>
+      <div class="field">
+        <label for=${id}>Mật khẩu mới cho ${user.username}</label>
+        <input id=${id} type="password" autocomplete="new-password" ref=${inputRef} value=${pw}
+          aria-describedby=${`${id}-help`} onInput=${(e) => setPw(e.currentTarget.value)} />
+        <small id=${`${id}-help`}>Ít nhất 8 ký tự. Người này sẽ bị đăng xuất khỏi mọi nơi.</small>
+      </div>
+      <div class="row">
+        <button class="btn btn-primary btn-sm" disabled=${busy}>${busy ? 'Đang lưu…' : 'Lưu'}</button>
+        <button type="button" class="btn btn-secondary btn-sm" disabled=${busy} onClick=${onCancel}>Huỷ</button>
+      </div>
+      <${Live} error=${error} />
+    </form>
+  </td></tr>`;
+}
+
 export function Users({ me }) {
   const [list, setList] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -72,12 +106,8 @@ export function Users({ me }) {
     if (!u.disabled && !confirm(`Khoá tài khoản ${u.username}? Người này sẽ bị đăng xuất ngay.`)) return;
     patch(u, { disabled: !u.disabled }, u.disabled ? `Đã mở khoá ${u.username}.` : `Đã khoá ${u.username}.`);
   };
-  const resetPassword = (u) => {
-    const pw = prompt(`Mật khẩu mới cho ${u.username} (ít nhất 8 ký tự):`);
-    if (pw === null) return;
-    if (pw.length < 8) { setMsg({ error: 'Mật khẩu cần ít nhất 8 ký tự — bấm "Đặt lại mật khẩu" và nhập lại.' }); return; }
-    patch(u, { password: pw }, `Đã đặt mật khẩu mới cho ${u.username}. Người này cần đăng nhập lại.`);
-  };
+  const [resetFor, setResetFor] = useState('');
+  const openReset = (u) => { setResetFor(resetFor === u.username ? '' : u.username); setMsg({}); };
 
   return html`
     <${PageHead} title="Người dùng" sub="Ai được vào dashboard và với vai trò gì." />
@@ -100,10 +130,12 @@ export function Users({ me }) {
                   <button class="btn btn-secondary btn-sm" disabled=${busy === u.username || u.username === me.username}
                     title=${u.username === me.username ? 'Không thể tự khoá tài khoản đang dùng' : undefined} onClick=${() => toggle(u)}>
                     <${Icon} name=${u.disabled ? 'unlock' : 'lock'} size=${14} /> ${u.disabled ? 'Mở khoá' : 'Khoá'}</button>
-                  <button class="btn btn-secondary btn-sm" disabled=${busy === u.username} onClick=${() => resetPassword(u)}>
-                    <${Icon} name="key" size=${14} /> Đặt lại mật khẩu</button>
+                  <button class="btn btn-secondary btn-sm" disabled=${busy === u.username} aria-expanded=${resetFor === u.username}
+                    onClick=${() => openReset(u)}><${Icon} name="key" size=${14} /> Đặt lại mật khẩu</button>
                 </div></td>
-              </tr>`)}
+              </tr>
+              ${resetFor === u.username ? html`<${ResetRow} key=${`reset-${u.username}`} user=${u}
+                onCancel=${() => setResetFor('')} onDone=${(text) => { setResetFor(''); setMsg({ ok: text }); }} />` : null}`)}
             </tbody>
           </table>
         </div>`}

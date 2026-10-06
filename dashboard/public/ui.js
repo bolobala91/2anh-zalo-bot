@@ -36,10 +36,10 @@ export function Icon({ name, size = 18 }) {
 
 const KIND_ICON = { ok: 'check', warn: 'warn', danger: 'error', info: 'info' };
 
-/** Hộp thông báo có biểu tượng + chữ (không chỉ dựa vào màu). */
+/** Hộp thông báo có biểu tượng + chữ (không chỉ dựa vào màu). Không tự đọc to — muốn đọc thì đặt trong <Live>. */
 export function Notice({ kind = 'info', children }) {
   if (!children) return null;
-  return html`<div class=${`notice notice-${kind}`} role=${kind === 'danger' ? 'alert' : 'status'}>
+  return html`<div class=${`notice notice-${kind}`}>
     <${Icon} name=${KIND_ICON[kind]} /><div>${children}</div></div>`;
 }
 

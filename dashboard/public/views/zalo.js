@@ -1,4 +1,4 @@
-import { useEffect, useState } from '../vendor/hooks.mjs';
+import { useEffect, useRef, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
 
@@ -6,9 +6,11 @@ const QR_SECONDS = 60;
 const POLL_MS = 1000;
 const MAX_AUTO_RESTART = 3;
 
-const startQr = () => api('/api/zalo/qr/start', { method: 'POST' });
-
 function QrFlow({ refresh }) {
+  // Chỉ một yêu cầu qr/start chạy cùng lúc (đếm ngược và nhánh "idle" của poll có thể cùng gọi).
+  const starting = useRef(null);
+  const startQr = () => starting.current
+    || (starting.current = api('/api/zalo/qr/start', { method: 'POST' }).finally(() => { starting.current = null; }));
   const [qr, setQr] = useState(null);
   const [left, setLeft] = useState(QR_SECONDS);
   const [error, setError] = useState('');
@@ -60,7 +62,7 @@ function QrFlow({ refresh }) {
 
   if (done) {
     return html`<section class="card qr-card">
-      <${Notice} kind="ok">Đăng nhập Zalo thành công${qr?.user?.display_name ? ` — ${qr.user.display_name}` : ''}. Đang chuyển về Tổng quan…<//>
+      <${Live} ok=${`Đăng nhập Zalo thành công${qr?.user?.display_name ? ` — ${qr.user.display_name}` : ''}. Đang chuyển về Tổng quan…`} />
     </section>`;
   }
   const scanned = qr?.status === 'scanned';
@@ -77,8 +79,8 @@ function QrFlow({ refresh }) {
           <progress class="qr-progress" max=${QR_SECONDS} value=${left} aria-hidden="true"></progress>` : null}
     </div>
     <${Live} error=${error} />
-    ${stopped ? html`<button class="btn btn-primary" onClick=${() => { setQr(null); setRound(round + 1); }}>
-      <${Icon} name="refresh" size=${16} /> Tạo mã mới</button>` : null}
+    <button class=${stopped ? 'btn btn-primary' : 'btn btn-secondary btn-sm'} onClick=${() => { setQr(null); setRound(round + 1); }}>
+      <${Icon} name="refresh" size=${16} /> Tạo mã mới</button>
   </section>`;
 }
 
@@ -86,6 +88,9 @@ export function Zalo({ status: s, refresh }) {
   const [showQr, setShowQr] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const needsQr = Boolean(s) && s.sidecar !== 'down' && (s.zalo.status !== 'logged-in' || s.zalo.needsRelogin);
+  // Chưa đăng nhập → tự hiện QR ngay; giữ luồng QR sau khi đăng nhập xong để báo thành công rồi chuyển trang.
+  useEffect(() => { if (needsQr) setShowQr(true); }, [needsQr]);
   if (!s) return html`<${PageHead} title="Tài khoản Zalo" /><${Spinner} />`;
 
   async function logout() {
@@ -125,8 +130,7 @@ export function Zalo({ status: s, refresh }) {
           <li>Quét mã hiện bên cạnh, rồi bấm <strong>Đăng nhập</strong> trên điện thoại.</li>
         </ol>
         <${Notice} kind="warn">Không mở trang này trên chính điện thoại đó — điện thoại không quét được mã trên màn hình của nó.<//>
-        ${showQr ? null : html`<button class="btn btn-primary" onClick=${() => setShowQr(true)}><${Icon} name="qr" size=${16} /> Hiện mã QR</button>`}
       </section>
-      ${showQr ? html`<${QrFlow} refresh=${refresh} />` : null}
+      <${QrFlow} refresh=${refresh} />
     </div>`;
 }
