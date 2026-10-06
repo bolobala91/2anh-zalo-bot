@@ -6,14 +6,17 @@ import { dirname, join } from 'path';
 import { mkdirSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { loadEnvFile } from 'node:process';
 import { loadRepoEnv, loadHermesEnv } from './scripts/setup-env.js';
-import { Zalo, LoginQRCallbackEventType } from 'zca-js';
+import { Zalo } from 'zca-js';
 import { tryReconnect, saveSession, clearSession, fetchProfile, zaloOptions } from './auth.js';
 import { setupBotListener } from './bot-handler.js';
-import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached } from './hermes-bridge.js';
+import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached, sendSystemNotice } from './hermes-bridge.js';
 import { openZaloStore } from './zalo-store.js';
 import { createRuntimeHealth } from './runtime-health.js';
 import { importLegacyHermesHistory } from './legacy-history-import.js';
 import { installFileLog } from './file-log.js';
+import { createQrLogin } from './qr-login.js';
+import { createControlRouter } from './control-api.js';
+import { createGroupDirectory } from './group-directory.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 installFileLog({ path: join(__dirname, 'logs', 'sidecar.log') });
@@ -58,6 +61,28 @@ app.use((req, res, next) => (
   isLocalHost(req.headers.host) ? next() : res.status(403).json({ ok: false, error: 'Host không hợp lệ' })
 ));
 app.use(express.json());
+
+// --- Dashboard control (Bearer ZALO_BRIDGE_TOKEN, không qua CSRF /api) ---
+const groupDirectory = createGroupDirectory({ getApi: () => api });
+app.use('/control', createControlRouter({
+  token: process.env.ZALO_BRIDGE_TOKEN,
+  health: () => runtimeHealth.snapshot(),
+  qr: { start: () => qrLogin.start(), state: () => qrLogin.state() },
+  logout: () => logoutZalo(),
+  send: ({ threadId, threadType, text, actor }) => {
+    if (!api) throw new Error('Zalo chưa đăng nhập');
+    return sendSystemNotice({ api, threadId, threadType, text, actorUid: actor, actorRole: 'dashboard', action: 'dashboard_send' });
+  },
+  loginCode: ({ zaloUid, code }) => {
+    if (!api) throw new Error('Zalo chưa đăng nhập');
+    return sendSystemNotice({
+      api, threadId: zaloUid, threadType: 0, actorUid: 'dashboard', actorRole: 'dashboard', action: 'dashboard_login_code',
+      text: `Mã đăng nhập dashboard: ${code}
+Mã có hiệu lực 5 phút. Đừng đưa mã này cho ai.`,
+    });
+  },
+  groups: () => groupDirectory.list(),
+}));
 app.use(express.static(join(__dirname, 'public')));
 app.use('/api', (req, res, next) => {
   if (req.method !== 'POST' || req.get('X-Zalo-Dashboard') === '1') return next();
@@ -68,7 +93,6 @@ app.use('/api', (req, res, next) => {
 let zalo = null;
 let api = null;
 let loginInfo = null;
-let qrBase64 = null;
 let status = 'idle'; // 'idle' | 'qr-pending' | 'scanned' | 'logged-in'
 let sessionFromDisk = false;
 let stopBotListener = () => {};
@@ -114,9 +138,30 @@ wss.on('connection', (ws) => {
   // push current state to new client
   if (status === 'logged-in' && loginInfo) {
     ws.send(JSON.stringify({ type: 'login-success', data: loginInfo }));
-  } else if (qrBase64) {
-    ws.send(JSON.stringify({ type: 'qr-generated', data: { image: qrBase64 } }));
+  } else if (qrLogin.state().image) {
+    // Trang cũ tự thêm tiền tố data URL nên chỉ gửi base64 thuần.
+    const image = qrLogin.state().image.replace(/^data:image\/png;base64,/, '');
+    ws.send(JSON.stringify({ type: 'qr-generated', data: { image } }));
   }
+});
+
+const qrLogin = createQrLogin({
+  createZalo: () => (zalo = new Zalo(zaloOptions())),
+  health: runtimeHealth,
+  broadcast,
+  onLoggedIn: async (loggedApi, credentials) => {
+    api = loggedApi;
+    sessionFromDisk = false;
+    loginInfo = await fetchProfile(api);
+    status = 'logged-in';
+    runtimeHealth.setZaloState('logged-in', { userId: loginInfo?.user_id, displayName: loginInfo?.display_name });
+    if (!credentials) console.warn('[auth] ⚠️ không bắt được credentials từ sự kiện GotLoginInfo');
+    await saveSession(credentials, loginInfo);
+    console.log(`[auth] ✅ đăng nhập thành công — ${loginInfo?.display_name || '?'} (${loginInfo?.user_id || '?'})`);
+    broadcast({ type: 'login-success', data: loginInfo });
+    activateZaloRuntime();
+    return loginInfo;
+  },
 });
 
 // --- Boot check: Auto Reconnect ---
@@ -128,6 +173,7 @@ if (reconnectResult) {
   loginInfo = reconnectResult.loginInfo;
   sessionFromDisk = true;
   status = 'logged-in';
+  qrLogin.markLoggedIn(loginInfo);
   runtimeHealth.setZaloState('logged-in', {
     userId: loginInfo?.user_id,
     displayName: loginInfo?.display_name,
@@ -142,83 +188,12 @@ if (reconnectResult) {
 // --- QR Login ---
 app.post('/api/qr/start', async (req, res) => {
   if (status === 'logged-in' && api) return res.json({ ok: true, user: loginInfo });
-
-  status = 'qr-pending';
-  qrBase64 = null;
-
   try {
-    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0';
-    zalo = new Zalo(zaloOptions());
-    
-    // Bắt sự kiện GotLoginInfo để lưu credentials chuẩn xác
-    let capturedCredentials = null;
-
-    const session = await zalo.loginQR(
-      { userAgent, language: 'vi' },
-      async (evt) => {
-        console.log('[ZCA QR Event]:', evt.type);
-        switch (evt.type) {
-          case LoginQRCallbackEventType.QRCodeGenerated:
-            qrBase64 = evt.data.image;
-            status = 'qr-pending';
-            runtimeHealth.setZaloState('qr-pending');
-            broadcast({ type: 'qr-generated', data: { image: qrBase64 } });
-            break;
-          case LoginQRCallbackEventType.QRCodeScanned:
-            status = 'scanned';
-            runtimeHealth.setZaloState('scanned');
-            broadcast({ type: 'qr-scanned' });
-            break;
-          case LoginQRCallbackEventType.QRCodeExpired:
-            status = 'idle';
-            runtimeHealth.setZaloState('idle');
-            qrBase64 = null;
-            broadcast({ type: 'qr-expired' });
-            break;
-          case LoginQRCallbackEventType.QRCodeDeclined:
-            status = 'idle';
-            runtimeHealth.setZaloState('idle');
-            qrBase64 = null;
-            broadcast({ type: 'qr-declined' });
-            break;
-          case LoginQRCallbackEventType.GotLoginInfo:
-            status = 'scanned';
-            if (evt.data) {
-              capturedCredentials = evt.data; // { cookie, imei, userAgent }
-              console.log('[auth] GotLoginInfo captured with cookies:', capturedCredentials.cookie?.length);
-            }
-            break;
-        }
-      }
-    );
-
-    api = session;
-    status = 'logged-in';
-    sessionFromDisk = false;
-
-    // zca-js không trả hồ sơ kèm session — phải hỏi server.
-    loginInfo = await fetchProfile(api);
-    runtimeHealth.setZaloState('logged-in', {
-      userId: loginInfo?.user_id,
-      displayName: loginInfo?.display_name,
-    });
-
-    if (!capturedCredentials) {
-      console.warn('[auth] ⚠️ không bắt được credentials từ sự kiện GotLoginInfo');
-    }
-    await saveSession(capturedCredentials, loginInfo);
-
-    console.log(`[auth] ✅ đăng nhập thành công — ${loginInfo?.display_name || '?'} (${loginInfo?.user_id || '?'})`);
-    broadcast({ type: 'login-success', data: loginInfo });
-    activateZaloRuntime();
-    res.json({ ok: true, user: loginInfo });
+    const user = await qrLogin.waitForLogin();
+    res.json({ ok: true, user });
   } catch (err) {
     console.error('[auth] loginQR error:', err);
-    status = 'idle';
-    runtimeHealth.setZaloState('idle');
-    qrBase64 = null;
-    broadcast({ type: 'error', data: err.message });
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
 });
 
@@ -243,7 +218,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // --- Logout ---
-app.post('/api/logout', async (req, res) => {
+async function logoutZalo() {
   stopBotListener();
   stopBotListener = () => {};
   stopHermesBridge();
@@ -251,10 +226,14 @@ app.post('/api/logout', async (req, res) => {
   loginInfo = null;
   status = 'idle';
   runtimeHealth.setZaloState('idle');
-  qrBase64 = null;
+  qrLogin.markLoggedOut();
   sessionFromDisk = false;
   await clearSession();
   broadcast({ type: 'logout' });
+}
+
+app.post('/api/logout', async (req, res) => {
+  await logoutZalo();
   res.json({ ok: true });
 });
 
