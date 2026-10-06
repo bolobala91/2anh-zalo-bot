@@ -36,6 +36,7 @@ test('mã qua Zalo: start gửi mã tới UID, verify bằng mã', async (t) => 
   assert.equal(start.status, 200);
   const [, sent] = sidecar.calls.find((c) => c[0] === 'code');
   assert.equal(sent.zaloUid, '1234567890123456');
+  assert.equal(sent.actor, 'khach'); // control API đòi actor — thiếu là 400 và mã không bao giờ tới
   const ok = await call('/api/auth/verify', { method: 'POST', body: { username: 'khach', code: sent.code } });
   assert.equal(ok.status, 200);
 });

@@ -60,7 +60,7 @@ export function authRoutes({ users, sessions, guard, setupToken, activity, sidec
     if (user && !user.disabled && user.zaloUid && !lastCode.has(username) && await zaloReady()) {
       lastCode.set(username, t);
       const code = guard.issueCode(username);
-      try { await sidecar.loginCode({ zaloUid: user.zaloUid, code }); } catch (err) { console.error('[dashboard] gửi mã Zalo lỗi:', err?.message || err); }
+      try { await sidecar.loginCode({ zaloUid: user.zaloUid, code, actor: username }); } catch (err) { console.error('[dashboard] gửi mã Zalo lỗi:', err?.message || err); }
     }
     res.json({ ok: true, methods: ['zalo', 'password'], message: NEUTRAL });
   });
