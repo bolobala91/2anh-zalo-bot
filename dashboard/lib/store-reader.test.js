@@ -115,6 +115,20 @@ test('tin mã đăng nhập dashboard không bao giờ lộ ra: khung tin, xem t
   assert.equal(r.listConversations()[0].lastText, 'Chào bot');
 });
 
+test('tin mã đăng nhập không tính vào danh sách hội thoại và số liệu hôm nay', (t) => {
+  const s = setup(t);
+  const code = 'Mã đăng nhập dashboard: 123456\nMã có hiệu lực 5 phút.';
+  s.write([
+    m(1, { text: 'Chào bot', ts: 1000 }),
+    m(2, { text: code, isSelf: true, ts: 2000 }),
+    m(3, { threadId: '300', text: code, isSelf: true, ts: 3000 }),                  // chỉ có tin mã
+    m(4, { threadId: '400', threadType: 1, text: code, isSelf: true, ts: 4000 }),   // nhóm chỉ có tin mã
+  ]);
+  const r = s.reader();
+  assert.deepEqual(r.listConversations().map((c) => [c.threadId, c.total, c.lastAtMs]), [['100', 1, 1000]]);
+  assert.deepEqual(r.todayStats(0), { received: 1, sent: 0, topGroups: [] });
+});
+
 test('tìm toàn văn: không phân biệt hoa thường tiếng Việt; % và _ là chữ thường', (t) => {
   const s = setup(t);
   s.write([

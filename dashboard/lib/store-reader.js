@@ -66,10 +66,10 @@ export function createStoreReader({ path, caseFold = true }) {
     const d = open();
     const threads = d.prepare(`
       SELECT thread_id, thread_type, MAX(timestamp_ms) AS last_at, COUNT(*) AS total
-      FROM messages WHERE account_id = ?
+      FROM messages WHERE account_id = ? AND text NOT LIKE ?
       GROUP BY thread_type, thread_id
       ORDER BY last_at DESC LIMIT ?
-    `).all(acc, pageSize(limit, 300, 300));
+    `).all(acc, SECRET, pageSize(limit, 300, 300));
     const last = d.prepare(`
       SELECT text, msg_type, is_self FROM messages
       WHERE account_id = ? AND thread_type = ? AND thread_id = ? AND text NOT LIKE ?
@@ -143,13 +143,13 @@ export function createStoreReader({ path, caseFold = true }) {
     const d = open();
     const totals = d.prepare(`
       SELECT COALESCE(SUM(is_self = 0), 0) AS received, COALESCE(SUM(is_self = 1), 0) AS sent
-      FROM messages WHERE account_id = ? AND timestamp_ms >= ?
-    `).get(acc, sinceMs);
+      FROM messages WHERE account_id = ? AND timestamp_ms >= ? AND text NOT LIKE ?
+    `).get(acc, sinceMs, SECRET);
     const top = d.prepare(`
       SELECT thread_id, COUNT(*) AS n FROM messages
-      WHERE account_id = ? AND thread_type = 1 AND timestamp_ms >= ?
+      WHERE account_id = ? AND thread_type = 1 AND timestamp_ms >= ? AND text NOT LIKE ?
       GROUP BY thread_id ORDER BY n DESC, thread_id LIMIT 5
-    `).all(acc, sinceMs);
+    `).all(acc, sinceMs, SECRET);
     return { received: Number(totals.received), sent: Number(totals.sent), topGroups: top.map((g) => ({ threadId: g.thread_id, count: Number(g.n) })) };
   }
 
