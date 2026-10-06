@@ -55,14 +55,14 @@ export function Audit({ me }) {
   else if (!items.length) body = error ? null : html`<p class="muted">${failedOnly ? 'Không có lỗi nào.' : 'Chưa có hoạt động nào được ghi lại.'}</p>`;
   else {
     body = html`
-      <div class="table-wrap"><table class="table audit-table">
+      <div class="table-wrap"><table class="table audit-table table-cards">
         <thead><tr><th scope="col">Lúc nào</th><th scope="col">Ai</th><th scope="col">Làm gì</th><th scope="col">Ở đâu</th><th scope="col">Kết quả</th></tr></thead>
         <tbody>${items.map((it, i) => html`<tr key=${`${it.at}-${i}`}>
-          <td>${fmtTime(it.at)}</td>
-          <td>${it.who}</td>
-          <td>${it.what}${admin && it.code ? html`<div class="mono muted small">${codeText(it.code)}</div>` : null}</td>
-          <td>${it.where}</td>
-          <td><span class=${`badge ${it.ok ? 'badge-ok' : 'badge-danger'}`}><${Icon} name=${it.ok ? 'check' : 'error'} size=${14} /> ${it.result}</span></td>
+          <td data-label="Lúc nào">${fmtTime(it.at)}</td>
+          <td data-label="Ai">${it.who}</td>
+          <td data-label="Làm gì">${it.what}${admin && it.code ? html`<div class="mono muted small">${codeText(it.code)}</div>` : null}</td>
+          <td data-label="Ở đâu">${it.where}</td>
+          <td data-label="Kết quả"><span class=${`badge ${it.ok ? 'badge-ok' : 'badge-danger'}`}><${Icon} name=${it.ok ? 'check' : 'error'} size=${14} /> ${it.result}</span></td>
         </tr>`)}</tbody>
       </table></div>
       ${next ? html`<button type="button" class="btn btn-secondary btn-sm load-more" disabled=${busy} onClick=${more}>${busy ? 'Đang tải…' : 'Xem cũ hơn'}</button>` : null}`;

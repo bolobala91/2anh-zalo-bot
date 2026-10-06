@@ -326,4 +326,18 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
   .chat-thread { height: calc(100vh - 240px); height: calc(100dvh - 240px); min-height: 400px; }
   .only-mobile { display: inline-flex; }
   .msg { max-width: 90%; }
+
+  /* Bảng → thẻ xếp chồng (vẫn là <table> cho trình đọc màn hình) */
+  .table-cards { font-size: 15px; }
+  .table-cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .table-cards, .table-cards tbody, .table-cards tr, .table-cards td { display: block; width: 100%; }
+  .table-cards tbody tr { border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px; margin-bottom: 12px; background: #fff; }
+  .table-cards tbody tr:hover { background: #fff; }
+  .table-cards td, .table-cards .audit-table td:first-child { white-space: normal; overflow-wrap: anywhere; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .table-cards tbody tr td:last-child, .table-cards tbody tr:last-child td:last-child { border-bottom: 0; }
+  .table-cards td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .table-cards .actions { flex-wrap: wrap; justify-content: flex-start; }
+  .table-cards .reset-row { background: #f8fafc; }
+  .table-cards .reset-row td { padding: 8px 0; border-bottom: 0; }
 }
