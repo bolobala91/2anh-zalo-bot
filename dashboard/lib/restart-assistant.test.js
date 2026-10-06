@@ -56,3 +56,9 @@ test('Windows không có hermes.exe: dùng "hermes"; stop lỗi vẫn chạy ti�
   assert.equal(f.spawned[0][0], 'hermes');
   assert.deepEqual(f.spawned[0][1], ['gateway', 'run', '--accept-hooks']);
 });
+
+test('spawn phát sự kiện error (ENOENT) thì rejects', async () => {
+  const { EventEmitter } = await import('node:events');
+  const spawnImpl = () => { const c = new EventEmitter(); c.unref = () => {}; setImmediate(() => c.emit('error', new Error('ENOENT'))); return c; };
+  await assert.rejects(makeRestartAssistant({ platform: 'linux', hermesHome: '/h', spawnImpl })(), /ENOENT/);
+});

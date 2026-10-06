@@ -1,5 +1,6 @@
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { waitSpawned } from './spawn-detached.js';
 
 const execFileP = promisify(execFile);
 const defaultExec = (file, args, opts) => execFileP(file, args, opts);
@@ -46,6 +47,6 @@ export function makeRestartSidecar({
       await freePort().catch((e) => console.warn('[restart] không giải phóng được cổng:', e.message));
       child = spawnImpl(process.execPath, ['server.js'], { ...opts, cwd: sidecarRoot });
     } else child = spawnImpl('systemctl', ['restart', 'zalo-bridge'], opts);
-    child.unref?.();
+    await waitSpawned(child);
   };
 }

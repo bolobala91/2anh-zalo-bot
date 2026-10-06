@@ -110,3 +110,17 @@ test('netstat: chỉ cột Foreign Address kết thúc bằng :3872 thì không 
   await makeRestartSidecar({ platform: 'win32', sidecarRoot: 'C:/x', spawnImpl: f.spawnImpl, execImpl: f.execImpl, sleepImpl: f.sleepImpl })();
   assert.equal(f.execCalls.filter((c) => c[0] === 'taskkill').length, 0);
 });
+
+test('spawn phát sự kiện error (ENOENT) thì rejects, không thành uncaught', async () => {
+  const { EventEmitter } = await import('node:events');
+  const spawnImpl = () => { const c = new EventEmitter(); c.unref = () => {}; setImmediate(() => c.emit('error', new Error('ENOENT'))); return c; };
+  await assert.rejects(makeRestartSidecar({ platform: 'linux', sidecarRoot: '/x', spawnImpl })(), /ENOENT/);
+});
+
+test('spawn thành công: chờ sự kiện spawn rồi mới unref', async () => {
+  const { EventEmitter } = await import('node:events');
+  let unrefd = false;
+  const spawnImpl = () => { const c = new EventEmitter(); c.unref = () => { unrefd = true; }; setImmediate(() => c.emit('spawn')); return c; };
+  await makeRestartSidecar({ platform: 'linux', sidecarRoot: '/x', spawnImpl })();
+  assert.equal(unrefd, true);
+});

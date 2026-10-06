@@ -1,5 +1,6 @@
 import express from 'express';
 import { requireAuth, requireRole } from '../lib/http-guards.js';
+import { validatePassword, validateZaloUid } from '../lib/users.js';
 
 export function adminRoutes({ users, sessions, activity, restartAssistant }) {
   const r = express.Router();
@@ -27,14 +28,12 @@ export function adminRoutes({ users, sessions, activity, restartAssistant }) {
     try {
       const target = String(req.params.username || '').trim().toLowerCase();
       const { role, zaloUid, disabled, password } = req.body || {};
-      const locks = disabled === true || (role !== undefined && role !== 'admin');
-      if (target === req.user.username && locks) throw bad('Không thể tự khoá/hạ quyền tài khoản đang dùng');
-      const current = users.get(target);
-      if (!current) throw Object.assign(new Error('Không có người dùng này — tải lại danh sách rồi thử lại.'), { statusCode: 404 });
-      if (locks && current.role === 'admin' && !current.disabled
-        && users.list().filter((u) => u.role === 'admin' && !u.disabled).length <= 1) {
-        throw bad('Phải còn ít nhất một Quản trị đang hoạt động — tạo Quản trị khác trước rồi thử lại.');
-      }
+      if (disabled !== undefined && typeof disabled !== 'boolean') throw bad('Giá trị khoá tài khoản không hợp lệ — tải lại trang rồi thử lại.');
+      if (role !== undefined && role !== 'admin' && role !== 'owner') throw bad('Vai trò phải là Quản trị hoặc Chủ bot — chọn lại vai trò rồi thử lại.');
+      if (password !== undefined && password !== '') { if (typeof password !== 'string') throw bad('Mật khẩu không hợp lệ — nhập lại mật khẩu.'); validatePassword(password); }
+      if (zaloUid !== undefined) validateZaloUid(zaloUid);
+      const locks = disabled === true || role === 'owner';
+      if (target === req.user.username && locks) throw bad('Không thể tự khoá/hạ quyền tài khoản đang dùng — nhờ một Quản trị khác thực hiện.');
       const u = users.update(target, { role, zaloUid, disabled });
       if (password) users.setPassword(target, password);
       if (disabled === true || password) sessions.destroyAll(target);

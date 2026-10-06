@@ -2,6 +2,7 @@ import { spawn, execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { waitSpawned } from './spawn-detached.js';
 
 const execFileP = promisify(execFile);
 const defaultExec = (file, args, opts) => execFileP(file, args, opts);
@@ -22,6 +23,6 @@ export function makeRestartAssistant({
         .catch((e) => console.warn('[restart] hermes gateway stop lỗi, vẫn chạy lại:', e.message));
       child = spawnImpl(exe, ['gateway', 'run', '--accept-hooks'], { ...opts, cwd: hermesHome });
     } else child = spawnImpl('systemctl', ['restart', 'hermes-gateway'], opts);
-    child.unref?.();
+    await waitSpawned(child);
   };
 }
