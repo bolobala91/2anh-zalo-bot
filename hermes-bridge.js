@@ -212,11 +212,46 @@ function normalizeHistoryMessage(msg) {
   };
 }
 
+// Tin gửi với remember:false (vd. mã đăng nhập dashboard) vẫn dội lại qua
+// listener selfListen; ghi nhớ tạm id/nội dung để bản dội không vào lịch sử.
+const NO_STORE_ID_TTL_MS = 5 * 60_000;
+const NO_STORE_TEXT_TTL_MS = 2 * 60_000;
+const noStoreIds = new Map();
+const noStoreTexts = new Map();
+
+function pruneNoStore(now = Date.now()) {
+  for (const map of [noStoreIds, noStoreTexts]) {
+    for (const [key, expires] of map) if (expires <= now) map.delete(key);
+  }
+}
+
+function noStoreTextKey(threadId, text) {
+  return `${threadId}\n${text}`;
+}
+
+function registerNoStoreIds(result) {
+  const message = result?.message && typeof result.message === 'object' ? result.message : result;
+  const expires = Date.now() + NO_STORE_ID_TTL_MS;
+  for (const [kind, id] of [['m', message?.msgId ?? message?.msgID], ['c', message?.cliMsgId ?? message?.cliMsgID]]) {
+    if (id != null) noStoreIds.set(`${kind}:${id}`, expires);
+  }
+}
+
+function isNoStoreEcho(item) {
+  if (!item.isSelf) return false;
+  const now = Date.now();
+  pruneNoStore(now);
+  if (item.msgId && noStoreIds.has(`m:${item.msgId}`)) return true;
+  if (item.cliMsgId && noStoreIds.has(`c:${item.cliMsgId}`)) return true;
+  return noStoreTexts.has(noStoreTextKey(item.threadId, item.text));
+}
+
 /** Ghi một tin vào cache cục bộ; bot-handler gọi cả với tin self trước khi bỏ qua. */
 export function rememberZaloMessage(msg) {
   const item = normalizeHistoryMessage(msg);
   if (!item) return false;
   if (!activeStore) return false;
+  if (isNoStoreEcho(item)) return false;
   activeStore.upsertMessage(activeAccountId, item, 'live');
   return true;
 }
@@ -726,6 +761,11 @@ export async function sendSystemNotice({
     threadType: Number(threadType),
     targetSummary: { commandType: 'system_notice', threadId: String(threadId), threadType: Number(threadType) },
   });
+  const noStoreKey = remember ? null : noStoreTextKey(String(threadId), String(text));
+  if (noStoreKey) {
+    pruneNoStore();
+    noStoreTexts.set(noStoreKey, Date.now() + NO_STORE_TEXT_TTL_MS);
+  }
   try {
     const content = { msg: String(text) };
     if (mentions?.length) content.mentions = mentions;
@@ -738,10 +778,12 @@ export async function sendSystemNotice({
       result = await api.sendMessage({ msg: content.msg }, String(threadId), threadType);
     }
     if (remember) rememberOutboundResult(result, threadId, threadType, text);
+    else registerNoStoreIds(result);
     activeStore.finishAudit(requestId, 'succeeded');
     activeHealth?.markOutbound();
     return result;
   } catch (error) {
+    if (noStoreKey) noStoreTexts.delete(noStoreKey);
     activeStore.finishAudit(requestId, 'failed', { error: 'operation_failed' });
     activeHealth?.recordError('system_notice_failed', 'operation_failed');
     throw error;

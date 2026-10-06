@@ -1115,6 +1115,46 @@ test('sendSystemNotice remember:false không lưu nội dung nhưng vẫn ghi au
   }
 });
 
+test('bản dội self của tin remember:false không vào lịch sử (id đến sau hoặc trước khi send xong)', async (t) => {
+  const store = testStore(t);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const api = {
+    sendMessage: async (content) => {
+      if (content.msg === 'Mã đăng nhập A 111111') await gate;
+      return { message: { msgId: `n-${content.msg.length}`, cliMsgId: `nc-${content.msg.length}` } };
+    },
+  };
+  const server = startHermesBridge({ api, profile: { user_id: 'bot' }, port: 0, store });
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const { rememberZaloMessage } = await import('./hermes-bridge.js');
+    const echo = (msgId, cliMsgId, content, threadId = 'dm-echo') => rememberZaloMessage({
+      threadId, type: 0, isSelf: true, data: { msgId, cliMsgId, uidFrom: 'bot', content, ts: 1 },
+    });
+    const before = store.getHealth().messageCount;
+
+    // Echo đến TRƯỚC khi send resolve: chưa có id, chặn theo nội dung.
+    const pending = sendSystemNotice({ api, threadId: 'dm-echo', threadType: 0, text: 'Mã đăng nhập A 111111', remember: false });
+    echo('e-1', 'ec-1', 'Mã đăng nhập A 111111');
+    release();
+    await pending;
+    assert.equal(store.getHealth().messageCount, before);
+
+    // Echo đến SAU khi send resolve: chặn theo id (nội dung cố ý khác để chứng minh).
+    await sendSystemNotice({ api, threadId: 'dm-echo', threadType: 0, text: 'Mã B 222222', remember: false });
+    echo('n-11', 'nc-11', 'nội dung khác hẳn');
+    assert.equal(store.getHealth().messageCount, before);
+
+    // Tin self thường (khác nội dung/id, hoặc khác hội thoại) vẫn được lưu.
+    echo('e-2', 'ec-2', 'tin bình thường');
+    echo('e-3', 'ec-3', 'Mã đăng nhập A 111111', 'dm-khac');
+    assert.equal(store.getHealth().messageCount, before + 2);
+  } finally {
+    stopHermesBridge();
+  }
+});
+
 test('lời chào có tag bị Zalo từ chối (mã số) thì gửi lại chữ thường, lỗi mạng thì không', async (t) => {
   const store = testStore(t);
   const calls = [];
