@@ -33,7 +33,7 @@ test('mã qua Zalo: start gửi mã tới UID, verify bằng mã', async (t) => 
   deps.users.create({ username: 'khach', role: 'owner', zaloUid: '1234567890123456' });
   const { call } = await startApp(t, deps);
   const start = await call('/api/auth/start', { method: 'POST', body: { username: 'khach' } });
-  assert.deepEqual(start.json.methods, ['zalo']);
+  assert.equal(start.status, 200);
   const [, sent] = sidecar.calls.find((c) => c[0] === 'code');
   assert.equal(sent.zaloUid, '1234567890123456');
   const ok = await call('/api/auth/verify', { method: 'POST', body: { username: 'khach', code: sent.code } });
@@ -46,7 +46,7 @@ test('không đề nghị mã Zalo khi bot mất phiên', async (t) => {
   deps.users.create({ username: 'anh', role: 'admin', zaloUid: '1234567890123456', password: 'matkhau-dai' });
   const { call } = await startApp(t, deps);
   const start = await call('/api/auth/start', { method: 'POST', body: { username: 'anh' } });
-  assert.deepEqual(start.json.methods, ['password']);
+  assert.equal(start.status, 200);
   assert.equal(sidecar.calls.filter((c) => c[0] === 'code').length, 0);
 });
 
@@ -55,7 +55,7 @@ test('không tiết lộ tên đăng nhập có tồn tại hay không', async (
   const { call } = await startApp(t, deps);
   const res = await call('/api/auth/start', { method: 'POST', body: { username: 'khongco' } });
   assert.equal(res.status, 200);
-  assert.deepEqual(res.json.methods, ['password']);
+  assert.deepEqual(res.json.methods, ['zalo', 'password']);
 });
 
 test('sai 5 lần thì khoá', async (t) => {
@@ -105,4 +105,55 @@ test('header bảo mật có mặt', async (t) => {
   assert.match(res.headers.get('content-security-policy'), /default-src 'self'/);
   assert.equal(res.headers.get('x-frame-options'), 'DENY');
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+});
+
+test('/auth/start trả phản hồi y hệt cho tên có thật và tên không tồn tại', async (t) => {
+  const deps = makeDeps(t);
+  deps.users.create({ username: 'khach', role: 'owner', zaloUid: '1234567890123456' });
+  const { call } = await startApp(t, deps);
+  const real = await call('/api/auth/start', { method: 'POST', body: { username: 'khach' } });
+  const fake = await call('/api/auth/start', { method: 'POST', body: { username: 'khongco' } });
+  assert.equal(real.status, fake.status);
+  assert.deepEqual(real.json, fake.json);
+});
+
+test('/auth/start vẫn trả cùng phản hồi khi gửi mã Zalo lỗi', async (t) => {
+  const deps = makeDeps(t, { sidecar: fakeSidecar({ loginCode: async () => { throw new Error('boom'); } }) });
+  deps.users.create({ username: 'khach', role: 'owner', zaloUid: '1234567890123456' });
+  const { call } = await startApp(t, deps);
+  const real = await call('/api/auth/start', { method: 'POST', body: { username: 'khach' } });
+  const fake = await call('/api/auth/start', { method: 'POST', body: { username: 'khongco' } });
+  assert.equal(real.status, 200);
+  assert.deepEqual(real.json, fake.json);
+});
+
+test('/auth/start trong 60 giây chỉ gửi một mã, mã đầu vẫn dùng được', async (t) => {
+  const sidecar = fakeSidecar();
+  const deps = makeDeps(t, { sidecar });
+  deps.users.create({ username: 'khach', role: 'owner', zaloUid: '1234567890123456' });
+  const { call } = await startApp(t, deps);
+  await call('/api/auth/start', { method: 'POST', body: { username: 'khach' } });
+  const again = await call('/api/auth/start', { method: 'POST', body: { username: 'khach' } });
+  assert.equal(again.status, 200);
+  const sent = sidecar.calls.filter((c) => c[0] === 'code');
+  assert.equal(sent.length, 1);
+  const ok = await call('/api/auth/verify', { method: 'POST', body: { username: 'khach', code: sent[0][1].code } });
+  assert.equal(ok.status, 200);
+});
+
+test('thiết lập với mật khẩu yếu trả 400 và không đốt link', async (t) => {
+  const deps = makeDeps(t);
+  const { call } = await startApp(t, deps);
+  const token = deps.setupToken.issue();
+  const weak = await call('/api/auth/setup', { method: 'POST', body: { token, username: 'anh', password: '123' } });
+  assert.equal(weak.status, 400);
+  const ok = await call('/api/auth/setup', { method: 'POST', body: { token, username: 'anh', password: 'matkhau-dai' } });
+  assert.equal(ok.status, 200);
+});
+
+test('JSON hỏng trả 400, không phải 500', async (t) => {
+  const { base } = await startApp(t, makeDeps(t));
+  const res = await fetch(`${base}/api/auth/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'zalo-dashboard' }, body: '{oops' });
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).ok, false);
 });

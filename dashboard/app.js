@@ -17,6 +17,10 @@ export function createDashboardApp(deps) {
   if (deps.publicDir && existsSync(deps.publicDir)) app.use(express.static(deps.publicDir, { index: 'index.html' }));
   app.use('/api', (req, res) => res.status(404).json({ ok: false, error: 'Không có đường dẫn này' }));
   app.use((err, req, res, next) => {
+    const status = err.status || err.statusCode;
+    if (Number.isInteger(status) && status >= 400 && status < 500) {
+      return res.status(status).json({ ok: false, error: status === 413 ? 'Dữ liệu gửi lên quá lớn — thu nhỏ rồi thử lại.' : 'Dữ liệu gửi lên không hợp lệ — kiểm tra lại rồi thử lại.' });
+    }
     console.error('[dashboard]', err);
     res.status(500).json({ ok: false, error: 'Lỗi bên trong dashboard — xem nhật ký dịch vụ.' });
   });

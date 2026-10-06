@@ -7,6 +7,22 @@ const ROLES = new Set(['admin', 'owner']);
 const MAX_PASSWORD = 256;
 const bad = (m) => Object.assign(new Error(m), { statusCode: 400 });
 
+export function validatePassword(pw) {
+  if (String(pw).length < 8) throw bad('Mật khẩu cần ít nhất 8 ký tự');
+  if (String(pw).length > MAX_PASSWORD) throw bad('Mật khẩu tối đa 256 ký tự');
+}
+
+export function validateUsername(username) {
+  const name = String(username || '').trim().toLowerCase();
+  if (!NAME.test(name)) throw bad('Tên đăng nhập 3–32 ký tự: chữ thường, số, dấu . _ -');
+  return name;
+}
+
+export function validateZaloUid(uid) {
+  if (uid != null && uid !== '' && typeof uid !== 'string') throw bad('UID Zalo phải là chuỗi chữ số');
+  if (uid && !ZALO_UID.test(uid)) throw bad('UID Zalo không hợp lệ (dãy 15–22 chữ số, không bắt đầu bằng 0)');
+}
+
 export function hashPassword(password) {
   const salt = randomBytes(16);
   return `scrypt$${salt.toString('hex')}$${scryptSync(String(password), salt, 64).toString('hex')}`;
@@ -25,21 +41,15 @@ const toPublic = (u) => ({ username: u.username, role: u.role, zaloUid: u.zaloUi
 export function createUserStore(path) {
   const load = () => readJson(path, { users: [] });
   const save = (data) => writeJsonAtomic(path, data);
-  const checkPassword = (pw) => {
-    if (String(pw).length < 8) throw bad('Mật khẩu cần ít nhất 8 ký tự');
-    if (String(pw).length > MAX_PASSWORD) throw bad('Mật khẩu tối đa 256 ký tự');
-  };
-  const checkUid = (uid) => {
-    if (uid != null && uid !== '' && typeof uid !== 'string') throw bad('UID Zalo phải là chuỗi chữ số');
-    if (uid && !ZALO_UID.test(uid)) throw bad('UID Zalo không hợp lệ (dãy 15–22 chữ số, không bắt đầu bằng 0)'); };
+  const checkPassword = validatePassword;
+  const checkUid = validateZaloUid;
 
   return {
     list: () => load().users.map(toPublic),
     get: (username) => load().users.find((u) => u.username === username) || null,
     hasAdmin: () => load().users.some((u) => u.role === 'admin' && !u.disabled),
     create({ username, role, zaloUid = '', password = '' }) {
-      const name = String(username || '').trim().toLowerCase();
-      if (!NAME.test(name)) throw bad('Tên đăng nhập 3–32 ký tự: chữ thường, số, dấu . _ -');
+      const name = validateUsername(username);
       if (!ROLES.has(role)) throw bad('Vai trò phải là Quản trị hoặc Chủ bot');
       checkUid(zaloUid);
       if (password) checkPassword(password);
