@@ -4,6 +4,7 @@ import { checkOrigin, securityHeaders, sessionMiddleware } from './lib/http-guar
 import { authRoutes } from './routes/auth.js';
 import { statusRoutes } from './routes/status.js';
 import { zaloRoutes } from './routes/zalo.js';
+import { chatRoutes } from './routes/chats.js';
 import { telegramRoutes } from './routes/telegram.js';
 import { adminRoutes } from './routes/admin.js';
 
@@ -18,6 +19,7 @@ export function createDashboardApp(deps) {
   app.use('/api', authRoutes(deps));
   app.use('/api', statusRoutes(deps));
   app.use('/api', zaloRoutes(deps));
+  app.use('/api', chatRoutes(deps));
   if (deps.linker) app.use('/api', telegramRoutes(deps));
   app.use('/api', adminRoutes(deps));
   // Các router khác được gắn thêm ở Task 8 theo cùng mẫu: app.use('/api', xxxRoutes(deps));

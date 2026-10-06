@@ -8,6 +8,9 @@ import { createLoginGuard } from './lib/login-guard.js';
 import { createSetupToken } from './lib/setup-token.js';
 import { createActivityLog } from './lib/activity-log.js';
 import { createTelegramApi, createTelegramLinker } from './lib/telegram.js';
+import { openZaloStore } from '../zalo-store.js';
+import { createStoreReader } from './lib/store-reader.js';
+import { createThreadNames } from './lib/thread-names.js';
 
 export function fakeSidecar(overrides = {}) {
   const calls = [];
@@ -19,6 +22,8 @@ export function fakeSidecar(overrides = {}) {
     qrStart: async () => { calls.push('qr-start'); },
     qr: async () => ({ status: 'qr-pending', image: 'data:image/png;base64,AAA', user: null }),
     logout: async () => { calls.push('logout'); },
+    send: async (m) => { calls.push(['send', m]); return { msgId: '999' }; },
+    groups: async () => [{ id: '200', name: 'Tổ Hoá', members: 12 }],
     ...overrides,
   };
 }
@@ -42,9 +47,9 @@ export function fakeBot({ failGetMe = false } = {}) {
 
 export function makeDeps(t, overrides = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'zd-app-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const bot = overrides.bot || fakeBot();
-  return {
+  const sidecar = overrides.sidecar || fakeSidecar();
+  const deps = {
     bot,
     linker: createTelegramLinker({ file: join(dir, 'telegram.json'), apiFactory: (token) => createTelegramApi({ token, fetchImpl: bot.fetchImpl }) }),
     config: { port: 3880, publicUrl: 'http://localhost:3880', restartCmd: null },
@@ -53,12 +58,40 @@ export function makeDeps(t, overrides = {}) {
     guard: createLoginGuard({}),
     setupToken: createSetupToken(join(dir, 'setup.json')),
     activity: createActivityLog(join(dir, 'activity.jsonl')),
-    sidecar: fakeSidecar(),
+    sidecar,
+    store: createStoreReader({ path: join(dir, 'zalo.sqlite') }),
+    threadNames: createThreadNames({ loadGroups: () => sidecar.groups() }),
     restartAssistant: async () => {},
     publicDir: join(dir, 'public'),
     dir,
     ...overrides,
   };
+  t.after(() => {
+    try { deps.store?.close(); } catch { /* đã đóng */ }
+    rmSync(dir, { recursive: true, force: true });
+  });
+  return deps;
+}
+
+let seq = 0;
+/** Một tin mẫu đúng dạng zalo-store.insertMessages. */
+export function chatMsg(over = {}) {
+  seq += 1;
+  return { threadId: '100', threadType: 0, msgId: `m${seq}`, senderUid: '100', senderName: 'Lan', text: `tin ${seq}`, msgType: 'webchat', ts: 1_000_000 + seq, isSelf: false, ...over };
+}
+
+/** Ghi lịch sử/nhật ký mẫu bằng chính zalo-store của bot vào <deps.dir>/zalo.sqlite. */
+export function seedHistory(deps, { account = 'bot1', messages = [], audits = [] } = {}) {
+  let clock = Date.now();
+  const store = openZaloStore({ path: join(deps.dir, 'zalo.sqlite'), now: () => clock });
+  try {
+    if (messages.length) store.insertMessages(account, messages, 'live');
+    for (const a of audits) {
+      clock = a.at ?? Date.now();
+      store.beginAudit({ accountId: account, category: 'send', ...a });
+      if (a.status) store.finishAudit(a.requestId, a.status, { error: a.error });
+    }
+  } finally { store.close(); }
 }
 
 export async function startApp(t, deps) {
