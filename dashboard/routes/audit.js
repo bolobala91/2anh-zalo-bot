@@ -3,9 +3,9 @@ import { requireAuth } from '../lib/http-guards.js';
 import { createAuditFeed } from '../lib/audit-feed.js';
 import { failStore } from '../lib/route-errors.js';
 
-export function auditRoutes({ store, activity, threadNames }) {
+export function auditRoutes({ store, activity, threadNames, users }) {
   const r = express.Router();
-  const feed = createAuditFeed({ store, activity, threadNames });
+  const feed = createAuditFeed({ store, activity, threadNames, isUser: (name) => Boolean(users.get(String(name))) });
   r.get('/audit', requireAuth, async (req, res) => {
     const status = req.query.status ?? '';
     const before = req.query.before ?? '';

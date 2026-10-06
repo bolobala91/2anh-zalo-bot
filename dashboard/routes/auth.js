@@ -83,7 +83,7 @@ export function authRoutes({ users, sessions, guard, setupToken, activity, sidec
     const user = users.get(username);
     if (!ok || !user || user.disabled) {
       guard.fail(k);
-      activity.append({ actor: username || '?', action: 'login', ok: false, detail: code ? 'mã Zalo' : 'mật khẩu' });
+      activity.append({ actor: user ? username : '?', action: 'login', ok: false, detail: code ? 'mã Zalo' : 'mật khẩu' });
       return res.status(401).json({ ok: false, error: 'Tên đăng nhập, mã hoặc mật khẩu không đúng — kiểm tra lại, hoặc nhờ Quản trị đặt lại mật khẩu.' });
     }
     // Chỉ xoá khoá theo tài khoản — không xoá khoá IP, để một tài khoản hợp lệ không dùng được để reset IP khi đoán mật khẩu tài khoản khác.

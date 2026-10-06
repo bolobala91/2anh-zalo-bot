@@ -7,7 +7,7 @@ const fakeStore = (rows, { available = true } = {}) => ({
   listAudit: ({ beforeMs, limit, failedOnly }) => rows.filter((r) => r.at < beforeMs && (!failedOnly || !r.ok)).sort((a, b) => b.at - a.at).slice(0, limit),
   senderNames: () => new Map([['555', 'Anh Chủ'], ['100', 'Lan']]),
 });
-const fakeActivity = (entries) => ({ list: ({ before, limit }) => entries.filter((e) => e.at < before).sort((a, b) => b.at - a.at).slice(0, limit) });
+const fakeActivity = (entries) => ({ list: ({ before, limit, failedOnly }) => entries.filter((e) => e.at < before && (!failedOnly || !e.ok)).sort((a, b) => b.at - a.at).slice(0, limit) });
 const names = { load: async () => new Map([['200', 'Tổ Hoá']]) };
 const row = (at, over = {}) => ({ id: at, at, actorUid: '555', actorRole: 'owner', action: 'send', category: 'send', threadId: '200', threadType: 1, ok: true, error: null, ...over });
 
@@ -57,4 +57,37 @@ test('nhãn: Chủ bot chữ dễ hiểu không có mã; Quản trị có mã; v
   const act = describe({ src: 'dashboard', at: 4, actor: 'anh', action: 'user_create', detail: 'khach (owner)', ok: true }, { role: 'admin', ...ctx });
   assert.deepEqual(act.code, { action: 'user_create', detail: 'khach (owner)' });
   assert.equal('code' in describe({ src: 'dashboard', at: 4, actor: 'anh', action: 'user_create', detail: 'khach (owner)', ok: true }, { role: 'owner', ...ctx }), false);
+});
+
+test('đăng nhập hỏng của người không có thật hiện là "Người lạ"; tài khoản thật giữ tên', () => {
+  const stranger = describe({ src: 'dashboard', at: 1, actor: 'matkhau123', action: 'login', ok: false }, { role: 'owner', isUser: () => false });
+  assert.equal(stranger.who, 'Người lạ');
+  const real = describe({ src: 'dashboard', at: 1, actor: 'anh', action: 'login', ok: false }, { role: 'owner', isUser: (n) => n === 'anh' });
+  assert.equal(real.who, 'anh (dashboard)');
+});
+
+test('lọc chỉ lỗi không mất lỗi cũ dù có hơn 100 mục thành công mới hơn', async () => {
+  const ok = Array.from({ length: 100 }, (_, i) => ({ at: 1000 + i, actor: 'anh', action: 'login', ok: true }));
+  const feed = createAuditFeed({ store: fakeStore([], { available: false }), activity: fakeActivity([...ok, { at: 5, actor: 'x', action: 'login', ok: false }]), threadNames: names });
+  const { items } = await feed.list({ role: 'owner', failedOnly: true });
+  assert.deepEqual(items.map((i) => i.at), [5]);
+});
+
+test('mã kỹ thuật bị cắt ngắn và che token', () => {
+  const token = `bot123456:${'A'.repeat(35)}`;
+  const long = `${'x '.repeat(200)}`;
+  const a = describe({ src: 'zalo', ...row(1, { ok: false, error: `fetch https://api.telegram.org/${token}/send ${'Z'.repeat(40)} ${long}` }) }, { role: 'admin' });
+  assert.ok(a.code.error.length <= 200);
+  assert.ok(!a.code.error.includes('AAAAAAAAAA'));
+  assert.ok(!a.code.error.includes('ZZZZZZZZZZ'));
+  const d = describe({ src: 'dashboard', at: 1, actor: 'anh', action: 'x', detail: token, ok: true }, { role: 'admin' });
+  assert.ok(!d.code.detail.includes('AAAAAAAAAA'));
+});
+
+test('đọc lịch sử bot lỗi vẫn còn hoạt động dashboard', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const store = { available: () => true, listAudit: () => { throw new Error('hỏng'); }, senderNames: () => new Map() };
+  const feed = createAuditFeed({ store, activity: fakeActivity([{ at: 5, actor: 'anh', action: 'zalo_logout', ok: true }]), threadNames: names });
+  const { items } = await feed.list({ role: 'owner' });
+  assert.deepEqual(items.map((i) => i.what), ['Đăng xuất Zalo']);
 });

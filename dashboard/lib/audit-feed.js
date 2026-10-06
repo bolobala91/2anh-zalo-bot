@@ -50,14 +50,24 @@ const REASONS = {
 
 const ROLE_LABELS = { owner: 'Chủ nhân', public: 'Thành viên' };
 
-export function describe(x, { role, names = new Map(), groups = new Map() }) {
+/** Cắt ngắn và che chuỗi giống khoá/token trước khi đưa vào mã kỹ thuật. */
+function scrub(value) {
+  if (value == null) return value;
+  return String(value).slice(0, 200)
+    .replace(/bot\d+:[A-Za-z0-9_-]{20,}/g, '…')
+    .replace(/[A-Za-z0-9_-]{32,}/g, '…');
+}
+
+export function describe(x, { role, names = new Map(), groups = new Map(), isUser = () => true }) {
   const admin = role === 'admin';
   if (x.src === 'dashboard') {
+    // Dòng đăng nhập hỏng cũ có thể ghi nguyên chữ người ta gõ (kể cả mật khẩu) — chỉ giữ tên nếu là tài khoản có thật.
+    const stranger = x.action === 'login' && x.ok === false && !isUser(x.actor);
     return {
-      at: x.at, source: 'dashboard', who: `${x.actor} (dashboard)`,
+      at: x.at, source: 'dashboard', who: stranger ? 'Người lạ' : `${scrub(x.actor)} (dashboard)`,
       what: ACTION_LABELS[x.action] || (admin ? x.action : 'Thao tác khác trên dashboard'),
       where: 'Dashboard', ok: x.ok, result: x.ok ? 'Thành công' : 'Không thành công',
-      ...(admin ? { code: { action: x.action, detail: x.detail || '' } } : {}),
+      ...(admin ? { code: { action: scrub(x.action), detail: scrub(x.detail || '') } } : {}),
     };
   }
   let who;
@@ -71,16 +81,19 @@ export function describe(x, { role, names = new Map(), groups = new Map() }) {
     what: ACTION_LABELS[x.action] || (admin ? x.action : 'Thao tác khác của bot'),
     where, ok: x.ok,
     result: x.ok ? 'Thành công' : `Không thành công${REASONS[x.error] ? ` — ${REASONS[x.error]}` : ''}`,
-    ...(admin ? { code: { action: x.action, category: x.category, actorUid: x.actorUid, actorRole: x.actorRole, threadId: x.threadId, error: x.error } } : {}),
+    ...(admin ? { code: { action: scrub(x.action), category: x.category, actorUid: x.actorUid, actorRole: x.actorRole, threadId: x.threadId, error: scrub(x.error) } } : {}),
   };
 }
 
-export function createAuditFeed({ store, activity, threadNames }) {
+export function createAuditFeed({ store, activity, threadNames, isUser }) {
   return {
     async list({ role, beforeMs = Number.MAX_SAFE_INTEGER, limit = 50, failedOnly = false }) {
       const want = limit + 20; // dư ra để kéo dài trang qua các mục trùng mili-giây
-      const fromBot = store.available() ? store.listAudit({ beforeMs, limit: want, failedOnly }) : [];
-      const fromDashboard = activity.list({ before: beforeMs, limit: want }).filter((e) => !failedOnly || !e.ok);
+      let fromBot = [];
+      try { fromBot = store.available() ? store.listAudit({ beforeMs, limit: want, failedOnly }) : []; } catch (err) {
+        console.error('[dashboard] đọc nhật ký của bot lỗi:', err?.message || err);
+      }
+      const fromDashboard = activity.list({ before: beforeMs, limit: want, failedOnly });
       const merged = [
         ...fromBot.map((r) => ({ src: 'zalo', ...r })),
         ...fromDashboard.map((e) => ({ src: 'dashboard', at: e.at, actor: e.actor, action: e.action, detail: e.detail, ok: e.ok })),
@@ -90,10 +103,13 @@ export function createAuditFeed({ store, activity, threadNames }) {
       while (n > 0 && n < merged.length && merged[n].at === merged[n - 1].at) n += 1;
       const page = merged.slice(0, n);
       const uids = page.filter((x) => x.src === 'zalo').flatMap((x) => [x.actorUid, x.threadType === 0 ? x.threadId : null]).filter(Boolean);
-      const names = uids.length && store.available() ? store.senderNames(uids) : new Map();
+      let names = new Map();
+      try { if (uids.length && store.available()) names = store.senderNames(uids); } catch (err) {
+        console.error('[dashboard] đọc tên người dùng lỗi:', err?.message || err);
+      }
       const groups = await threadNames.load();
       return {
-        items: page.map((x) => describe(x, { role, names, groups })),
+        items: page.map((x) => describe(x, { role, names, groups, isUser })),
         nextBefore: merged.length > n ? page[page.length - 1].at : null,
       };
     },
