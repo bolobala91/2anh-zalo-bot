@@ -202,3 +202,27 @@ test('startOfDayVN và parseCursor', () => {
   assert.deepEqual(parseCursor('5000:3'), { ts: 5000, id: 3 });
   for (const bad of ['x', '5:', ':3', '../5:3', '5:3;', '1'.repeat(17) + ':1', null, undefined]) assert.equal(parseCursor(bad), null);
 });
+
+test('listAudit: chỉ dòng kết quả, bỏ "đang gõ"/"đã xem", lọc lỗi, trước mốc', (t) => {
+  const s = setup(t);
+  s.write([m(1)]);
+  s.closeWriter();
+  let clock = 0;
+  const w = openZaloStore({ path: s.path, now: () => clock });
+  const add = (requestId, action, at, status, error) => {
+    clock = at;
+    w.beginAudit({ requestId, accountId: 'bot1', actorUid: '555', actorRole: 'owner', action, category: 'send', threadId: '200', threadType: 1 });
+    if (status) w.finishAudit(requestId, status, { error });
+  };
+  add('r1', 'send', 1000, 'succeeded');
+  add('r2', 'typing', 1100, 'succeeded');
+  add('r3', 'ack_message', 1200, 'succeeded');
+  add('r4', 'dashboard_send', 1300, 'failed', 'operation_failed');
+  add('r5', 'send', 1400); // chỉ có attempted
+  w.close();
+  const r = s.reader();
+  assert.deepEqual(r.listAudit().map((x) => [x.action, x.at, x.ok]), [['dashboard_send', 1300, false], ['send', 1000, true]]);
+  assert.deepEqual(r.listAudit({ failedOnly: true }).map((x) => [x.action, x.error]), [['dashboard_send', 'operation_failed']]);
+  assert.deepEqual(r.listAudit({ beforeMs: 1300 }).map((x) => x.action), ['send']);
+  assert.equal(r.listAudit()[0].threadType, 1);
+});

@@ -165,6 +165,23 @@ export function createStoreReader({ path, caseFold = true }) {
     return new Map(rows.map((r) => [r.sender_uid, r.sender_name]));
   }
 
+  function listAudit({ beforeMs = END, limit = 70, failedOnly = false } = {}) {
+    // Không chọn target_summary: cột đó có thể chứa nội dung tin (kể cả mã đăng nhập).
+    const rows = open().prepare(`
+      SELECT id, created_at_ms, actor_uid, actor_role, action, category, thread_id, thread_type, status, error
+      FROM audit_log
+      WHERE status IN ('succeeded', 'failed') AND action NOT IN ('typing', 'ack_message')
+        AND (? = 0 OR status = 'failed') AND created_at_ms < ?
+      ORDER BY created_at_ms DESC, id DESC LIMIT ?
+    `).all(failedOnly ? 1 : 0, Number(beforeMs), pageSize(limit, 300, 70));
+    return rows.map((r) => ({
+      id: Number(r.id), at: Number(r.created_at_ms), actorUid: r.actor_uid, actorRole: r.actor_role,
+      action: r.action, category: r.category, threadId: r.thread_id,
+      threadType: r.thread_type == null ? null : Number(r.thread_type),
+      ok: r.status === 'succeeded', error: r.error || null,
+    }));
+  }
+
   return {
     available: () => Boolean(db) || Boolean(path && existsSync(path)),
     isReadOnly: () => Number(open().prepare('PRAGMA query_only').get().query_only) === 1,
@@ -174,6 +191,7 @@ export function createStoreReader({ path, caseFold = true }) {
     hasThread,
     todayStats,
     senderNames,
+    listAudit,
     close() { if (db) { db.close(); db = null; } },
   };
 }
