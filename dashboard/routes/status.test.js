@@ -24,6 +24,27 @@ test('status khi sidecar không trả lời', async (t) => {
   assert.equal(res.json.assistant, 'unknown');
 });
 
+test('lastError chỉ giữ code, message, atMs', async (t) => {
+  const health = async () => ({ zalo: { status: 'logged-in' }, bridge: { attachedClients: 1 },
+    lastError: { code: 'E1', message: 'lỗi', atMs: 5, cookie: 'bí mật' } });
+  const deps = makeDeps(t, { sidecar: fakeSidecar({ health }) });
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call);
+  const res = await call('/api/status', { cookie });
+  assert.deepEqual(res.json.lastError, { code: 'E1', message: 'lỗi', atMs: 5 });
+});
+
+test('sidecar trả 401 thì trình duyệt nhận 502 tiếng Việt, không lộ unauthorized', async (t) => {
+  const deps = makeDeps(t, { sidecar: fakeSidecar({ qr: async () => { throw Object.assign(new Error('unauthorized'), { statusCode: 401 }); } }) });
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call);
+  const orig = console.error; console.error = () => {};
+  t.after(() => { console.error = orig; });
+  const res = await call('/api/zalo/qr', { cookie });
+  assert.equal(res.status, 502);
+  assert.doesNotMatch(res.json.error, /unauthorized|sidecar|bridge|toolset/i);
+});
+
 test('chưa đăng nhập dashboard thì 401', async (t) => {
   const { call } = await startApp(t, makeDeps(t));
   assert.equal((await call('/api/status')).status, 401);
