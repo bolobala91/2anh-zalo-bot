@@ -57,6 +57,9 @@ function useStatus() {
 export function statusLevel(s) {
   if (s.sidecar === 'down') return { kind: 'danger', icon: 'error', text: 'Kết nối Zalo đang tắt — hệ thống sẽ tự bật lại trong ít phút.', qr: true };
   if (s.zalo.needsRelogin || s.zalo.status !== 'logged-in') return { kind: 'danger', icon: 'error', text: 'Bot đang mất kết nối Zalo — cần quét mã đăng nhập lại.', qr: true };
+  if (s.zalo.listener != null && s.zalo.listener !== 'connected') {
+    return { kind: 'warn', icon: 'warn', text: 'Đang nối lại Zalo… — bot tạm thời chưa nhận được tin nhắn. Nếu quá 10 phút vẫn vậy, hãy quét mã đăng nhập lại.' };
+  }
   if (s.assistant !== 'connected') return { kind: 'warn', icon: 'warn', text: 'Trợ lý chưa phản hồi — bot nhận tin nhưng chưa trả lời được. Báo người cài đặt nếu kéo dài.' };
   return { kind: 'ok', icon: 'check', text: `Bot đang hoạt động bình thường${s.zalo.displayName ? ` — ${s.zalo.displayName}` : ''}.` };
 }

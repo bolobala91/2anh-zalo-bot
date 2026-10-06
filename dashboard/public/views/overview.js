@@ -11,9 +11,12 @@ function StatCard({ icon, title, kind, state, children }) {
   </section>`;
 }
 
-function zaloCard(s) {
+export function zaloCard(s) {
   if (s.sidecar === 'down') return { kind: 'danger', state: 'Kết nối Zalo đang tắt — hệ thống sẽ tự bật lại trong ít phút' };
   if (s.zalo.needsRelogin) return { kind: 'danger', state: 'Bị đăng xuất — cần quét QR lại', qr: true };
+  if (s.zalo.status === 'logged-in' && s.zalo.listener != null && s.zalo.listener !== 'connected') {
+    return { kind: 'warn', state: 'Đang nối lại… — tạm thời chưa nhận được tin nhắn' };
+  }
   if (s.zalo.status === 'logged-in') return { kind: 'ok', state: `Đang hoạt động — ${s.zalo.displayName || 'bot Zalo'}` };
   return { kind: 'danger', state: 'Chưa đăng nhập — cần quét QR', qr: true };
 }
