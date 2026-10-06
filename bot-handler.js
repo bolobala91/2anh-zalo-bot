@@ -130,13 +130,17 @@ export function setupBotListener(api, profile = null, {
     stableTimer.unref?.();
   };
 
+  // Bị đá có thể chỉ đến dưới dạng `closed` mà không có `disconnected` trước.
+  const noteKick = (code) => {
+    if (!KICK_CODES.has(Number(code))) return;
+    kicked = true;
+    health?.setNeedsRelogin?.(true);
+  };
+
   const onDisconnected = (code, reason) => {
     clearTimeout(stableTimer);
     health?.setListenerState('reconnecting');
-    if (KICK_CODES.has(Number(code))) {
-      kicked = true;
-      health?.setNeedsRelogin?.(true);
-    }
+    noteKick(code);
     const heldMs = connectedAt ? now() - connectedAt : null;
     const flap = heldMs != null && heldMs < flapWindowMs ? ` (rớt sau ${heldMs}ms)` : '';
     console.warn(`[bot] ⚠️ Zalo listener mất kết nối (mã ${code}${reason ? `: ${reason}` : ''})${flap}`);
@@ -144,6 +148,8 @@ export function setupBotListener(api, profile = null, {
 
   const onClosed = (code, reason) => {
     if (stopped) return;
+    clearTimeout(stableTimer);
+    noteKick(code);
     health?.setListenerState('closed');
     health?.recordError('zalo_listener_closed', `code ${code}`);
     console.error(`[bot] ❌ Zalo listener đã đóng (mã ${code}${reason ? `: ${reason}` : ''}) — không nhận được tin cho tới khi mở lại`);

@@ -303,3 +303,46 @@ test('bị Zalo đá (3003) thì báo needsRelogin và chờ nhịp dài nhất'
   assert.deepEqual(delays, [30]);
   stop();
 });
+
+test('chỉ có closed(3003) không có disconnected vẫn báo needsRelogin và chờ nhịp dài nhất', () => {
+  const listener = new FakeListener();
+  const health = fakeHealth();
+  const delays = [];
+  const stop = setupBotListener({ listener }, { user_id: 'bot' }, {
+    health, restartDelaysMs: [5, 15, 30], onScheduleRestart: (ms) => delays.push(ms),
+  });
+  listener.emit('closed', 3003, 'kick');
+  assert.equal(health.needs, true);
+  assert.deepEqual(delays, [30]);
+  stop();
+});
+
+test('closed không có disconnected thì bộ hẹn "ổn định" cũ bị huỷ, nhịp chờ không bị đặt lại', async () => {
+  const listener = new FakeListener();
+  const delays = [];
+  const stop = setupBotListener({ listener }, { user_id: 'bot' }, {
+    health: fakeHealth(), restartDelaysMs: [5, 15, 30], stableAfterMs: 30,
+    onScheduleRestart: (ms) => delays.push(ms),
+  });
+  listener.emit('connected');
+  listener.emit('closed', 1006, '');
+  await new Promise((r) => setTimeout(r, 80)); // dài hơn stableAfterMs
+  await waitFor(() => listener.starts.length === 2);
+  listener.emit('closed', 1006, '');
+  assert.deepEqual(delays, [5, 15]);
+  stop();
+});
+
+test('kết nối ổn định sau khi bị đá thì xoá needsRelogin', async () => {
+  const listener = new FakeListener();
+  const health = fakeHealth();
+  const stop = setupBotListener({ listener }, { user_id: 'bot' }, {
+    health, restartDelaysMs: [5, 15, 30], stableAfterMs: 30,
+  });
+  listener.emit('closed', 3003, 'kick');
+  assert.equal(health.needs, true);
+  await waitFor(() => listener.starts.length === 2);
+  listener.emit('connected');
+  await waitFor(() => health.needs === false);
+  stop();
+});
