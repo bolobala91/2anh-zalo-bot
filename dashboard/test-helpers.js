@@ -54,6 +54,7 @@ export function makeDeps(t, overrides = {}) {
     setupToken: createSetupToken(join(dir, 'setup.json')),
     activity: createActivityLog(join(dir, 'activity.jsonl')),
     sidecar: fakeSidecar(),
+    restartAssistant: async () => {},
     publicDir: join(dir, 'public'),
     dir,
     ...overrides,

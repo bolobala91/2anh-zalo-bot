@@ -18,9 +18,9 @@ test('thiếu HERMES_HOME thì báo lỗi dễ hiểu', () => {
 });
 
 test('cấu hình mặc định và ghi đè', () => {
-  assert.deepEqual(loadDashboardConfig({}), { port: 3880, publicUrl: 'http://localhost:3880', restartCmd: null });
-  const c = loadDashboardConfig({ ZALO_DASHBOARD_PORT: '4000', ZALO_DASHBOARD_URL: 'https://d.example.vn/', ZALO_SIDECAR_RESTART_CMD: 'systemctl restart zalo-bridge' });
-  assert.deepEqual(c, { port: 4000, publicUrl: 'https://d.example.vn', restartCmd: 'systemctl restart zalo-bridge' });
+  assert.deepEqual(loadDashboardConfig({}), { port: 3880, publicUrl: 'http://localhost:3880', restartCmd: null, assistantRestartCmd: null });
+  const c = loadDashboardConfig({ ZALO_DASHBOARD_PORT: '4000', ZALO_DASHBOARD_URL: 'https://d.example.vn/', ZALO_SIDECAR_RESTART_CMD: 'systemctl restart zalo-bridge', ZALO_ASSISTANT_RESTART_CMD: ' systemctl restart hermes-gateway ' });
+  assert.deepEqual(c, { port: 4000, publicUrl: 'https://d.example.vn', restartCmd: 'systemctl restart zalo-bridge', assistantRestartCmd: 'systemctl restart hermes-gateway' });
 });
 
 test('cổng sai thì quay về mặc định', () => {
