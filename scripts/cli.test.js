@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync, existsSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { parseCliArgs } from './hermes-install-lib.js';
 
 const PROJECT = resolve(new URL('..', import.meta.url).pathname.replace(/^\/(.:)/, '$1'));
 
@@ -26,7 +27,7 @@ function fixture(t) {
 
 function run(script, fx) {
   return spawnSync(process.execPath, [join(PROJECT, 'scripts', script), '--hermes-home', fx.home,
-    '--sidecar-root', fx.sidecar, '--skip-python'], { encoding: 'utf8' });
+    '--sidecar-root', fx.sidecar, '--skip-python', '--no-dashboard'], { encoding: 'utf8' });
 }
 
 test('doctor is read-only and fails before installation', (t) => {
@@ -59,4 +60,9 @@ test('install, repeated install, doctor, and uninstall work end to end', (t) => 
   assert.equal(existsSync(join(fx.repo, 'plugins', 'zalo_tools')), false);
   assert.equal(existsSync(join(fx.sidecar, '.env')), true);
   assert.equal(existsSync(join(fx.home, 'config.yaml')), true);
+});
+
+test('parseCliArgs accepts --no-dashboard', () => {
+  assert.equal(parseCliArgs(['--no-dashboard']).noDashboard, true);
+  assert.equal(parseCliArgs([]).noDashboard, undefined);
 });

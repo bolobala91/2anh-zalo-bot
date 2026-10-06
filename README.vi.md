@@ -385,6 +385,74 @@ curl http://127.0.0.1:3872/api/status
 
 ---
 
+## Dashboard quản trị
+
+Dashboard là một trang web để xem bot đang chạy ra sao và xử lý việc thường gặp mà không cần gõ lệnh: xem tình trạng, quét lại mã QR khi Zalo đăng xuất, quản lý tài khoản của khách, nhận cảnh báo qua Telegram. Trình cài đặt tự cài và tự bật dịch vụ này (trừ khi chạy với `--no-dashboard`).
+
+### Mở ở đâu
+
+* Máy cá nhân: mở `http://localhost:3880`.
+* Trên VPS: mở địa chỉ tên miền đã khai ở `ZALO_DASHBOARD_URL` (ví dụ `https://dashboard.ten-mien.vn`). Dashboard chỉ nghe ở `127.0.0.1`, nên phải có Caddy đứng trước (xem bên dưới) thì mới vào được từ ngoài.
+
+### Tạo tài khoản Quản trị đầu tiên
+
+Cuối lần cài, trình cài in dòng `Mở dashboard: <link>`. Mở link đó (dùng một lần, hết hạn sau 24 giờ), đặt tên đăng nhập và mật khẩu. Lỡ mất link thì chạy:
+
+```bash
+npm run dashboard:setup-link
+```
+
+### Tạo tài khoản cho khách
+
+Đăng nhập bằng tài khoản Quản trị, vào mục **Người dùng**, bấm **Tạo tài khoản** và đưa tên đăng nhập cùng mật khẩu cho khách. Khách chỉ thấy phần được cho phép, không động được vào cài đặt của bạn.
+
+### Đăng nhập bằng mã Zalo
+
+Ở màn hình đăng nhập, người dùng đã có tài khoản có thể chọn đăng nhập bằng mã: dashboard gửi một mã ngắn qua Zalo của chính họ, nhập mã đó là vào, không cần nhớ mật khẩu.
+
+### Quét mã QR khi Zalo đăng xuất
+
+Khi Zalo đăng xuất bot, trang tổng quan hiện cảnh báo. Vào mục **Zalo**, bấm **Đăng nhập lại bằng mã QR** và quét bằng điện thoại của tài khoản Zalo phụ.
+
+### Cảnh báo qua Telegram
+
+1. Mở Telegram, nhắn cho **@BotFather**, gửi `/newbot`, đặt tên và lấy token (dạng `123456:ABC...`).
+2. Trong dashboard, vào mục **Cảnh báo**, dán token và lưu.
+3. Mỗi người muốn nhận cảnh báo bấm **Nối Telegram của tôi** rồi làm theo hướng dẫn trên màn hình.
+
+### Đặt sau Caddy (VPS có tên miền)
+
+Trỏ tên miền về máy chủ, rồi thêm khối sau vào `Caddyfile` và chạy `systemctl reload caddy` (trình cài tự in sẵn khối này khi `ZALO_DASHBOARD_URL` bắt đầu bằng `https://`):
+
+```
+dashboard.ten-mien.vn {
+    reverse_proxy 127.0.0.1:3880
+}
+```
+
+### Quên mật khẩu
+
+Khách quên thì Quản trị đặt lại trong mục **Người dùng**. Chính tài khoản Quản trị quên thì chạy trên máy chủ:
+
+```bash
+npm run dashboard:reset-admin -- --username <tên> --password <mật khẩu mới>
+```
+
+### Kiểm tay sau khi cài (Giai đoạn 1)
+
+- [ ] `npm run doctor` không có dòng `[FAIL]`; `dashboard-running` báo "đang chạy".
+- [ ] Mở dashboard, tạo được tài khoản Quản trị từ link thiết lập.
+- [ ] Đăng nhập, thấy trạng thái Zalo trên trang tổng quan.
+- [ ] Tạo thử một tài khoản khách và đăng nhập bằng tài khoản đó.
+- [ ] Đăng nhập bằng mã Zalo thành công.
+- [ ] Quét lại mã QR được khi cần.
+- [ ] (Nếu dùng) Nối Telegram và nhận được tin cảnh báo thử.
+- [ ] Khởi động lại máy, dashboard tự chạy lại.
+
+Gỡ cài đặt (`npm run uninstall:hermes`) cũng gỡ dịch vụ dashboard, nhưng giữ nguyên tài khoản và dữ liệu.
+
+---
+
 ## Cấu hình
 
 ### Cấu hình nằm ở đâu

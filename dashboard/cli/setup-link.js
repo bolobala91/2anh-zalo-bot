@@ -6,8 +6,7 @@ import { existsSync } from 'node:fs';
 import { loadRepoEnv, loadHermesEnv } from '../../scripts/setup-env.js';
 import { resolveDashboardPaths } from '../lib/paths.js';
 import { loadDashboardConfig } from '../lib/config.js';
-import { createUserStore } from '../lib/users.js';
-import { createSetupToken } from '../lib/setup-token.js';
+import { issueSetupLink } from '../lib/setup-link.js';
 
 try {
   const sidecarRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -15,11 +14,11 @@ try {
   loadHermesEnv();
   const paths = resolveDashboardPaths({ sidecarRoot });
   const config = loadDashboardConfig();
-  if (createUserStore(paths.usersFile).hasAdmin()) {
+  const link = issueSetupLink({ paths, config });
+  if (!link) {
     console.log('Đã có tài khoản Quản trị. Quên mật khẩu thì chạy: npm run dashboard:reset-admin -- --username <tên> --password <mật khẩu mới>');
   } else {
-    const token = createSetupToken(paths.setupFile).issue();
-    console.log(`Mở link sau trong 24 giờ để tạo tài khoản Quản trị:\n${config.publicUrl}/#/setup/${token}`);
+    console.log(`Mở link sau trong 24 giờ để tạo tài khoản Quản trị:\n${link}`);
   }
 } catch (err) {
   console.error(`Không tạo được link thiết lập: ${err.message}`);

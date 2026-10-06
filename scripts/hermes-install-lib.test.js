@@ -12,10 +12,14 @@ import {
   resolveHermesLayout,
   mergeHermesConfig,
   renderPlatformManifest,
-  installHermes,
+  installHermes as installHermesReal,
   doctorHermes,
-  uninstallHermes,
+  uninstallHermes as uninstallHermesReal,
 } from './hermes-install-lib.js';
+
+// Mặc định không đụng systemd / thư mục Startup thật khi kiểm thử.
+const installHermes = (options) => installHermesReal({ noDashboard: true, ...options });
+const uninstallHermes = (options) => uninstallHermesReal({ noDashboard: true, ...options });
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 
@@ -323,4 +327,40 @@ test('doctor báo đúng mục style-guide: đã ghi bản mặc định rồi b
   check = diagnosis.checks.find((c) => c.name === 'style-guide');
   assert.equal(check.ok, true);
   assert.match(check.detail, /riêng/);
+});
+
+test('installHermes wires the dashboard service, setup link and Caddy block without touching the system', async (t) => {
+  const fx = fixture(t);
+  const calls = [];
+  const prev = { url: process.env.ZALO_DASHBOARD_URL, port: process.env.ZALO_DASHBOARD_PORT };
+  process.env.ZALO_DASHBOARD_URL = 'https://dashboard.example.vn/';
+  delete process.env.ZALO_DASHBOARD_PORT;
+  t.after(() => {
+    if (prev.url === undefined) delete process.env.ZALO_DASHBOARD_URL; else process.env.ZALO_DASHBOARD_URL = prev.url;
+    if (prev.port !== undefined) process.env.ZALO_DASHBOARD_PORT = prev.port;
+  });
+  const result = await installHermesReal({
+    sidecarRoot: fx.sidecar,
+    hermesHome: fx.hermesHome,
+    skipPython: true,
+    dashboardInstaller: (opts) => { calls.push(opts.sidecarRoot); return { installed: false, detail: 'giả lập' }; },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(result.dashboard.installed, false);
+  assert.match(result.setupLink, /^https:\/\/dashboard\.example\.vn\/#\/setup\/[\w-]+$/);
+  assert.match(result.caddy, /dashboard\.example\.vn \{/);
+  assert.equal(existsSync(join(fx.hermesHome, 'zalo', 'dashboard', 'setup.json')), true);
+});
+
+test('doctorHermes reports dashboard checks as warnings, never failures', (t) => {
+  const fx = fixture(t);
+  const probe = (cmd, args) => ({ status: args?.[0] === '-e' ? 1 : 0 });
+  return installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true }).then(() => {
+    const diagnosis = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, commandProbe: probe });
+    assert.equal(diagnosis.ok, true, JSON.stringify(diagnosis.checks));
+    const byName = Object.fromEntries(diagnosis.checks.map((c) => [c.name, c]));
+    assert.match(byName['dashboard-running'].detail, /^chưa chạy — /);
+    assert.match(byName['dashboard-admin'].detail, /npm run dashboard:setup-link/);
+    assert.match(byName['dashboard-telegram'].detail, /chưa cài bot cảnh báo/);
+  });
 });
