@@ -33,6 +33,34 @@ test('đăng xuất mọi nơi', (t) => {
   assert.equal(s.get(a), null); assert.equal(s.get(b), null); assert.ok(s.get(c));
 });
 
+test('reset-admin (tiến trình khác) gỡ phiên thì dashboard đang chạy cũng mất phiên, không làm sống lại', (t) => {
+  const clock = { t: 0 }; const { s: server, file } = mk(t, clock);
+  const opts = { now: () => clock.t, ttlMs: 1000, idleMs: 300 };
+  const a = server.create('anh'); const b = server.create('anh'); const k = server.create('khach');
+  assert.ok(server.get(a));
+  const cli = createSessionStore(file, opts); // như dashboard:reset-admin
+  cli.destroyAll('anh');
+  assert.equal(server.get(a), null);
+  assert.equal(server.get(b), null);
+  assert.ok(server.get(k));
+  // Server ghi tiếp (tạo phiên mới, flush) không được hồi sinh phiên đã gỡ.
+  const c = server.create('khach');
+  clock.t = 100; server.get(c);
+  const fresh = createSessionStore(file, opts);
+  assert.equal(fresh.get(a), null);
+  assert.equal(fresh.get(b), null);
+  assert.ok(fresh.get(c));
+  assert.ok(fresh.get(k));
+});
+
+test('phiên do tiến trình khác tạo được thấy ngay', (t) => {
+  const clock = { t: 0 }; const { s: server, file } = mk(t, clock);
+  server.get('chua-co');
+  const other = createSessionStore(file, { now: () => clock.t, ttlMs: 1000, idleMs: 300 });
+  const tok = other.create('anh');
+  assert.equal(server.get(tok).username, 'anh');
+});
+
 test('phiên còn sống qua khởi động lại (đọc lại từ tệp)', (t) => {
   const clock = { t: 0 }; const { s, file } = mk(t, clock);
   const a = s.create('anh');

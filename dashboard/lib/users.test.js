@@ -17,6 +17,21 @@ test('tạo, đặt mật khẩu, kiểm mật khẩu; tệp không chứa mật
   assert.equal(s.hasAdmin(), true);
 });
 
+test('reset-admin (tiến trình khác) sửa users.json thì dashboard đang chạy thấy ngay, không ghi đè', (t) => {
+  const { s: server, file } = store(t);
+  server.create({ username: 'anh', role: 'owner', password: 'matkhau-cu-1' });
+  server.create({ username: 'khach', role: 'owner', password: 'matkhau-khach' });
+  server.update('anh', { disabled: true });
+  const cli = createUserStore(file);
+  cli.setPassword('anh', 'matkhau-moi-1');
+  cli.update('anh', { disabled: false, role: 'admin' });
+  assert.equal(server.verifyPassword('anh', 'matkhau-moi-1'), true);
+  assert.equal(server.get('anh').disabled, false);
+  server.update('khach', { disabled: true }); // ghi tiếp từ server không làm mất thay đổi của CLI
+  assert.equal(createUserStore(file).verifyPassword('anh', 'matkhau-moi-1'), true);
+  assert.equal(createUserStore(file).get('anh').role, 'admin');
+});
+
 test('bản công khai không lộ mật khẩu băm', (t) => {
   const { s } = store(t);
   const u = s.create({ username: 'khach', role: 'owner', password: 'abcdefgh' });
