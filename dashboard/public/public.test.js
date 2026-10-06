@@ -64,6 +64,28 @@ test('tô sáng kết quả tìm: tách chữ thành đoạn, không phân biệ
   assert.deepEqual(markMatches('abc', '%'), [{ text: 'abc', hit: false }]);
 });
 
+test('gấp chữ: không phân biệt dấu, đ → d; tô sáng đúng chữ gốc có dấu dù độ dài khác nhau', async () => {
+  const { fold, markMatches, indexOfFolded } = await import('./fold.js');
+  assert.equal(fold('Hòa HOÀ hoà'), 'hoa hoa hoa');
+  assert.equal(fold('Đoàn Thanh niên'), 'doan thanh nien');
+  assert.equal(fold('Học sinh'), fold('hoc sinh'));
+  assert.equal(fold('hòa'), 'hoa'); // dấu rời (NFD)
+  assert.deepEqual(markMatches('Lớp học sinh giỏi', 'hoc sinh'), [
+    { text: 'Lớp ', hit: false }, { text: 'học sinh', hit: true }, { text: ' giỏi', hit: false },
+  ]);
+  assert.deepEqual(markMatches('ĐOÀN trường', 'doan'), [{ text: 'ĐOÀN', hit: true }, { text: ' trường', hit: false }]);
+  assert.deepEqual(markMatches('hoà và hòa', 'hòa'), [
+    { text: 'hoà', hit: true }, { text: ' và ', hit: false }, { text: 'hòa', hit: true },
+  ]);
+  // Chữ gốc dạng tổ hợp (dài hơn chữ gấp): đoạn tô gồm cả dấu rời, ghép lại đúng chữ gốc.
+  const nfd = 'xin chào bạn';
+  const parts = markMatches(nfd, 'chao');
+  assert.deepEqual(parts, [{ text: 'xin ', hit: false }, { text: 'chào', hit: true }, { text: ' bạn', hit: false }]);
+  assert.equal(parts.map((p) => p.text).join(''), nfd);
+  assert.equal(indexOfFolded('abc Học sinh', 'hoc'), 4);
+  assert.equal(indexOfFolded('abc', 'x'), -1);
+});
+
 test('Nhật ký: mã kỹ thuật cho Quản trị gọn một dòng, bỏ trường rỗng', async () => {
   const { codeText } = await import('./views/audit.js');
   assert.equal(codeText({ action: 'send', category: 'send', actorUid: '555', threadId: '', error: null }), 'action=send · category=send · actorUid=555');

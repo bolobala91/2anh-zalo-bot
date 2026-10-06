@@ -442,7 +442,7 @@ npm run dashboard:reset-admin -- --username <tên> --password <mật khẩu mớ
 
 ### Phiên chat
 
-Mục **Phiên chat** hiện mọi hội thoại bot đã lưu, mới nhất trên cùng. Gõ vào ô trên cùng để lọc theo tên; bấm Enter để tìm trong nội dung tin nhắn (không phân biệt hoa thường). Mở một hội thoại: tin của bot nằm bên phải, nền màu; kéo lên đầu để xem tin cũ hơn.
+Mục **Phiên chat** hiện mọi hội thoại bot đã lưu, mới nhất trên cùng. Gõ vào ô trên cùng để lọc theo tên; bấm Enter để tìm trong nội dung tin nhắn (không phân biệt hoa thường và dấu: gõ "hoc sinh" vẫn thấy "học sinh"). Mở một hội thoại: tin của bot nằm bên phải, nền màu; kéo lên đầu để xem tin cũ hơn.
 
 Ô soạn ở dưới gửi tin **dưới tên bot** — dùng khi cần trả lời thay bot hoặc sửa một câu bot trả lời sai. Mỗi tin gửi tay được ghi vào Nhật ký kèm tên người gửi. Mỗi người gửi tối đa 10 tin mỗi phút. Chỉ gửi được vào hội thoại đã có trong lịch sử.
 

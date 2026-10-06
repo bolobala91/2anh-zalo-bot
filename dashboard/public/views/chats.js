@@ -3,6 +3,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Live, Notice, PageHead, Spinner, fmtTime } from '../ui.js';
+import { fold, indexOfFolded, markMatches } from '../fold.js';
+
+export { markMatches };
 
 const LIST_MS = 10_000;
 const THREAD_MS = 5_000;
@@ -15,7 +18,6 @@ const TYPE_LABELS = {
   'chat.gif': 'Ảnh động', 'chat.location.new': 'Vị trí', 'chat.link': 'Liên kết',
 };
 
-const fold = (s) => String(s ?? '').normalize('NFC').toLocaleLowerCase('vi');
 const keyOf = (c) => `${c.threadType}:${c.threadId}`;
 
 export function messageView(m) {
@@ -38,24 +40,6 @@ export function preview(c) {
   return `${c.lastIsSelf ? 'Bot: ' : ''}${v.text || (v.label ? `[${v.label}]` : '')}`;
 }
 
-/** Tách chữ thành đoạn [{ text, hit }] theo từ khoá (không phân biệt hoa thường) — để bọc <mark> qua htm. */
-export function markMatches(text, q) {
-  const s = String(text ?? '');
-  const needle = fold(q).trim();
-  const hay = fold(s);
-  // Chữ thường hoá đổi độ dài (hiếm) thì vị trí không còn khớp — thà không tô còn hơn tô sai.
-  if (!needle || hay.length !== s.length) return [{ text: s, hit: false }];
-  const out = [];
-  let i = 0;
-  for (let j = hay.indexOf(needle); j !== -1; j = hay.indexOf(needle, i)) {
-    if (j > i) out.push({ text: s.slice(i, j), hit: false });
-    out.push({ text: s.slice(j, j + needle.length), hit: true });
-    i = j + needle.length;
-  }
-  if (i < s.length || !out.length) out.push({ text: s.slice(i), hit: false });
-  return out;
-}
-
 function ConvItem({ c, active, onSelect }) {
   return html`<li><button type="button" class=${`conv${active ? ' active' : ''}`} aria-current=${active ? 'true' : undefined} onClick=${() => onSelect(c)}>
     <span class="conv-top"><span class="conv-name">${c.name}</span><time class="conv-time">${fmtTime(c.lastAtMs)}</time></span>
@@ -67,7 +51,7 @@ function ResultItem({ r, q, onSelect }) {
   const v = messageView(r);
   const who = r.isSelf ? 'Bot: ' : r.senderName ? `${r.senderName}: ` : '';
   let text = v.text;
-  const at = fold(text).indexOf(fold(q).trim());
+  const at = indexOfFolded(text, q);
   if (at > LEAD * 2) text = `…${text.slice(at - LEAD)}`;
   return html`<li><button type="button" class="conv" onClick=${() => onSelect({ threadId: r.threadId, threadType: r.threadType, name: r.threadName })}>
     <span class="conv-top"><span class="conv-name">${r.threadName}</span><time class="conv-time">${fmtTime(r.ts)}</time></span>

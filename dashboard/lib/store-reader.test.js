@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { openZaloStore } from '../../zalo-store.js';
-import { createStoreReader, parseCursor, startOfDayVN, StoreUnavailable } from './store-reader.js';
+import { fold as clientFold } from '../public/fold.js';
+import { createStoreReader, parseCursor, SEARCH_MATCH, SQL, startOfDayVN, StoreUnavailable } from './store-reader.js';
 
 const m = (n, over = {}) => ({
   threadId: '100', threadType: 0, msgId: `m${n}`, senderUid: '100', senderName: 'Lan',
@@ -145,6 +147,28 @@ test('tìm toàn văn: không phân biệt hoa thường tiếng Việt; % và _
   assert.deepEqual(hits.map((x) => [x.threadId, x.threadType]), [['200', 1], ['100', 0]]); // mới nhất trước
 });
 
+test('tìm không phân biệt dấu: hòa ↔ hoà, "hoc sinh" thấy "học sinh", Đoàn ↔ doan', (t) => {
+  const s = setup(t);
+  s.write([
+    m(1, { text: 'hoà nhạc tối nay', ts: 1001 }), m(2, { text: 'Hòa ơi', ts: 1002 }),
+    m(3, { text: 'Danh sách học sinh giỏi', ts: 1003 }), m(4, { text: 'ĐOÀN trường thông báo', ts: 1004 }),
+    m(5, { text: 'doan van ban', ts: 1005 }), m(6, { text: 'hoa hồng', ts: 1006 }),
+  ]);
+  const r = s.reader();
+  const texts = (q) => r.searchMessages(q).results.map((x) => x.text);
+  assert.deepEqual(texts('hòa'), ['hoa hồng', 'Hòa ơi', 'hoà nhạc tối nay']);
+  assert.deepEqual(texts('hoà'), texts('hòa'));
+  assert.deepEqual(texts('hoc sinh'), ['Danh sách học sinh giỏi']);
+  assert.deepEqual(texts('HỌC SINH'), ['Danh sách học sinh giỏi']);
+  assert.deepEqual(texts('Đoàn'), ['doan van ban', 'ĐOÀN trường thông báo']);
+  assert.deepEqual(texts('doan'), texts('Đoàn'));
+  // Hàm zd_fold của SQLite chính là fold của giao diện: kết quả máy chủ trùng đúng phép so ở trình duyệt.
+  const all = ['hoà nhạc tối nay', 'Hòa ơi', 'Danh sách học sinh giỏi', 'ĐOÀN trường thông báo', 'doan van ban', 'hoa hồng'];
+  for (const q of ['hòa', 'HOA', 'sách', 'đoàn', 'trUONG', 'ơi', 'hòa']) {
+    assert.deepEqual(new Set(texts(q)), new Set(all.filter((x) => clientFold(x).includes(clientFold(q)))), q);
+  }
+});
+
 test('tìm kiếm có con trỏ và cắt chữ 300 ký tự', (t) => {
   const s = setup(t);
   s.write([1, 2, 3].map((n) => m(n, { text: `chung ${n} ${'y'.repeat(400)}` })));
@@ -193,6 +217,139 @@ test('senderNames lấy tên mới nhất, bỏ tin của bot và UID không h�
   ]);
   const names = s.reader().senderNames(['100', '../x', '']);
   assert.deepEqual([...names], [['100', 'Lan']]);
+});
+
+test('senderNames chỉ lấy từ tài khoản bot đang dùng; người chỉ nhắn trong nhóm lấy từ 30 ngày tính tới tin mới nhất', (t) => {
+  const s = setup(t);
+  const nowMs = 100 * 86_400_000;
+  s.write([m(1, { senderUid: '100', senderName: 'Tên ở tài khoản cũ', ts: nowMs - 5 })], 'cu');
+  s.write([
+    m(2, { threadId: '100', senderUid: '100', senderName: 'Lan', ts: 1 }),                                     // nhắn riêng, rất cũ
+    m(3, { threadId: '200', threadType: 1, senderUid: '300', senderName: 'Minh', ts: nowMs - 1000 }),           // chỉ trong nhóm, gần đây
+    m(4, { threadId: '200', threadType: 1, senderUid: '301', senderName: 'Hà', ts: nowMs - 40 * 86_400_000 }),  // chỉ trong nhóm, quá 30 ngày
+    m(5, { threadId: '900', senderUid: '900', senderName: 'Mới nhất', ts: nowMs }),                             // tin mới nhất → tài khoản bot1
+  ]);
+  const names = s.reader().senderNames(['100', '300', '301', '555']);
+  assert.deepEqual([...names].sort(), [['100', 'Lan'], ['300', 'Minh']]);
+});
+
+test('listAudit chỉ lấy tài khoản bot đang dùng (và dòng chưa gắn tài khoản)', (t) => {
+  const s = setup(t);
+  s.write([m(1, { ts: 5000 })], 'bot1');
+  s.closeWriter();
+  let clock = 0;
+  const w = openZaloStore({ path: s.path, now: () => clock });
+  for (const [id, accountId, at] of [['a', 'bot1', 1000], ['b', 'cu', 1100], ['c', '', 1200]]) {
+    clock = at;
+    w.beginAudit({ requestId: id, accountId, actorUid: '555', actorRole: 'owner', action: `act_${id}`, category: 'send', threadId: '200', threadType: 1 });
+    w.finishAudit(id, 'succeeded');
+  }
+  w.close();
+  assert.deepEqual(s.reader().listAudit().map((x) => x.action), ['act_c', 'act_a']);
+});
+
+test('danh sách hội thoại đệm 10 s theo tài khoản; xoá đệm thì thấy tin mới ngay', (t) => {
+  const s = setup(t);
+  let clock = 0;
+  s.write([m(1, { threadId: '100', ts: 1000 })]);
+  const r = s.reader({ now: () => clock });
+  assert.deepEqual(r.listConversations().map((c) => c.threadId), ['100']);
+  s.write([m(2, { threadId: '101', ts: 2000 })]);
+  clock = 9_999;
+  assert.deepEqual(r.listConversations().map((c) => c.threadId), ['100']); // còn trong đệm
+  clock = 10_000;
+  assert.deepEqual(r.listConversations().map((c) => c.threadId), ['101', '100']);
+  s.write([m(3, { threadId: '102', ts: 3000 })]);
+  r.invalidateConversations();
+  assert.deepEqual(r.listConversations().map((c) => c.threadId), ['102', '101', '100']);
+  s.write([m(4, { threadId: '555', ts: 4000 })], 'tai-khoan-moi'); // đổi tài khoản → khoá đệm khác
+  assert.deepEqual(r.listConversations().map((c) => c.threadId), ['555']);
+});
+
+test('tệp bị thay hoặc mất (khôi phục, cài lại): kiểm tối đa 30 s/lần rồi mở lại', (t) => {
+  const s = setup(t);
+  s.write([m(1)]);
+  let clock = 0; let id = 'v1'; let checks = 0;
+  const statFile = () => { checks += 1; if (id === null) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); return id; };
+  const r = s.reader({ now: () => clock, statFile });
+  assert.equal(r.getMessages('100', 0).messages.length, 1);
+  const base = checks;
+  clock = 29_999; r.getMessages('100', 0);
+  assert.equal(checks, base); // chưa tới 30 s thì không stat
+  id = null; clock = 30_000;
+  assert.throws(() => r.getMessages('100', 0), StoreUnavailable);
+  id = 'v2'; clock = 60_000;
+  assert.equal(r.getMessages('100', 0).messages.length, 1); // mở lại được
+});
+
+test('tệp bị thay thật bằng bản khác: đọc bản mới sau lần kiểm kế tiếp', { skip: process.platform === 'win32' && 'Windows không cho đổi tên đè tệp SQLite đang mở' }, (t) => {
+  const s = setup(t);
+  s.write([m(1, { text: 'bản cũ' })]);
+  s.closeWriter();
+  const other = `${s.path}.new`;
+  const w = openZaloStore({ path: other });
+  w.insertMessages('bot1', [m(2, { text: 'bản khôi phục' })], 'live');
+  w.close();
+  let clock = 0;
+  const r = s.reader({ now: () => clock });
+  assert.deepEqual(r.getMessages('100', 0).messages.map((x) => x.text), ['bản cũ']);
+  for (const suffix of ['-wal', '-shm']) rmSync(`${s.path}${suffix}`, { force: true });
+  renameSync(other, s.path);
+  clock = 30_000;
+  assert.deepEqual(r.getMessages('100', 0).messages.map((x) => x.text), ['bản khôi phục']);
+});
+
+function seedBig(path, { rows, today, account = 'bot1' }) {
+  openZaloStore({ path }).close();
+  const d = new DatabaseSync(path);
+  // Một câu INSERT … SELECT trong một giao dịch: 200k dòng trong khoảng 1 s.
+  d.exec('BEGIN');
+  d.prepare(`
+    WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i + 1 < ?)
+    INSERT INTO messages (identity_key, account_id, thread_id, thread_type, msg_id, sender_uid, sender_name, text, msg_type,
+      timestamp_ms, is_self, source, created_at_ms, updated_at_ms)
+    SELECT 'k' || i, CASE WHEN i % 50 = 0 THEN 'cu' ELSE ? END, CAST(100 + i % 300 AS TEXT), i % 3 = 0, 'm' || i,
+      CAST(1000 + i % 700 AS TEXT), 'Người ' || (i % 700),
+      CASE i % 5 WHEN 0 THEN 'Danh sách học sinh số ' WHEN 1 THEN 'hoà nhạc ' WHEN 2 THEN 'Đoàn trường thông báo ' ELSE 'chào cả nhà ' END || i,
+      'webchat', ? - (? - i) * 150000, i % 4 = 0, 'live', 0, 0
+    FROM n
+  `).run(rows, account, today, rows);
+  d.exec('COMMIT');
+  d.close();
+}
+
+test('kế hoạch truy vấn: số liệu hôm nay và tìm kiếm đi theo idx_messages_retention, không quét cả bảng, không sắp xếp tạm', (t) => {
+  const s = setup(t);
+  seedBig(s.path, { rows: 2000, today: 10_000_000 });
+  const d = new DatabaseSync(s.path, { readOnly: true });
+  try {
+    d.function('zd_fold', (x) => x);
+    const plan = (sql) => d.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...Array(sql.split('?').length - 1).fill(1)).map((r) => r.detail);
+    for (const [name, sql] of [['todayTotals', SQL.todayTotals], ['todayTop', SQL.todayTop], ['search', SQL.search(SEARCH_MATCH.fold)], ['search LIKE', SQL.search(SEARCH_MATCH.like)]]) {
+      const p = plan(sql);
+      assert.ok(p.some((x) => /USING INDEX idx_messages_retention/.test(x)), `${name}: ${p.join(' | ')}`);
+      assert.ok(!p.some((x) => /^SCAN messages/.test(x)), `${name} quét cả bảng: ${p.join(' | ')}`);
+      if (name.startsWith('search')) assert.ok(!p.some((x) => /TEMP B-TREE/.test(x)), `${name} sắp xếp tạm: ${p.join(' | ')}`);
+    }
+  } finally { d.close(); }
+});
+
+test('200k tin: số liệu hôm nay < 5 ms, một trang tìm kiếm < 300 ms', (t) => {
+  const s = setup(t);
+  const today = 400 * 86_400_000;
+  seedBig(s.path, { rows: 200_000, today });
+  const r = s.reader();
+  const best = (fn) => { fn(); let min = Infinity; for (let i = 0; i < 5; i += 1) { const a = performance.now(); fn(); min = Math.min(min, performance.now() - a); } return min; };
+  const stats = r.todayStats(startOfDayVN(today));
+  assert.ok(stats.received + stats.sent > 0 && stats.received + stats.sent < 1000);
+  const statsMs = best(() => r.todayStats(startOfDayVN(today)));
+  const page = r.searchMessages('hoc sinh');
+  assert.equal(page.results.length, 30);
+  assert.match(page.results[0].text, /học sinh/);
+  const searchMs = best(() => r.searchMessages('hoc sinh'));
+  t.diagnostic(`todayStats ${statsMs.toFixed(2)} ms · tìm 1 trang ${searchMs.toFixed(2)} ms`);
+  assert.ok(statsMs < 5, `todayStats ${statsMs} ms`);
+  assert.ok(searchMs < 300, `tìm ${searchMs} ms`);
 });
 
 test('startOfDayVN và parseCursor', () => {
