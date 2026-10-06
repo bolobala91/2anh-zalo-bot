@@ -31,7 +31,7 @@ test('admin cài token, link trả url, status báo đã nối sau khi nối', a
   assert.match(link.json.url, /^https:\/\/t\.me\/canhbao_bot\?start=/);
   assert.equal((await call('/api/telegram/test', { method: 'POST', cookie })).status, 409);
   const code = new URL(link.json.url).searchParams.get('start');
-  bot.push({ update_id: 1, message: { text: `/start ${code}`, chat: { id: 7 } } });
+  bot.push({ update_id: 1, message: { text: `/start ${code}`, chat: { id: 7, type: 'private' } } });
   await deps.linker.pollOnce();
   assert.equal((await call('/api/telegram/test', { method: 'POST', cookie })).status, 200);
   const st = await call('/api/status', { cookie });

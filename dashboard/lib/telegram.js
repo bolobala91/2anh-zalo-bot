@@ -15,7 +15,7 @@ export function createTelegramApi({ token, fetchImpl = fetch, base = 'https://ap
       json = await res.json();
     } catch {
       // Lỗi mạng của fetch có thể chứa URL (có token) — không chuyển tiếp message gốc.
-      throw new Error(`Không kết nối được Telegram (${method})`);
+      throw Object.assign(new Error(`Không kết nối được Telegram (${method})`), { network: true });
     }
     if (!json.ok) throw new Error(json.description || `Telegram lỗi ${method}`);
     return json.result;
@@ -44,7 +44,8 @@ export function createTelegramLinker({ file, apiFactory = (token) => createTeleg
       let me;
       try {
         me = await apiFactory(tok).getMe();
-      } catch {
+      } catch (err) {
+        if (err?.network) throw Object.assign(new Error('Không kết nối được Telegram — kiểm tra mạng của máy chủ rồi thử lại.'), { statusCode: 502 });
         throw Object.assign(new Error('Telegram không nhận token này — kiểm tra lại token lấy từ @BotFather.'), { statusCode: 400 });
       }
       const d = load();
@@ -58,29 +59,36 @@ export function createTelegramLinker({ file, apiFactory = (token) => createTeleg
       if (!d.token) throw Object.assign(new Error('Chưa cài bot Telegram cảnh báo — báo người cài đặt.'), { statusCode: 409 });
       const code = randomBytes(12).toString('base64url');
       const t = now();
-      for (const [k, p] of Object.entries(d.pending)) if (p.expiresAt < t) delete d.pending[k];
+      for (const [k, p] of Object.entries(d.pending)) if (p.expiresAt < t || p.username === username) delete d.pending[k];
       d.pending[sha(code)] = { username, expiresAt: t + codeTtlMs };
       save(d);
       return `https://t.me/${d.botUsername}?start=${code}`;
     },
     async pollOnce(timeoutSec = 0) {
-      const tg = api(); if (!tg) return 0;
-      const updates = await tg.getUpdates({ offset: load().offset, timeout: timeoutSec });
+      const start = load();
+      if (!start.token) return 0;
+      const tg = apiFactory(start.token);
+      const updates = await tg.getUpdates({ offset: start.offset, timeout: timeoutSec });
+      // Từ đây đến save(d) không được có await, để không ghi đè thay đổi đồng thời.
       const d = load();
-      let linked = 0;
+      if (d.token !== start.token) return 0; // token đã bị đổi/gỡ trong lúc chờ
+      const confirms = [];
       for (const u of updates) {
         d.offset = Math.max(d.offset, u.update_id + 1);
-        const m = /^\/start\s+(\S+)/.exec(u.message?.text || '');
+        if (u.message?.chat?.type !== 'private') continue;
+        const m = /^\/start(?:@\w+)?\s+(\S+)/.exec(u.message?.text || '');
         const p = m && d.pending[sha(m[1])];
         if (p && p.expiresAt >= now()) {
           d.links[p.username] = String(u.message.chat.id);
           delete d.pending[sha(m[1])];
-          linked += 1;
-          await tg.sendMessage(u.message.chat.id, `Đã nối cảnh báo cho tài khoản "${p.username}". Khi bot gặp sự cố, bạn sẽ nhận tin ở đây.`).catch(() => {});
+          confirms.push([u.message.chat.id, p.username]);
         }
       }
       save(d);
-      return linked;
+      for (const [chat, username] of confirms) {
+        await tg.sendMessage(chat, `Đã nối cảnh báo cho tài khoản "${username}". Khi bot gặp sự cố, bạn sẽ nhận tin ở đây.`).catch(() => {});
+      }
+      return confirms.length;
     },
     isLinked: (username) => Boolean(load().links[username]),
     chatIds: () => Object.values(load().links),
