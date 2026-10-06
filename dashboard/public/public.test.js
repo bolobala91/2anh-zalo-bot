@@ -34,6 +34,37 @@ test('dải trạng thái và thẻ Zalo: listener đứt → vàng "Đang nối
   }
 });
 
+test('tin nhắn: ảnh/tệp hiện nhãn + link https; chữ giữ nguyên, không bao giờ thành HTML hay link lạ', async () => {
+  const { messageView, mergeMessages, preview } = await import('./views/chats.js');
+  assert.deepEqual(messageView({ msgType: 'chat.photo', text: 'https://photo-stal-1.zdn.vn/a.jpg' }), { label: 'Ảnh', text: '', link: 'https://photo-stal-1.zdn.vn/a.jpg' });
+  assert.deepEqual(messageView({ msgType: 'chat.sticker', text: '[Nhãn dán]' }), { label: 'Nhãn dán', text: '', link: null });
+  assert.deepEqual(messageView({ msgType: 'webchat', text: '<img src=x onerror=alert(1)>' }), { label: null, text: '<img src=x onerror=alert(1)>', link: null });
+  for (const text of ['javascript:alert(1)', 'http://evil.vn', 'data:text/html,x', 'https://a.vn có chữ']) {
+    assert.equal(messageView({ msgType: 'webchat', text }).link, null, text);
+  }
+  assert.deepEqual(mergeMessages([{ id: 2, ts: 5 }, { id: 1, ts: 5 }], [{ id: 2, ts: 5 }, { id: 3, ts: 4 }]).map((m) => m.id), [3, 1, 2]);
+  assert.equal(preview({ lastMsgType: 'chat.photo', lastText: 'https://x.zdn.vn/a.jpg', lastIsSelf: true }), 'Bot: [Ảnh]');
+  assert.equal(preview({ lastMsgType: 'webchat', lastText: 'Chào', lastIsSelf: false }), 'Chào');
+});
+
+test('tô sáng kết quả tìm: tách chữ thành đoạn, không phân biệt hoa thường, giữ nguyên chữ gốc kể cả thẻ HTML', async () => {
+  const { markMatches } = await import('./views/chats.js');
+  assert.deepEqual(markMatches('Họp lúc 8h, HỌP lại chiều', 'họp'), [
+    { text: 'Họp', hit: true }, { text: ' lúc 8h, ', hit: false }, { text: 'HỌP', hit: true }, { text: ' lại chiều', hit: false },
+  ]);
+  assert.deepEqual(markMatches('<b>x</b> họp', 'họp'), [{ text: '<b>x</b> ', hit: false }, { text: 'họp', hit: true }]);
+  assert.deepEqual(markMatches('không có', 'họp'), [{ text: 'không có', hit: false }]);
+  assert.deepEqual(markMatches('abc', ''), [{ text: 'abc', hit: false }]);
+});
+
+test('giao diện không dùng innerHTML và không có style nội tuyến (CSP)', () => {
+  for (const f of files(root).filter((x) => x.endsWith('.js') && !x.endsWith('.test.js'))) {
+    const src = readFileSync(f, 'utf8');
+    assert.doesNotMatch(src, /innerHTML|dangerouslySetInnerHTML|insertAdjacentHTML/, f);
+    assert.doesNotMatch(src, /\sstyle=/, f);
+  }
+});
+
 test('index.html không tải tài nguyên từ Internet', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   assert.doesNotMatch(html, /(src|href)=["']https?:/);
