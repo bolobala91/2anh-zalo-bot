@@ -37,3 +37,19 @@ test('mã 6 số: đúng một lần, hết hạn sau 5 phút, sai quá 5 lần 
   for (let i = 0; i < 5; i++) assert.equal(g.verifyCode('anh', wrong), false);
   assert.equal(g.verifyCode('anh', c3), false); // đã quá 5 lần sai nên mã đúng cũng bị từ chối
 });
+
+test('khoá và mã cũ hết hiệu lực sau khi dọn dẹp; khoá mới vẫn hoạt động', () => {
+  const clock = { t: 0 };
+  const g = createLoginGuard({ now: () => clock.t });
+  for (let i = 0; i < 50; i++) g.fail([`ip:10.0.0.${i}`]);
+  for (let i = 0; i < 5; i++) g.fail(['u:cu']);
+  g.issueCode('cu');
+  clock.t = 31 * 60_000;
+  g.fail(['u:moi']);          // kích hoạt dọn dẹp
+  const c = g.issueCode('moi');
+  assert.equal(g.locked(['u:cu', 'ip:10.0.0.1']), 0);
+  assert.equal(g.verifyCode('cu', '123456'), false);
+  assert.equal(g.verifyCode('moi', c), true);
+  for (let i = 0; i < 4; i++) g.fail(['u:moi']);
+  assert.ok(g.locked(['u:moi']) > 0);
+});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSetupToken } from './setup-token.js';
@@ -42,4 +42,16 @@ test('tệp không chứa token thô', (t) => {
   const { s, file } = mk(t, { t: 0 });
   const token = s.issue();
   assert.ok(!readFileSync(file, 'utf8').includes(token));
+});
+
+test('tệp bị sửa (hash hoặc expiresAt sai kiểu) thì consume false', (t) => {
+  const clock = { t: 0 }; const { s, file } = mk(t, clock);
+  const token = s.issue();
+  const good = JSON.parse(readFileSync(file, 'utf8'));
+  for (const bad of [{ ...good, hash: 'abc' }, { ...good, hash: 123 }, { ...good, expiresAt: '9999999999999' }, { hash: good.hash }]) {
+    writeFileSync(file, JSON.stringify(bad));
+    assert.equal(s.consume(token), false);
+  }
+  writeFileSync(file, JSON.stringify(good));
+  assert.equal(s.consume(token), true);
 });

@@ -39,3 +39,20 @@ test('khoá tài khoản thì không kiểm mật khẩu được', (t) => {
   s.update('khach', { disabled: true });
   assert.equal(s.verifyPassword('khach', 'abcdefgh'), false);
 });
+
+test('UID phải là chuỗi: số JSON bị từ chối (create và update)', (t) => {
+  const { s } = store(t);
+  assert.throws(() => s.create({ username: 'abc', role: 'owner', zaloUid: 1234567890123456789 }), (e) => e.statusCode === 400 && /UID Zalo phải là chuỗi chữ số/.test(e.message));
+  s.create({ username: 'abc', role: 'owner' });
+  assert.throws(() => s.update('abc', { zaloUid: 1234567890123456789 }), (e) => e.statusCode === 400 && /chuỗi chữ số/.test(e.message));
+});
+
+test('mật khẩu tối đa 256 ký tự; verify mật khẩu quá dài trả false', (t) => {
+  const { s } = store(t);
+  const long = 'a'.repeat(257);
+  assert.throws(() => s.create({ username: 'abc', role: 'owner', password: long }), (e) => e.statusCode === 400 && /tối đa 256/.test(e.message));
+  s.create({ username: 'abc', role: 'owner', password: 'a'.repeat(256) });
+  assert.throws(() => s.setPassword('abc', long), /tối đa 256/);
+  assert.equal(s.verifyPassword('abc', 'a'.repeat(256)), true);
+  assert.equal(s.verifyPassword('abc', long), false);
+});

@@ -13,6 +13,8 @@ export function createLoginGuard({ now = Date.now, maxFails = 5, windowMs = 15 *
     },
     fail(keys) {
       const t = now();
+      // Dọn khoá đã hết cửa sổ đếm và hết khoá để Map không phình mãi.
+      for (const [k, e] of fails) if (e.lockedUntil <= t && e.times.every((x) => t - x >= windowMs)) fails.delete(k);
       for (const k of keys) {
         const e = entry(k);
         e.times = [...e.times.filter((x) => t - x < windowMs), t];
@@ -22,6 +24,8 @@ export function createLoginGuard({ now = Date.now, maxFails = 5, windowMs = 15 *
     },
     succeed(keys) { for (const k of keys) fails.delete(k); },
     issueCode(username) {
+      // Dọn mã đã hết hạn.
+      for (const [u, c] of codes) if (now() > c.expiresAt) codes.delete(u);
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
       codes.set(username, { hash: sha(code), expiresAt: now() + codeTtlMs, attempts: 0 });
       return code;

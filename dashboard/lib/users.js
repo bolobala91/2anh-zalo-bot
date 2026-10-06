@@ -4,6 +4,7 @@ import { readJson, writeJsonAtomic } from './json-store.js';
 const NAME = /^[a-z0-9._-]{3,32}$/;
 const ZALO_UID = /^[1-9]\d{14,21}$/;
 const ROLES = new Set(['admin', 'owner']);
+const MAX_PASSWORD = 256;
 const bad = (m) => Object.assign(new Error(m), { statusCode: 400 });
 
 export function hashPassword(password) {
@@ -24,8 +25,13 @@ const toPublic = (u) => ({ username: u.username, role: u.role, zaloUid: u.zaloUi
 export function createUserStore(path) {
   const load = () => readJson(path, { users: [] });
   const save = (data) => writeJsonAtomic(path, data);
-  const checkPassword = (pw) => { if (String(pw).length < 8) throw bad('Mật khẩu cần ít nhất 8 ký tự'); };
-  const checkUid = (uid) => { if (uid && !ZALO_UID.test(uid)) throw bad('UID Zalo không hợp lệ (dãy 15–22 chữ số, không bắt đầu bằng 0)'); };
+  const checkPassword = (pw) => {
+    if (String(pw).length < 8) throw bad('Mật khẩu cần ít nhất 8 ký tự');
+    if (String(pw).length > MAX_PASSWORD) throw bad('Mật khẩu tối đa 256 ký tự');
+  };
+  const checkUid = (uid) => {
+    if (uid != null && uid !== '' && typeof uid !== 'string') throw bad('UID Zalo phải là chuỗi chữ số');
+    if (uid && !ZALO_UID.test(uid)) throw bad('UID Zalo không hợp lệ (dãy 15–22 chữ số, không bắt đầu bằng 0)'); };
 
   return {
     list: () => load().users.map(toPublic),
@@ -35,11 +41,11 @@ export function createUserStore(path) {
       const name = String(username || '').trim().toLowerCase();
       if (!NAME.test(name)) throw bad('Tên đăng nhập 3–32 ký tự: chữ thường, số, dấu . _ -');
       if (!ROLES.has(role)) throw bad('Vai trò phải là Quản trị hoặc Chủ bot');
-      checkUid(String(zaloUid));
+      checkUid(zaloUid);
       if (password) checkPassword(password);
       const data = load();
       if (data.users.some((u) => u.username === name)) throw bad('Tên đăng nhập đã tồn tại');
-      const user = { username: name, role, zaloUid: String(zaloUid), disabled: false, passwordHash: password ? hashPassword(password) : '', createdAt: Date.now() };
+      const user = { username: name, role, zaloUid: zaloUid || '', disabled: false, passwordHash: password ? hashPassword(password) : '', createdAt: Date.now() };
       data.users.push(user);
       save(data);
       return toPublic(user);
@@ -49,7 +55,7 @@ export function createUserStore(path) {
       const user = data.users.find((u) => u.username === username);
       if (!user) throw Object.assign(new Error('Không có người dùng này'), { statusCode: 404 });
       if (patch.role !== undefined) { if (!ROLES.has(patch.role)) throw bad('Vai trò phải là Quản trị hoặc Chủ bot'); user.role = patch.role; }
-      if (patch.zaloUid !== undefined) { checkUid(String(patch.zaloUid)); user.zaloUid = String(patch.zaloUid); }
+      if (patch.zaloUid !== undefined) { checkUid(patch.zaloUid); user.zaloUid = patch.zaloUid || ''; }
       if (patch.disabled !== undefined) user.disabled = Boolean(patch.disabled);
       save(data);
       return toPublic(user);
@@ -64,7 +70,7 @@ export function createUserStore(path) {
     },
     verifyPassword(username, password) {
       const user = load().users.find((u) => u.username === username);
-      if (!user || user.disabled || !user.passwordHash) { hashPassword('dummy-timing'); return false; }
+      if (!user || user.disabled || !user.passwordHash || String(password).length > MAX_PASSWORD) { hashPassword('dummy-timing'); return false; }
       return verifyHash(password, user.passwordHash);
     },
   };
