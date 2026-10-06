@@ -1074,6 +1074,31 @@ test('Hermes-unavailable system notice is audited outside the WebSocket command 
   }
 });
 
+test('sendSystemNotice ghi đúng người gửi và hành động do dashboard truyền vào', async (t) => {
+  const store = testStore(t);
+  const requestIds = [];
+  const beginAudit = store.beginAudit;
+  store.beginAudit = (entry) => { requestIds.push(entry.requestId); return beginAudit(entry); };
+  const api = { sendMessage: () => Promise.resolve({ message: { msgId: 'd-1', cliMsgId: 'd-c1' } }) };
+  const server = startHermesBridge({ api, profile: { user_id: 'bot' }, port: 0, store });
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    await sendSystemNotice({
+      api, threadId: 'dm-1', threadType: 0, text: 'Chào',
+      actorUid: 'khach', actorRole: 'dashboard', action: 'dashboard_send',
+    });
+    const trail = store.getAuditTrail(requestIds.at(-1));
+    assert.ok(trail.length > 0);
+    for (const row of trail) {
+      assert.equal(row.actorUid, 'khach');
+      assert.equal(row.actorRole, 'dashboard');
+      assert.equal(row.action, 'dashboard_send');
+    }
+  } finally {
+    stopHermesBridge();
+  }
+});
+
 test('lời chào có tag bị Zalo từ chối (mã số) thì gửi lại chữ thường, lỗi mạng thì không', async (t) => {
   const store = testStore(t);
   const calls = [];

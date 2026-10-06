@@ -709,15 +709,18 @@ export async function acquireSendQuota() {
   }
 }
 
-export async function sendSystemNotice({ api, threadId, threadType, text, mentions = null }) {
+export async function sendSystemNotice({
+  api, threadId, threadType, text, mentions = null,
+  actorUid = 'system', actorRole = 'system', action = 'send_system_notice',
+}) {
   if (!activeStore) throw new Error('Zalo store is not ready');
   const requestId = `system-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   activeStore.beginAudit({
     requestId,
     accountId: activeAccountId,
-    actorUid: 'system',
-    actorRole: 'system',
-    action: 'send_system_notice',
+    actorUid,
+    actorRole,
+    action,
     category: 'send',
     threadId: String(threadId),
     threadType: Number(threadType),
