@@ -394,6 +394,7 @@ export function doctorHermes({
   skipPython = false,
   noDashboard = false,
   commandProbe = spawnSync,
+  hostPlatform = platform(),
 } = {}) {
   const checks = [];
   const add = (name, ok, detail = '') => checks.push({ name, ok: Boolean(ok), detail });
@@ -489,12 +490,12 @@ export function doctorHermes({
       ? 'có — bot đọc và tải được video YouTube/TikTok/Facebook'
       : 'thiếu — bot chưa đọc/tải được video; cài: uv pip install --python <venv Hermes> "yt-dlp[default,curl-cffi]" youtube-transcript-api, và cài ffmpeg');
   }
-  if (!noDashboard) addDashboardChecks(add, { layout, root, commandProbe });
+  if (!noDashboard) addDashboardChecks(add, { layout, root, commandProbe, hostPlatform });
   return { ok: checks.every((check) => check.ok), checks };
 }
 
 // Dashboard là phần tuỳ chọn: thiếu/chưa chạy chỉ là cảnh báo (ok:true + chi tiết).
-function addDashboardChecks(add, { layout, root, commandProbe }) {
+function addDashboardChecks(add, { layout, root, commandProbe, hostPlatform }) {
   let paths; let config;
   try {
     const env = { ...process.env, HERMES_HOME: layout.home };
@@ -517,6 +518,19 @@ function addDashboardChecks(add, { layout, root, commandProbe }) {
   add('dashboard-admin', true, hasAdmin ? 'đã có tài khoản Quản trị' : 'chưa có — chạy npm run dashboard:setup-link');
   const hasTelegram = Boolean(readJson(paths.telegramFile, {})?.token);
   add('dashboard-telegram', true, hasTelegram ? 'đã cài bot cảnh báo' : 'chưa cài bot cảnh báo');
+  // Nút "khởi động lại" trên Linux mặc định gọi systemctl restart zalo-bridge / hermes-gateway.
+  if (hostPlatform !== 'win32') {
+    const missing = [['zalo-bridge', 'ZALO_SIDECAR_RESTART_CMD', config.restartCmd], ['hermes-gateway', 'ZALO_ASSISTANT_RESTART_CMD', config.assistantRestartCmd]]
+      .filter(([service, , custom]) => {
+        if (custom) return false;
+        try {
+          return commandProbe('systemctl', ['cat', service], { encoding: 'utf8', timeout: 5000, windowsHide: true })?.status !== 0;
+        } catch { return true; }
+      });
+    add('dashboard-restart', true, missing.length
+      ? `chưa có dịch vụ ${missing.map(([s]) => s).join(', ')} — đặt ${missing.map(([, v]) => v).join('/')} trong .env của bot để nút khởi động lại chạy được`
+      : 'khởi động lại được kết nối Zalo và trợ lý từ dashboard');
+  }
 }
 
 export async function installHermes({

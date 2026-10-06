@@ -11,12 +11,24 @@ function fakes({ exeExists = false, stopFails = false } = {}) {
   return { spawned, execs, order, spawnImpl, execImpl, existsImpl };
 }
 
-test('Linux: systemctl restart hermes-gateway', async () => {
+test('Linux: chạy systemctl restart hermes-gateway tới khi xong (không spawn tách rời)', async () => {
   const f = fakes();
   await makeRestartAssistant({ platform: 'linux', hermesHome: '/h', spawnImpl: f.spawnImpl, execImpl: f.execImpl, existsImpl: f.existsImpl })();
-  assert.deepEqual(f.spawned[0].slice(0, 2), ['systemctl', ['restart', 'hermes-gateway']]);
-  assert.equal(f.spawned[0].unrefd, true);
-  assert.equal(f.execs.length, 0);
+  assert.equal(f.execs.length, 1);
+  assert.deepEqual(f.execs[0].slice(0, 2), ['systemctl', ['restart', 'hermes-gateway']]);
+  assert.equal(f.execs[0][2].windowsHide, true);
+  assert.equal(f.spawned.length, 0);
+});
+
+test('Linux: systemctl lỗi thì báo lỗi gợi ý ZALO_ASSISTANT_RESTART_CMD, không báo thành công', async () => {
+  const logged = [];
+  const execImpl = async () => { throw Object.assign(new Error('Command failed'), { code: 1, stderr: 'Access denied' }); };
+  const error = console.error; console.error = (...a) => logged.push(a.join(' '));
+  try {
+    await assert.rejects(makeRestartAssistant({ platform: 'linux', hermesHome: '/h', execImpl, spawnImpl: () => { throw new Error('không được spawn'); } })(),
+      (e) => /ZALO_ASSISTANT_RESTART_CMD/.test(e.message) && /hermes-gateway/.test(e.message) && !/Access denied/.test(e.message));
+  } finally { console.error = error; }
+  assert.ok(logged.some((l) => /Access denied/.test(l)));
 });
 
 test('có cmd: chạy qua shell, ẩn cửa sổ, tách rời', async () => {
@@ -60,5 +72,5 @@ test('Windows không có hermes.exe: dùng "hermes"; stop lỗi vẫn chạy ti�
 test('spawn phát sự kiện error (ENOENT) thì rejects', async () => {
   const { EventEmitter } = await import('node:events');
   const spawnImpl = () => { const c = new EventEmitter(); c.unref = () => {}; setImmediate(() => c.emit('error', new Error('ENOENT'))); return c; };
-  await assert.rejects(makeRestartAssistant({ platform: 'linux', hermesHome: '/h', spawnImpl })(), /ENOENT/);
+  await assert.rejects(makeRestartAssistant({ cmd: 'do-it', platform: 'linux', hermesHome: '/h', spawnImpl })(), /ENOENT/);
 });

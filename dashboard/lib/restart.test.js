@@ -13,12 +13,24 @@ const LINE = (port, pid, state = 'LISTENING') =>
   `  TCP    127.0.0.1:${port}        0.0.0.0:0              ${state}       ${pid}\n`;
 const HEAD = '  Proto  Local Address          Foreign Address        State           PID\n';
 
-test('Linux không cmd: systemctl restart zalo-bridge', async () => {
+test('Linux không cmd: chạy systemctl restart zalo-bridge tới khi xong (không spawn tách rời)', async () => {
   const f = fakes();
   await makeRestartSidecar({ platform: 'linux', sidecarRoot: '/x', spawnImpl: f.spawnImpl, execImpl: f.execImpl, sleepImpl: f.sleepImpl })();
-  assert.deepEqual(f.calls[0].slice(0, 2), ['systemctl', ['restart', 'zalo-bridge']]);
-  assert.equal(f.calls[0].unrefd, true);
-  assert.equal(f.execCalls.length, 0);
+  assert.equal(f.execCalls.length, 1);
+  assert.deepEqual(f.execCalls[0].slice(0, 2), ['systemctl', ['restart', 'zalo-bridge']]);
+  assert.equal(f.execCalls[0][2].windowsHide, true);
+  assert.equal(f.calls.length, 0);
+});
+
+test('Linux: systemctl thoát mã khác 0 thì báo lỗi kèm bước tiếp theo, stderr chỉ vào log', async () => {
+  const logged = [];
+  const execImpl = async () => { throw Object.assign(new Error('Command failed'), { code: 5, stderr: 'Unit zalo-bridge.service not found.' }); };
+  const error = console.error; console.error = (...a) => logged.push(a.join(' '));
+  try {
+    await assert.rejects(makeRestartSidecar({ platform: 'linux', sidecarRoot: '/x', execImpl, spawnImpl: () => { throw new Error('không được spawn'); } })(),
+      (e) => /ZALO_SIDECAR_RESTART_CMD/.test(e.message) && /Không khởi động lại được/.test(e.message) && !/not found/.test(e.message));
+  } finally { console.error = error; }
+  assert.ok(logged.some((l) => /Unit zalo-bridge\.service not found/.test(l)));
 });
 
 test('có cmd: chạy qua shell, ẩn cửa sổ, không đụng netstat', async () => {
@@ -114,13 +126,13 @@ test('netstat: chỉ cột Foreign Address kết thúc bằng :3872 thì không 
 test('spawn phát sự kiện error (ENOENT) thì rejects, không thành uncaught', async () => {
   const { EventEmitter } = await import('node:events');
   const spawnImpl = () => { const c = new EventEmitter(); c.unref = () => {}; setImmediate(() => c.emit('error', new Error('ENOENT'))); return c; };
-  await assert.rejects(makeRestartSidecar({ platform: 'linux', sidecarRoot: '/x', spawnImpl })(), /ENOENT/);
+  await assert.rejects(makeRestartSidecar({ cmd: 'start-it', platform: 'linux', sidecarRoot: '/x', spawnImpl })(), /ENOENT/);
 });
 
 test('spawn thành công: chờ sự kiện spawn rồi mới unref', async () => {
   const { EventEmitter } = await import('node:events');
   let unrefd = false;
   const spawnImpl = () => { const c = new EventEmitter(); c.unref = () => { unrefd = true; }; setImmediate(() => c.emit('spawn')); return c; };
-  await makeRestartSidecar({ platform: 'linux', sidecarRoot: '/x', spawnImpl })();
+  await makeRestartSidecar({ cmd: 'start-it', platform: 'linux', sidecarRoot: '/x', spawnImpl })();
   assert.equal(unrefd, true);
 });

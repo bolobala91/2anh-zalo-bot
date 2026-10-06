@@ -364,3 +364,39 @@ test('doctorHermes reports dashboard checks as warnings, never failures', (t) =>
     assert.match(byName['dashboard-telegram'].detail, /chưa cài bot cảnh báo/);
   });
 });
+
+test('doctorHermes trên Linux: thiếu dịch vụ systemd cho nút khởi động lại chỉ là cảnh báo kèm cách sửa', async (t) => {
+  const fx = fixture(t);
+  await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  const prev = { s: process.env.ZALO_SIDECAR_RESTART_CMD, a: process.env.ZALO_ASSISTANT_RESTART_CMD };
+  delete process.env.ZALO_SIDECAR_RESTART_CMD; delete process.env.ZALO_ASSISTANT_RESTART_CMD;
+  t.after(() => {
+    if (prev.s !== undefined) process.env.ZALO_SIDECAR_RESTART_CMD = prev.s; else delete process.env.ZALO_SIDECAR_RESTART_CMD;
+    if (prev.a !== undefined) process.env.ZALO_ASSISTANT_RESTART_CMD = prev.a; else delete process.env.ZALO_ASSISTANT_RESTART_CMD;
+  });
+  const seen = [];
+  const probe = (have) => (cmd, args) => {
+    if (cmd === 'systemctl') { seen.push(args.join(' ')); return { status: have.includes(args[1]) ? 0 : 1 }; }
+    return { status: 1 };
+  };
+  const check = (have) => {
+    const d = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, commandProbe: probe(have), hostPlatform: 'linux' });
+    assert.equal(d.ok, true, JSON.stringify(d.checks));
+    return d.checks.find((c) => c.name === 'dashboard-restart');
+  };
+  const missingBridge = check(['hermes-gateway']);
+  assert.equal(missingBridge.ok, true);
+  assert.match(missingBridge.detail, /chưa có dịch vụ zalo-bridge — đặt ZALO_SIDECAR_RESTART_CMD/);
+  assert.doesNotMatch(missingBridge.detail, /hermes-gateway/);
+  assert.deepEqual(seen, ['cat zalo-bridge', 'cat hermes-gateway']);
+  assert.match(check([]).detail, /zalo-bridge, hermes-gateway — đặt ZALO_SIDECAR_RESTART_CMD\/ZALO_ASSISTANT_RESTART_CMD/);
+  assert.doesNotMatch(check(['zalo-bridge', 'hermes-gateway']).detail, /chưa có/);
+  // Đã khai lệnh riêng thì không cần dịch vụ systemd.
+  process.env.ZALO_SIDECAR_RESTART_CMD = 'my-restart'; process.env.ZALO_ASSISTANT_RESTART_CMD = 'my-restart-2';
+  seen.length = 0;
+  assert.doesNotMatch(check([]).detail, /chưa có/);
+  assert.deepEqual(seen, []);
+  // Windows không có kiểm tra này.
+  const win = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, commandProbe: probe([]), hostPlatform: 'win32' });
+  assert.equal(win.checks.find((c) => c.name === 'dashboard-restart'), undefined);
+});

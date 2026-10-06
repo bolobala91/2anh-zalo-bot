@@ -36,6 +36,19 @@ export async function freeListenerPort({
   }
 }
 
+/**
+ * `systemctl restart` chạy tới khi xong và xét mã thoát: dịch vụ không tồn tại / thiếu quyền
+ * thì báo lỗi thật thay vì "đã gửi lệnh". stderr chỉ ghi ra log, không đưa lên giao diện.
+ */
+export async function systemctlRestart({ service, envVar, execImpl = defaultExec }) {
+  try {
+    await execImpl('systemctl', ['restart', service], { windowsHide: true, timeout: 90_000 });
+  } catch (err) {
+    console.error(`[restart] systemctl restart ${service} thất bại (mã ${err?.code ?? '?'}):`, String(err?.stderr || err?.message || err).trim());
+    throw new Error(`Không khởi động lại được dịch vụ ${service} — kiểm tra "systemctl status ${service}" trên máy chủ, hoặc đặt ${envVar} trong .env của bot thành lệnh khởi động lại đúng cho máy này.`);
+  }
+}
+
 export function makeRestartSidecar({
   cmd, platform = process.platform, sidecarRoot, port = 3872,
   spawnImpl = spawn, execImpl = defaultExec, ownPid = process.pid,
@@ -45,12 +58,17 @@ export function makeRestartSidecar({
   const freePort = () => freeListenerPort({ port, execImpl, ownPid, sleepImpl });
 
   return async () => {
+    // Linux mặc định: chờ systemctl xong và xét mã thoát. Các cách chạy tách rời giữ kiểu "spawn là xong".
+    if (!cmd && platform !== 'win32') {
+      await systemctlRestart({ service: 'zalo-bridge', envVar: 'ZALO_SIDECAR_RESTART_CMD', execImpl });
+      return;
+    }
     let child;
     if (cmd) child = spawnImpl(cmd, { ...opts, shell: true });
-    else if (platform === 'win32') {
+    else {
       await freePort().catch((e) => console.warn('[restart] không giải phóng được cổng:', e.message));
       child = spawnImpl(process.execPath, ['server.js'], { ...opts, cwd: sidecarRoot });
-    } else child = spawnImpl('systemctl', ['restart', 'zalo-bridge'], opts);
+    }
     await waitSpawned(child);
   };
 }
