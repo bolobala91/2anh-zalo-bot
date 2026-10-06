@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SidecarDown } from '../lib/sidecar-client.js';
+import { SidecarDown, SidecarTimeout } from '../lib/sidecar-client.js';
 import { chatMsg, fakeSidecar, loginAs, makeDeps, seedHistory, startApp } from '../test-helpers.js';
 
 async function ready(t, overrides = {}) {
@@ -56,20 +56,85 @@ test('quá 10 tin/phút/người dùng → 429; người khác vẫn gửi đư�
   assert.equal(sends().length, 12);
 });
 
-test('bot tắt → 503 tiếng Việt; bot báo Zalo chưa đăng nhập (502) → câu chung, không lộ chữ gốc', async (t) => {
-  const { send } = await ready(t, { sidecar: fakeSidecar({ send: async () => { throw new SidecarDown(); } }) });
-  const down = await send('100', { text: 'chào', threadType: 0 });
-  assert.equal(down.status, 503);
-  assert.doesNotMatch(down.json.error, /sidecar|bridge/i);
+test('bot tắt (không kết nối được) → 503 tiếng Việt; gửi lại cùng tin được ngay', async (t) => {
+  let down = true;
+  const sidecar = fakeSidecar();
+  const ok = sidecar.send;
+  sidecar.send = async (m) => { if (down) throw new SidecarDown(); return ok(m); };
+  const { send, sends } = await ready(t, { sidecar });
+  const res = await send('100', { text: 'chào', threadType: 0 });
+  assert.equal(res.status, 503);
+  assert.match(res.json.error, /Kết nối Zalo đang tắt/);
+  assert.doesNotMatch(res.json.error, /sidecar|bridge/i);
+  down = false;
+  assert.equal((await send('100', { text: 'chào', threadType: 0 })).status, 200); // lỗi rõ ràng không chặn gửi lại
+  assert.equal(sends().length, 1);
 });
 
-test('lỗi 502 từ bot không lộ nội dung gốc', async (t) => {
-  const orig = console.error; console.error = () => {};
-  t.after(() => { console.error = orig; });
+test('bot báo Zalo chưa đăng nhập → 503 kèm bước quét QR, không lộ chữ gốc', async (t) => {
   const { send } = await ready(t, { sidecar: fakeSidecar({ send: async () => { throw Object.assign(new Error('Zalo chưa đăng nhập'), { statusCode: 502 }); } }) });
   const res = await send('100', { text: 'chào', threadType: 0 });
+  assert.equal(res.status, 503);
+  assert.equal(res.json.error, 'Zalo của bot đang đăng xuất — vào Tài khoản Zalo để quét QR.');
+});
+
+test('lỗi 502 khác từ bot không lộ nội dung gốc; 401/403 từ bot → 502', async (t) => {
+  const orig = console.error; console.error = () => {};
+  t.after(() => { console.error = orig; });
+  let fail = { message: 'zca: lỗi nội bộ abc', statusCode: 502 };
+  const { send } = await ready(t, { sidecar: fakeSidecar({ send: async () => { throw Object.assign(new Error(fail.message), { statusCode: fail.statusCode }); } }) });
+  const res = await send('100', { text: 'chào', threadType: 0 });
   assert.equal(res.status, 502);
-  assert.doesNotMatch(res.json.error, /Zalo chưa đăng nhập/);
+  assert.doesNotMatch(res.json.error, /lỗi nội bộ abc/);
+  for (const statusCode of [401, 403]) {
+    fail = { message: 'unauthorized', statusCode };
+    const r = await send('100', { text: `chào ${statusCode}`, threadType: 0 });
+    assert.equal(r.status, 502);
+    assert.match(r.json.error, /khoá kết nối/);
+  }
+});
+
+test('gửi quá hạn chờ → 504 "chưa rõ đã gửi"; gửi lại đúng tin đó trong 30 s → 409, không gọi bot lần hai', async (t) => {
+  let clock = 1_000_000;
+  const sidecar = fakeSidecar();
+  sidecar.send = async (m) => { sidecar.calls.push(['send', m]); throw new SidecarTimeout(); };
+  const { send, sends } = await ready(t, { sidecar, now: () => clock });
+  const res = await send('100', { text: 'Dạ em chào chị', threadType: 0 });
+  assert.equal(res.status, 504);
+  assert.equal(res.json.error, 'Chưa rõ tin đã gửi được chưa — xem khung tin (tự cập nhật) trước khi gửi lại.');
+  clock += 29_999;
+  const again = await send('100', { text: '  Dạ em chào chị ', threadType: 0 });
+  assert.equal(again.status, 409);
+  assert.equal(again.json.error, 'Tin này vừa được gửi — kiểm tra khung tin trước khi gửi lại.');
+  assert.equal(sends().length, 1);
+  clock += 1;
+  assert.equal((await send('100', { text: 'Dạ em chào chị', threadType: 0 })).status, 504); // hết 30 s thì cho thử lại
+  assert.equal(sends().length, 2);
+});
+
+test('gửi trùng sau khi đã gửi được: 409 trong 30 s; khác nội dung / hội thoại / người gửi thì vẫn gửi', async (t) => {
+  let clock = 1_000_000;
+  const { deps, call, send, sends } = await ready(t, { now: () => clock });
+  assert.equal((await send('100', { text: 'chào', threadType: 0 })).status, 200);
+  clock += 10_000;
+  assert.equal((await send('100', { text: 'chào', threadType: 0 })).status, 409);
+  assert.equal((await send('100', { text: 'chào nhé', threadType: 0 })).status, 200);
+  assert.equal((await send('200', { text: 'chào', threadType: 1 })).status, 200);
+  const admin = await loginAs(t, deps, call);
+  assert.equal((await send('100', { text: 'chào', threadType: 0 }, admin)).status, 200);
+  assert.equal(sends().length, 4);
+  clock += 20_000;
+  assert.equal((await send('100', { text: 'chào', threadType: 0 })).status, 200);
+});
+
+test('gửi tay thành công thì danh sách hội thoại cập nhật ngay, không chờ hết đệm 10 s', async (t) => {
+  const { deps, call, cookie, send } = await ready(t);
+  const ids = async () => (await call('/api/chats', { cookie })).json.conversations.map((c) => c.threadId);
+  assert.deepEqual(await ids(), ['200', '100']);
+  seedHistory(deps, { messages: [chatMsg({ threadId: '300', threadType: 0, ts: 9_000_000 })] });
+  assert.deepEqual(await ids(), ['200', '100']); // còn trong đệm
+  assert.equal((await send('100', { text: 'chào', threadType: 0 })).status, 200);
+  assert.deepEqual(await ids(), ['300', '200', '100']);
 });
 
 test('chưa đăng nhập → 401; Origin lạ → 403', async (t) => {

@@ -88,7 +88,11 @@ function Compose({ conv, onSent }) {
     try {
       await api(`/api/chats/${encodeURIComponent(conv.threadId)}/send`, { method: 'POST', body: { text: body, threadType: conv.threadType } });
       setText((cur) => (cur.trim() === body ? '' : cur)); setMsg({ ok: 'Đã gửi dưới tên bot.' }); onSent();
-    } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
+    } catch (err) {
+      // 504: chưa rõ tin đã đi chưa; 409: vừa gửi đúng tin này. Giữ nguyên chữ trong ô, làm mới khung tin để người dùng tự kiểm.
+      setMsg({ error: err.message });
+      if (err.status === 504 || err.status === 409) onSent();
+    } finally { setBusy(false); }
   }
   return html`<form class="compose" onSubmit=${send} novalidate>
     <label for="chat-compose" class="sr-only">Tin nhắn gửi dưới tên bot</label>

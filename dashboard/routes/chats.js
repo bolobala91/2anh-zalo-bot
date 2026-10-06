@@ -6,6 +6,8 @@ import { failSidecar, failStore } from '../lib/route-errors.js';
 
 const THREAD_ID = /^\d{1,32}$/;
 const MAX_TEXT = 2000;
+const DUP_MS = 30_000;
+const DUP_MAX = 1000;
 const READ_FAIL = 'Chưa đọc được lịch sử trò chuyện — tải lại trang, nếu vẫn lỗi hãy báo người cài đặt.';
 const BAD_THREAD = 'Hội thoại không hợp lệ — chọn lại từ danh sách.';
 const BAD_CURSOR = 'Vị trí trang không hợp lệ — tải lại trang rồi thử lại.';
@@ -63,6 +65,17 @@ export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10,
     return ok;
   }
 
+  // Chống gửi trùng: cùng người, cùng hội thoại, cùng nội dung trong DUP_MS sau một lần đã gửi được
+  // hoặc chưa rõ kết quả (quá hạn chờ) → 409. Lần đang gửi dở cũng tính, để bấm đúp không thành hai tin.
+  const lastSends = new Map(); // khoá → mốc thời gian; Map giữ thứ tự chèn nên phần tử đầu là cũ nhất
+  const sendKey = (username, threadId, type, body) => JSON.stringify([username, type, threadId, body]);
+  function pruneSends(t) {
+    for (const [k, at] of lastSends) {
+      if (t - at < DUP_MS && lastSends.size <= DUP_MAX) break;
+      lastSends.delete(k);
+    }
+  }
+
   r.post('/chats/:threadId/send', requireAuth, async (req, res) => {
     const { text, threadType } = req.body || {};
     const type = parseType(threadType);
@@ -75,13 +88,24 @@ export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10,
         return res.status(404).json({ ok: false, error: 'Không thấy hội thoại này trong lịch sử — chọn lại từ danh sách.' });
       }
     } catch (err) { return failStore(res, err, READ_FAIL); }
+    const key = sendKey(req.user.username, req.params.threadId, type, body);
+    pruneSends(now());
+    if (lastSends.has(key)) {
+      return res.status(409).json({ ok: false, error: 'Tin này vừa được gửi — kiểm tra khung tin trước khi gửi lại.' });
+    }
     if (!allowSend(req.user.username)) {
       return res.status(429).json({ ok: false, error: 'Bạn đang gửi quá nhanh — đợi một phút rồi gửi tiếp.' });
     }
+    lastSends.set(key, now());
     try {
       await sidecar.send({ threadId: req.params.threadId, threadType: type, text: body, actor: req.user.username });
+      lastSends.delete(key); lastSends.set(key, now()); // tính 30 s từ lúc gửi xong
+      store.invalidateConversations?.();
       res.json({ ok: true });
-    } catch (err) { failSidecar(res, err); }
+    } catch (err) {
+      if (err?.name === 'SidecarTimeout') { lastSends.delete(key); lastSends.set(key, now()); } else lastSends.delete(key);
+      failSidecar(res, err);
+    }
   });
 
   return r;
