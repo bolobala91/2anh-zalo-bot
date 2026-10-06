@@ -14,7 +14,7 @@ const windows = (p) => String(p).replaceAll('/', '\\').replace(/\\+$/, '');
 const defaultRunner = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', windowsHide: true });
 const defaultWriteFile = (path, content) => {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content, 'utf8');
+  writeFileSync(path, content, 'utf8'); // Buffer (tệp .vbs UTF-16) thì tham số mã hoá bị bỏ qua
 };
 const defaultProbe = async (port) => {
   try {
@@ -49,14 +49,32 @@ WantedBy=multi-user.target
 `;
 }
 
-/** Tệp .vbs chạy ngầm (cửa sổ ẩn). Tuyệt đối không có MsgBox/Popup. */
+const vbsString = (s) => `"${String(s).replaceAll('"', '""')}"`;
+
+/**
+ * Tệp .vbs chạy ngầm (cửa sổ ẩn). Tuyệt đối không có MsgBox/Popup, và không bao giờ để
+ * Windows Script Host tự bật hộp thoại lỗi: thiếu node/server.js (gỡ cài, đổi thư mục)
+ * thì thoát im lặng; lỗi khác bị nuốt bởi On Error Resume Next.
+ */
 export function renderWindowsStartup({ sidecarRoot, nodePath }) {
   const root = windows(sidecarRoot);
-  const command = `"${windows(nodePath)}" "${root}\\dashboard\\server.js"`;
-  return `Set sh = CreateObject("WScript.Shell")
-sh.CurrentDirectory = "${root}"
-sh.Run "${command.replaceAll('"', '""')}", 0, False
+  const node = windows(nodePath);
+  const server = `${root}\\dashboard\\server.js`;
+  const command = `"${node}" "${server}"`;
+  return `' Dashboard Zalo: chạy ngầm khi đăng nhập Windows.
+On Error Resume Next
+Set fso = CreateObject("Scripting.FileSystemObject")
+If Not fso.FileExists(${vbsString(node)}) Then WScript.Quit 0
+If Not fso.FileExists(${vbsString(server)}) Then WScript.Quit 0
+Set sh = CreateObject("WScript.Shell")
+sh.CurrentDirectory = ${vbsString(root)}
+sh.Run ${vbsString(command)}, 0, False
 `;
+}
+
+/** WSH đọc .vbs theo bảng mã ANSI trừ khi có BOM — ghi UTF-16LE kèm BOM để đường dẫn tiếng Việt không vỡ. */
+export function encodeVbs(text) {
+  return Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(String(text), 'utf16le')]);
 }
 
 function manualHelp() {
@@ -80,11 +98,11 @@ export async function installDashboardService({
   try {
     if (platform === 'win32') {
       const path = join(startupDir, VBS_FILE);
-      writeFile(path, renderWindowsStartup({ sidecarRoot, nodePath }));
+      writeFile(path, encodeVbs(renderWindowsStartup({ sidecarRoot, nodePath })));
       // Nâng cấp: bản cũ còn đang chạy thì dừng đúng tiến trình giữ cổng để bản mới thế chỗ.
       if (await probe(port)) await freePort(port);
-      // wscript (không phải cscript) + windowsHide: không bật cửa sổ nào lúc cài.
-      const run = runner('wscript', [path]);
+      // wscript //B (batch: không hộp thoại lỗi) //Nologo + windowsHide: không bật cửa sổ nào lúc cài.
+      const run = runner('wscript', ['//B', '//Nologo', path]);
       if (run?.error || (run?.status ?? 0) !== 0) {
         return { installed: false, detail: `Đã ghi ${path} nhưng chưa chạy được ngay; dashboard sẽ tự chạy ở lần đăng nhập Windows tới, hoặc chạy tay: npm run dashboard` };
       }

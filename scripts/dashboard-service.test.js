@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  renderSystemdUnit, renderWindowsStartup, installDashboardService,
+  renderSystemdUnit, renderWindowsStartup, encodeVbs, installDashboardService,
   uninstallDashboardService, caddySnippet,
 } from './dashboard-service.js';
 
@@ -21,6 +21,25 @@ test('windows startup script runs hidden, never shows a dialog, quotes spaced pa
   assert.ok(vbs.includes('CurrentDirectory = "C:\\Program Files\\zalo"'));
   assert.ok(vbs.includes('""C:\\Program Files\\nodejs\\node.exe""'));
   assert.doesNotMatch(vbs, /MsgBox|Popup/i);
+});
+
+test('windows startup script: thiếu node/server.js thì thoát im lặng, lỗi không bật hộp thoại', () => {
+  const vbs = renderWindowsStartup({ sidecarRoot: 'C:\\Người dùng\\zalo', nodePath: 'C:\\node\\node.exe' });
+  const lines = vbs.split('\n');
+  const at = (re) => lines.findIndex((l) => re.test(l));
+  assert.ok(at(/^On Error Resume Next$/) >= 0);
+  assert.ok(at(/^On Error Resume Next$/) < at(/sh\.Run/));
+  assert.ok(vbs.includes('CreateObject("Scripting.FileSystemObject")'));
+  assert.ok(vbs.includes('If Not fso.FileExists("C:\\node\\node.exe") Then WScript.Quit 0'));
+  assert.ok(vbs.includes('If Not fso.FileExists("C:\\Người dùng\\zalo\\dashboard\\server.js") Then WScript.Quit 0'));
+  assert.ok(at(/FileExists/) < at(/sh\.Run/));
+  assert.doesNotMatch(vbs, /MsgBox|Popup|Echo/i);
+});
+
+test('encodeVbs: UTF-16LE kèm BOM, giữ nguyên đường dẫn tiếng Việt', () => {
+  const buf = encodeVbs('sh.CurrentDirectory = "C:\\Người dùng\\Đức"');
+  assert.deepEqual([...buf.subarray(0, 2)], [0xff, 0xfe]);
+  assert.equal(buf.subarray(2).toString('utf16le'), 'sh.CurrentDirectory = "C:\\Người dùng\\Đức"');
 });
 
 function recorder(status = 0) {
@@ -76,26 +95,35 @@ test('installDashboardService on Windows writes into startupDir and launches it 
   });
   assert.equal(result.installed, true);
   assert.match(written[0][0], /^C:\\Startup[\\/]zalo-dashboard\.vbs$/);
-  // Bản cũ đang chạy: giải phóng cổng trước, rồi mới chạy .vbs.
+  // Ghi dạng UTF-16LE có BOM.
+  assert.ok(Buffer.isBuffer(written[0][1]));
+  assert.deepEqual([...written[0][1].subarray(0, 2)], [0xff, 0xfe]);
+  assert.match(written[0][1].subarray(2).toString('utf16le'), /dashboard\\server\.js/);
   assert.deepEqual(calls[0], ['free', 3999]);
   assert.equal(calls.length, 2);
-  assert.equal(calls[1][0], 'wscript');
-  assert.match(calls[1][1], /zalo-dashboard\.vbs$/);
+  // wscript //B //Nologo: không bao giờ bật hộp thoại.
+  assert.deepEqual(calls[1].slice(0, 3), ['wscript', '//B', '//Nologo']);
+  assert.match(calls[1][3], /zalo-dashboard\.vbs$/);
+});
+
+test('installDashboardService on Windows: bản cũ còn trả lời → ghi tệp, giải phóng cổng, rồi mới chạy bản mới', async () => {
+  const order = [];
+  const probed = [];
+  await installDashboardService({
+    sidecarRoot: 'C:\\zalo', platform: 'win32', startupDir: 'C:\\Startup', port: 3880,
+    writeFile: () => order.push('write'),
+    probe: async (p) => { probed.push(p); order.push('probe'); return true; },
+    freePort: async (p) => { order.push(`free:${p}`); },
+    runner: (cmd) => { order.push(cmd); return { status: 0 }; },
+  });
+  assert.deepEqual(probed, [3880]);
+  assert.deepEqual(order, ['write', 'probe', 'free:3880', 'wscript']);
 });
 
 test('installDashboardService on Windows does not free the port when nothing answers', async () => {
   const { calls, runner } = recorder();
   await installDashboardService({
     sidecarRoot: 'C:\\zalo', platform: 'win32', runner, writeFile: () => {}, startupDir: 'C:\\Startup',
-    probe: async () => false, freePort: async () => { calls.push(['free']); },
-  });
-  assert.deepEqual(calls.map((c) => c[0]), ['wscript']);
-});
-
-test('installDashboardService on Windows does not free the port when nothing answers', async () => {
-  const { calls, runner } = recorder();
-  await installDashboardService({
-    sidecarRoot: 'C:\zalo', platform: 'win32', runner, writeFile: () => {}, startupDir: 'C:\Startup',
     probe: async () => false, freePort: async () => { calls.push(['free']); },
   });
   assert.deepEqual(calls.map((c) => c[0]), ['wscript']);
