@@ -19,6 +19,19 @@ test('issue trả chuỗi đủ dài; consume đúng một lần', (t) => {
   assert.equal(s.consume(token), false);
 });
 
+test('check không đốt link; chuỗi sai/hết hạn thì false', (t) => {
+  const clock = { t: 0 }; const { s } = mk(t, clock);
+  const token = s.issue();
+  assert.equal(s.check(token), true);
+  assert.equal(s.check(token), true);
+  assert.equal(s.check('sai'), false);
+  assert.equal(s.consume(token), true);
+  assert.equal(s.check(token), false);
+  const again = s.issue();
+  clock.t = 24 * 3600_000 + 1;
+  assert.equal(s.check(again), false);
+});
+
 test('hết 24 giờ thì không dùng được', (t) => {
   const clock = { t: 0 }; const { s } = mk(t, clock);
   const token = s.issue();

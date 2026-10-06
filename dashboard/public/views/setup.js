@@ -1,4 +1,4 @@
-import { useState } from '../vendor/hooks.mjs';
+import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Live } from '../ui.js';
 import { AuthCard } from './login.js';
@@ -8,6 +8,15 @@ export function Setup({ brand, token, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const bind = (k) => ({ value: f[k], onInput: (e) => setF({ ...f, [k]: e.currentTarget.value }) });
+  const [suggested, setSuggested] = useState(false);
+  // Điền sẵn UID chủ bot từ cấu hình (ZALO_ALLOWED_USERS); không lấy được thì để trống như cũ.
+  useEffect(() => {
+    api(`/api/auth/setup-info?token=${encodeURIComponent(token)}`).then((r) => {
+      if (!r.suggestedZaloUid) return;
+      setF((cur) => (cur.zaloUid ? cur : { ...cur, zaloUid: r.suggestedZaloUid }));
+      setSuggested(true);
+    }).catch(() => {});
+  }, [token]);
 
   async function submit(e) {
     e.preventDefault();
@@ -31,7 +40,7 @@ export function Setup({ brand, token, onDone }) {
       <div class="field">
         <label for="su-uid">UID Zalo của bạn <span class="muted">(không bắt buộc)</span></label>
         <input id="su-uid" inputmode="numeric" aria-describedby="su-uid-help" ...${bind('zaloUid')} />
-        <small id="su-uid-help">Dãy 15–22 chữ số. Có UID thì đăng nhập được bằng mã gửi qua Zalo.</small>
+        <small id="su-uid-help">Dãy 15–22 chữ số. Có UID thì đăng nhập được bằng mã gửi qua Zalo.${suggested ? ' Đã điền sẵn UID chủ bot trong cấu hình — sửa lại nếu chưa đúng.' : ''}</small>
       </div>
       <div class="field">
         <label for="su-pass">Mật khẩu</label>

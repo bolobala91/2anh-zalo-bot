@@ -13,6 +13,23 @@ test('thiết lập Quản trị đầu tiên bằng link dùng một lần', as
   assert.equal((await call('/api/auth/setup', { method: 'POST', body: { token, username: 'x2', password: 'matkhau-dai' } })).status, 403);
 });
 
+test('setup-info: gợi ý UID chủ bot khi link còn hiệu lực, không đốt link', async (t) => {
+  const deps = makeDeps(t, { config: { port: 3880, publicUrl: 'http://localhost:3880', suggestedZaloUid: '1234567890123456' } });
+  const { call } = await startApp(t, deps);
+  const token = deps.setupToken.issue();
+  assert.equal((await call('/api/auth/setup-info?token=sai')).status, 403);
+  assert.equal((await call('/api/auth/setup-info')).status, 403);
+  const info = await call(`/api/auth/setup-info?token=${encodeURIComponent(token)}`);
+  assert.equal(info.status, 200);
+  assert.equal(info.json.suggestedZaloUid, '1234567890123456');
+  // Link vẫn dùng được sau khi hỏi gợi ý.
+  const res = await call('/api/auth/setup', { method: 'POST', body: { token, username: 'anh', password: 'matkhau-dai', zaloUid: info.json.suggestedZaloUid } });
+  assert.equal(res.status, 200);
+  // Đã có Quản trị thì không trả gì nữa, kể cả với link mới.
+  const later = deps.setupToken.issue();
+  assert.equal((await call(`/api/auth/setup-info?token=${encodeURIComponent(later)}`)).status, 403);
+});
+
 test('đăng nhập bằng mật khẩu, /api/me, đăng xuất', async (t) => {
   const deps = makeDeps(t);
   deps.users.create({ username: 'anh', role: 'admin', password: 'matkhau-dai' });

@@ -38,6 +38,24 @@ test('không tự khoá, không tự hạ quyền', async (t) => {
   assert.equal(deps.users.get('anh').role, 'admin');
 });
 
+test('sửa UID/vai trò ngay trong bảng: đúng dạng body giao diện gửi; tự sửa UID của mình được', async (t) => {
+  const deps = makeDeps(t); const { call } = await startApp(t, deps);
+  const admin = await loginAs(t, deps, call);
+  deps.users.create({ username: 'khach', role: 'owner', password: 'matkhau-dai' });
+  const r = await call('/api/admin/users/khach', { method: 'PATCH', cookie: admin, body: { zaloUid: '2234567890123456', role: 'admin' } });
+  assert.equal(r.status, 200);
+  assert.equal(deps.users.get('khach').zaloUid, '2234567890123456');
+  assert.equal(deps.users.get('khach').role, 'admin');
+  assert.equal((await call('/api/admin/users/khach', { method: 'PATCH', cookie: admin, body: { zaloUid: '' } })).status, 200);
+  assert.equal(deps.users.get('khach').zaloUid, '');
+  assert.equal((await call('/api/admin/users/khach', { method: 'PATCH', cookie: admin, body: { zaloUid: '0123' } })).status, 400);
+  // Tự sửa: giao diện chỉ gửi zaloUid (không gửi role) → được; gửi role owner → vẫn bị chặn.
+  assert.equal((await call('/api/admin/users/anh', { method: 'PATCH', cookie: admin, body: { zaloUid: '3234567890123456' } })).status, 200);
+  assert.equal(deps.users.get('anh').zaloUid, '3234567890123456');
+  assert.equal((await call('/api/admin/users/anh', { method: 'PATCH', cookie: admin, body: { zaloUid: '3234567890123456', role: 'owner' } })).status, 400);
+  assert.equal(deps.users.get('anh').role, 'admin');
+});
+
 test('có Quản trị khác thì hạ được; vẫn còn Quản trị đang bật', async (t) => {
   const deps = makeDeps(t); const { call } = await startApp(t, deps);
   const admin = await loginAs(t, deps, call);

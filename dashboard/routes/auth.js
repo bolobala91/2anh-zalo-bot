@@ -2,7 +2,7 @@ import express from 'express';
 import { validatePassword, validateUsername, validateZaloUid } from '../lib/users.js';
 import { clearSessionCookie, requireAuth, setSessionCookie } from '../lib/http-guards.js';
 
-export function authRoutes({ users, sessions, guard, setupToken, activity, sidecar }) {
+export function authRoutes({ users, sessions, guard, setupToken, activity, sidecar, config = {} }) {
   const r = express.Router();
   const userKey = (username) => `u:${String(username || '').toLowerCase()}`;
   const keys = (req, username) => [userKey(username), `ip:${req.ip}`];
@@ -25,6 +25,14 @@ export function authRoutes({ users, sessions, guard, setupToken, activity, sidec
       return h?.zalo?.status === 'logged-in' && !h?.zalo?.needsRelogin;
     } catch { return false; }
   }
+
+  // Chỉ trả gợi ý khi link thiết lập còn hiệu lực (không đốt link) và chưa có Quản trị.
+  r.get('/auth/setup-info', (req, res) => {
+    if (users.hasAdmin() || !setupToken.check(String(req.query?.token || ''))) {
+      return res.status(403).json({ ok: false, error: 'Link thiết lập không còn hiệu lực — chạy "npm run dashboard:setup-link" để lấy link mới.' });
+    }
+    res.json({ ok: true, suggestedZaloUid: config.suggestedZaloUid || '' });
+  });
 
   r.post('/auth/setup', (req, res) => {
     const { token, username, password, zaloUid = '' } = req.body || {};

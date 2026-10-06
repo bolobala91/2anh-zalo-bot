@@ -89,6 +89,55 @@ function ResetRow({ user, onCancel, onDone }) {
   </td></tr>`;
 }
 
+const ZALO_UID = /^[1-9]\d{14,21}$/;
+
+/** Dòng phụ sửa UID Zalo và vai trò ngay trong bảng. Không cho tự hạ quyền chính mình. */
+function EditRow({ user, self, onCancel, onDone }) {
+  const [uid, setUid] = useState(user.zaloUid || '');
+  const [role, setRole] = useState(user.role);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const id = `edit-${user.username}`;
+  const inputRef = useRef(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  async function save(e) {
+    e.preventDefault();
+    const zaloUid = uid.trim();
+    if (zaloUid && !ZALO_UID.test(zaloUid)) { setError('UID Zalo là dãy 15–22 chữ số, không bắt đầu bằng 0 — kiểm tra lại rồi lưu.'); return; }
+    const body = { zaloUid };
+    if (!self && role !== user.role) body.role = role;
+    setBusy(true); setError('');
+    try {
+      await api(`/api/admin/users/${encodeURIComponent(user.username)}`, { method: 'PATCH', body });
+      onDone(`Đã cập nhật ${user.username}.`);
+    } catch (err) { setError(err.message); setBusy(false); }
+  }
+  return html`<tr class="reset-row"><td colspan="6">
+    <form class="reset-form" onSubmit=${save} novalidate>
+      <div class="field">
+        <label for=${`${id}-uid`}>UID Zalo của ${user.username}</label>
+        <input id=${`${id}-uid`} inputmode="numeric" autocomplete="off" spellcheck="false" ref=${inputRef} value=${uid}
+          aria-describedby=${`${id}-uid-help`} onInput=${(e) => setUid(e.currentTarget.value.replace(/\D/g, ''))} />
+        <small id=${`${id}-uid-help`}>Dãy 15–22 chữ số, để trống nếu chỉ dùng mật khẩu.</small>
+      </div>
+      <div class="field">
+        <label for=${`${id}-role`}>Vai trò</label>
+        <select id=${`${id}-role`} value=${role} disabled=${self} aria-describedby=${self ? `${id}-role-help` : undefined}
+          onChange=${(e) => setRole(e.currentTarget.value)}>
+          <option value="owner">Chủ bot</option>
+          <option value="admin">Quản trị</option>
+        </select>
+        ${self ? html`<small id=${`${id}-role-help`}>Không tự hạ quyền tài khoản đang dùng.</small>` : null}
+      </div>
+      <div class="row">
+        <button class="btn btn-primary btn-sm" disabled=${busy}>${busy ? 'Đang lưu…' : 'Lưu'}</button>
+        <button type="button" class="btn btn-secondary btn-sm" disabled=${busy} onClick=${onCancel}>Huỷ</button>
+      </div>
+      <${Live} error=${error} />
+    </form>
+  </td></tr>`;
+}
+
 export function Users({ me }) {
   const [list, setList] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -107,7 +156,9 @@ export function Users({ me }) {
     patch(u, { disabled: !u.disabled }, u.disabled ? `Đã mở khoá ${u.username}.` : `Đã khoá ${u.username}.`);
   };
   const [resetFor, setResetFor] = useState('');
-  const openReset = (u) => { setResetFor(resetFor === u.username ? '' : u.username); setMsg({}); };
+  const [editFor, setEditFor] = useState('');
+  const openReset = (u) => { setResetFor(resetFor === u.username ? '' : u.username); setEditFor(''); setMsg({}); };
+  const openEdit = (u) => { setEditFor(editFor === u.username ? '' : u.username); setResetFor(''); setMsg({}); };
 
   return html`
     <${PageHead} title="Người dùng" sub="Ai được vào dashboard và với vai trò gì." />
@@ -132,8 +183,12 @@ export function Users({ me }) {
                     <${Icon} name=${u.disabled ? 'unlock' : 'lock'} size=${14} /> ${u.disabled ? 'Mở khoá' : 'Khoá'}</button>
                   <button class="btn btn-secondary btn-sm" disabled=${busy === u.username} aria-expanded=${resetFor === u.username}
                     onClick=${() => openReset(u)}><${Icon} name="key" size=${14} /> Đặt lại mật khẩu</button>
+                  <button class="btn btn-secondary btn-sm" disabled=${busy === u.username} aria-expanded=${editFor === u.username}
+                    onClick=${() => openEdit(u)}><${Icon} name="user" size=${14} /> Sửa UID / vai trò</button>
                 </div></td>
               </tr>
+              ${editFor === u.username ? html`<${EditRow} key=${`edit-${u.username}`} user=${u} self=${u.username === me.username}
+                onCancel=${() => setEditFor('')} onDone=${(text) => { setEditFor(''); setMsg({ ok: text }); load(); }} />` : null}
               ${resetFor === u.username ? html`<${ResetRow} key=${`reset-${u.username}`} user=${u}
                 onCancel=${() => setResetFor('')} onDone=${(text) => { setResetFor(''); setMsg({ ok: text }); }} />` : null}`)}
             </tbody>
