@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createActivityLog } from './activity-log.js';
@@ -33,4 +33,14 @@ test('xoay vòng khi vượt dung lượng, vẫn đọc được bản cũ', (t
   for (let i = 0; i < 10; i++) log.append({ actor: 'a', action: `x${i}` });
   assert.ok(existsSync(`${p}.1`));
   assert.equal(log.list({ limit: 100 })[0].action, 'x9');
+});
+
+test('dòng hỏng, null hoặc thiếu at bị bỏ qua; limit không phải số dùng mặc định', (t) => {
+  const d = mkdtempSync(join(tmpdir(), 'zd-act-')); t.after(() => rmSync(d, { recursive: true, force: true }));
+  const file = join(d, 'a.jsonl');
+  writeFileSync(file, 'null\n"chuỗi"\n{hỏng\n{"actor":"x"}\n{"at":5,"actor":"anh","action":"login","ok":true}\n');
+  const log = createActivityLog(file);
+  assert.deepEqual(log.list({}).map((e) => e.actor), ['anh']);
+  assert.equal(log.list({ limit: Number.NaN }).length, 1);
+  assert.equal(log.list({ limit: 'abc' }).length, 1);
 });

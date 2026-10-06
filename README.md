@@ -143,6 +143,8 @@ The installer also sets up a separate web dashboard (service `zalo-dashboard`, l
 - For a public domain set `ZALO_DASHBOARD_URL=https://dashboard.<domain>` and put Caddy in front; the installer prints the `reverse_proxy 127.0.0.1:3880` block. Other variables: `ZALO_DASHBOARD_PORT`, `ZALO_SIDECAR_RESTART_CMD`, `ZALO_ASSISTANT_RESTART_CMD`.
 - `npm run doctor` reports `dashboard-running`, `dashboard-admin` and `dashboard-telegram` as warnings only. `npm run uninstall:hermes` removes the dashboard service but keeps its data. See `README.vi.md` for the full walkthrough.
 
+Phase 2 adds **Chats** (conversation list with full-text search, message view with the bot's messages on the right, scroll up for older messages, and a compose box that sends as the bot — 10 messages per minute per user, existing conversations only) and **Activity log** (bot actions merged with dashboard actions, "errors only" filter; admins also see technical codes). The dashboard reads the bot's message history read-only, so it stays visible while the Zalo connection is down. The Overview now shows today's message counts and the five busiest groups.
+
 ## Configuration
 
 The installer manages these Hermes configuration areas without overwriting explicit customer values:

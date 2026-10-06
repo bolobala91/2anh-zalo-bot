@@ -166,18 +166,18 @@ export function Users({ me }) {
       <h2>Danh sách</h2>
       ${loadError ? html`<${Live} error=${loadError} />` : !list ? html`<${Spinner} />` : html`
         <div class="table-wrap">
-          <table class="table">
+          <table class="table table-cards">
             <thead><tr><th scope="col">Tên đăng nhập</th><th scope="col">Vai trò</th><th scope="col">UID Zalo</th>
               <th scope="col">Trạng thái</th><th scope="col">Tạo lúc</th><th scope="col"><span class="sr-only">Thao tác</span></th></tr></thead>
             <tbody>
               ${list.map((u) => html`<tr key=${u.username}>
-                <td><strong>${u.username}</strong>${u.username === me.username ? html` <span class="tag">bạn</span>` : null}</td>
-                <td>${roleLabel(u.role)}</td>
-                <td class="mono">${u.zaloUid || html`<span class="muted">Chưa có</span>`}</td>
-                <td>${u.disabled ? html`<span class="badge badge-danger"><${Icon} name="lock" size=${14} /> Đã khoá</span>`
+                <td data-label="Tên đăng nhập"><strong>${u.username}</strong>${u.username === me.username ? html` <span class="tag">bạn</span>` : null}</td>
+                <td data-label="Vai trò">${roleLabel(u.role)}</td>
+                <td data-label="UID Zalo" class="mono">${u.zaloUid || html`<span class="muted">Chưa có</span>`}</td>
+                <td data-label="Trạng thái">${u.disabled ? html`<span class="badge badge-danger"><${Icon} name="lock" size=${14} /> Đã khoá</span>`
                   : html`<span class="badge badge-ok"><${Icon} name="check" size=${14} /> Đang dùng</span>`}</td>
-                <td>${fmtTime(u.createdAt)}</td>
-                <td><div class="actions">
+                <td data-label="Tạo lúc">${fmtTime(u.createdAt)}</td>
+                <td data-label="Thao tác"><div class="actions">
                   <button class="btn btn-secondary btn-sm" disabled=${busy === u.username || u.username === me.username}
                     title=${u.username === me.username ? 'Không thể tự khoá tài khoản đang dùng' : undefined} onClick=${() => toggle(u)}>
                     <${Icon} name=${u.disabled ? 'unlock' : 'lock'} size=${14} /> ${u.disabled ? 'Mở khoá' : 'Khoá'}</button>

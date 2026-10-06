@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fakeSidecar, loginAs, makeDeps, startApp } from '../test-helpers.js';
+import { chatMsg, fakeSidecar, loginAs, makeDeps, seedHistory, startApp } from '../test-helpers.js';
 
 test('trạng thái khi mọi thứ ổn', async (t) => {
   const deps = makeDeps(t);
@@ -80,4 +80,39 @@ test('lỗi 5xx từ sidecar trả thông báo chung, không lộ nội dung g�
   const res = await call('/api/zalo/qr', { cookie });
   assert.equal(res.status, 502);
   assert.doesNotMatch(res.json.error, /ECONNRESET/);
+});
+
+test('tin hôm nay và 5 nhóm sôi nổi nhất đọc từ lịch sử, kể cả khi kết nối Zalo tắt', async (t) => {
+  const NOW = Date.UTC(2026, 9, 7, 5, 0);      // 12:00 giờ Việt Nam
+  const TODAY = Date.UTC(2026, 9, 6, 17, 0);   // 0:00 giờ Việt Nam
+  const { SidecarDown } = await import('../lib/sidecar-client.js');
+  let down = false;
+  const base = fakeSidecar();
+  const sidecar = fakeSidecar({ health: async () => { if (down) throw new SidecarDown(); return base.health(); } });
+  const deps = makeDeps(t, { sidecar, now: () => NOW });
+  seedHistory(deps, { messages: [
+    chatMsg({ threadId: '200', threadType: 1, ts: TODAY - 1 }),               // hôm qua: không tính
+    chatMsg({ threadId: '200', threadType: 1, ts: TODAY + 1 }),
+    chatMsg({ threadId: '200', threadType: 1, ts: TODAY + 2 }),
+    chatMsg({ threadId: '987654', threadType: 1, ts: TODAY + 3 }),
+    chatMsg({ threadId: '100', threadType: 0, ts: TODAY + 4, isSelf: true }),
+  ] });
+  await deps.threadNames.load();
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const expected = { received: 3, sent: 1, topGroups: [
+    { threadId: '200', count: 2, name: 'Tổ Hoá' }, { threadId: '987654', count: 1, name: 'Nhóm …7654' },
+  ] };
+  assert.deepEqual((await call('/api/status', { cookie })).json.today, expected);
+  down = true;
+  const res = await call('/api/status', { cookie });
+  assert.equal(res.json.sidecar, 'down');
+  assert.deepEqual(res.json.today, expected);
+});
+
+test('chưa có lịch sử thì today = null', async (t) => {
+  const deps = makeDeps(t);
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call);
+  assert.equal((await call('/api/status', { cookie })).json.today, null);
 });

@@ -2,6 +2,20 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.20.0] — 2026-10-07
+
+### Thêm
+
+- **Dashboard: Phiên chat.** Danh sách hội thoại, tìm trong nội dung tin nhắn (không phân biệt hoa thường và dấu: "hoc sinh" thấy "học sinh"), cuộn lên để xem tin cũ, xem tin với tin của bot bên phải, nhắn tay dưới tên bot (tối đa 10 tin/phút mỗi người, chỉ vào hội thoại đã có). Đọc lịch sử ở chế độ chỉ đọc nên kết nối Zalo tắt vẫn xem được.
+- **Dashboard: Nhật ký.** Gộp việc bot làm và việc làm trên dashboard: lúc nào, ai, làm gì, ở đâu, kết quả; lọc "chỉ lỗi". Chủ bot thấy nhãn dễ hiểu, Quản trị thấy thêm mã kỹ thuật.
+- **Tổng quan:** thẻ "Tin nhắn hôm nay" (nhận/gửi tính từ 0 giờ giờ Việt Nam) và 5 nhóm sôi nổi nhất.
+
+### Sửa
+
+- Nhật ký hoạt động của dashboard bỏ qua dòng hỏng thay vì báo lỗi.
+- Nhật ký kiểm toán ghi lần đăng nhập thất bại bằng tên tài khoản không có thật là "Người lạ", không hiện chữ đã gõ.
+- Mã đăng nhập không bao giờ hiện ra trên dashboard.
+
 ## [1.19.0] — 2026-10-07
 
 ### Thêm

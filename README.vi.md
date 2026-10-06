@@ -440,6 +440,22 @@ Khách quên thì Quản trị đặt lại trong mục **Người dùng**. Chí
 npm run dashboard:reset-admin -- --username <tên> --password <mật khẩu mới>
 ```
 
+### Phiên chat
+
+Mục **Phiên chat** hiện mọi hội thoại bot đã lưu, mới nhất trên cùng. Gõ vào ô trên cùng để lọc theo tên; bấm Enter để tìm trong nội dung tin nhắn (không phân biệt hoa thường và dấu: gõ "hoc sinh" vẫn thấy "học sinh"). Mở một hội thoại: tin của bot nằm bên phải, nền màu; kéo lên đầu để xem tin cũ hơn.
+
+Ô soạn ở dưới gửi tin **dưới tên bot** — dùng khi cần trả lời thay bot hoặc sửa một câu bot trả lời sai. Mỗi tin gửi tay được ghi vào Nhật ký kèm tên người gửi. Mỗi người gửi tối đa 10 tin mỗi phút. Chỉ gửi được vào hội thoại đã có trong lịch sử.
+
+Dashboard đọc lịch sử thẳng từ tệp `data/zalo.sqlite` của bot ở chế độ chỉ đọc, nên kết nối Zalo tắt vẫn xem được (chỉ không gửi được).
+
+### Nhật ký
+
+Mục **Nhật ký** ghi ai đã làm gì: tin bot gửi, việc bot làm theo lệnh chủ nhân, tin nhắn tay từ dashboard, đăng nhập dashboard, tạo/sửa tài khoản, quét QR, đăng xuất Zalo. Tích **Chỉ hiện lỗi** để xem việc không thành công. Quản trị thấy thêm mã kỹ thuật dưới mỗi dòng.
+
+### Tổng quan
+
+Trang **Tổng quan** có thẻ "Tin nhắn hôm nay" (số tin nhận và gửi từ 0 giờ giờ Việt Nam) và 5 nhóm sôi nổi nhất hôm nay.
+
 ### Kiểm tay sau khi cài (Giai đoạn 1)
 
 - [ ] `npm run doctor` không có dòng `[FAIL]`; `dashboard-running` báo "đang chạy".
@@ -450,6 +466,17 @@ npm run dashboard:reset-admin -- --username <tên> --password <mật khẩu mớ
 - [ ] Quét lại mã QR được khi cần.
 - [ ] (Nếu dùng) Nối Telegram và nhận được tin cảnh báo thử.
 - [ ] Khởi động lại máy, dashboard tự chạy lại.
+
+### Kiểm tay sau khi cài (Giai đoạn 2)
+
+- [ ] Tổng quan có thẻ "Tin nhắn hôm nay" với số nhận/gửi và 5 nhóm sôi nổi nhất.
+- [ ] Phiên chat hiện danh sách hội thoại với tên nhóm đúng; mở một nhóm thấy tin bot bên phải.
+- [ ] Kéo lên đầu hội thoại thì tải thêm tin cũ.
+- [ ] Tìm một từ có dấu (ví dụ "họp") ra đúng tin.
+- [ ] Nhắn tay một tin vào nhóm thử: tin tới Zalo thật và hiện trong khung.
+- [ ] Nhật ký có dòng "Nhắn tay từ dashboard" kèm tên mình; "Chỉ hiện lỗi" lọc đúng.
+- [ ] Tài khoản Chủ bot dùng được Phiên chat và Nhật ký, không thấy mã kỹ thuật.
+- [ ] Tắt kết nối Zalo của bot (dừng dịch vụ hoặc tiến trình): Phiên chat vẫn xem được; gửi tin báo lỗi tiếng Việt.
 
 Gỡ cài đặt (`npm run uninstall:hermes`) cũng gỡ dịch vụ dashboard, nhưng giữ nguyên tài khoản và dữ liệu.
 

@@ -19,11 +19,12 @@ export function createActivityLog(path, { maxBytes = 5 * 1024 * 1024, now = Date
       appendFileSync(path, `${JSON.stringify(entry)}\n`, { encoding: 'utf8', mode: 0o600 });
       return entry;
     },
-    list({ before = Infinity, limit = 50 } = {}) {
+    list({ before = Infinity, limit = 50, failedOnly = false } = {}) {
+      const n = Number.parseInt(limit, 10);
       return [...readLines(`${path}.1`), ...readLines(path)]
-        .filter((e) => e.at < before)
+        .filter((e) => e && typeof e === 'object' && Number.isFinite(e.at) && e.at < before && (!failedOnly || e.ok === false))
         .sort((a, b) => b.at - a.at)
-        .slice(0, Math.min(Math.max(limit, 1), 200));
+        .slice(0, Number.isInteger(n) ? Math.min(Math.max(n, 1), 200) : 50);
     },
   };
 }

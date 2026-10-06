@@ -186,3 +186,13 @@ test('JSON hỏng trả 400, không phải 500', async (t) => {
   assert.equal(res.status, 400);
   assert.equal((await res.json()).ok, false);
 });
+
+test('đăng nhập hỏng với tên không có thật ghi actor "?", không ghi chữ đã gõ', async (t) => {
+  const deps = makeDeps(t);
+  const { call } = await startApp(t, deps);
+  deps.users.create({ username: 'anh', role: 'admin', password: 'matkhau-dai' });
+  await call('/api/auth/verify', { method: 'POST', body: { username: 'MatKhauToiGoNham', password: 'x' } });
+  await call('/api/auth/verify', { method: 'POST', body: { username: 'anh', password: 'sai-sai-sai' } });
+  const actors = deps.activity.list({}).map((e) => e.actor).sort();
+  assert.deepEqual(actors, ['?', 'anh']);
+});

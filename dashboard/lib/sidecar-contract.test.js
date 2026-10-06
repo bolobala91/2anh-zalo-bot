@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { createControlRouter } from '../../control-api.js';
 import { createSidecarClient } from './sidecar-client.js';
-import { makeDeps, startApp, loginAs } from '../test-helpers.js';
+import { chatMsg, makeDeps, seedHistory, startApp, loginAs } from '../test-helpers.js';
 
 const TOKEN = 'hop-dong-token';
 const UID = '1234567890123456';
@@ -78,4 +78,15 @@ test('hợp đồng: route dashboard gọi bot đúng dạng tham số (mã đă
   assert.equal(qr.json.status, 'qr-pending');
   assert.equal((await call('/api/zalo/logout', { method: 'POST', cookie })).status, 200);
   assert.deepEqual(calls.map((c) => c[0]), ['code', 'qr-start', 'logout']);
+});
+
+test('hợp đồng: nhắn tay từ Phiên chat tới bot đúng dạng (threadType là số, có actor)', async (t) => {
+  const { client, calls } = await startControl(t);
+  const deps = makeDeps(t, { sidecar: client });
+  seedHistory(deps, { messages: [chatMsg({ threadId: '200', threadType: 1 })] });
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const res = await call('/api/chats/200/send', { method: 'POST', cookie, body: { text: '  Chào cả nhóm  ', threadType: '1' } });
+  assert.equal(res.status, 200);
+  assert.deepEqual(calls.at(-1), ['send', { threadId: '200', threadType: 1, text: 'Chào cả nhóm', actor: 'khach' }]);
 });

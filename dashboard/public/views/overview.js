@@ -21,6 +21,23 @@ export function zaloCard(s) {
   return { kind: 'danger', state: 'Chưa đăng nhập — cần quét QR', qr: true };
 }
 
+function TodayCard({ today }) {
+  return html`<section class="card">
+    <h2>Tin nhắn hôm nay</h2>
+    ${today ? html`
+      <dl class="facts">
+        <div><dt><${Icon} name="inbox" size=${16} /> Bot đã nhận</dt><dd>${today.received}</dd></div>
+        <div><dt><${Icon} name="send" size=${16} /> Bot đã gửi</dt><dd>${today.sent}</dd></div>
+      </dl>
+      <h3 class="subhead">5 nhóm sôi nổi nhất</h3>
+      ${today.topGroups.length
+        ? html`<ul class="list">${today.topGroups.map((g) => html`<li key=${g.threadId}><span>${g.name}</span><span class="muted push">${g.count} tin</span></li>`)}</ul>`
+        : html`<p class="muted small">Hôm nay chưa có nhóm nào nhắn tin.</p>`}
+      <a class="btn btn-secondary btn-sm" href="#/chats"><${Icon} name="chat" size=${16} /> Xem phiên chat</a>`
+    : html`<p class="muted">Chưa có số liệu — bot cần đăng nhập Zalo và nhận tin trước.</p>`}
+  </section>`;
+}
+
 export function Overview({ me, status: s }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
@@ -74,5 +91,6 @@ export function Overview({ me, status: s }) {
           <p class="muted small">Nếu lỗi này lặp lại hoặc bot ngừng trả lời, hãy báo người cài đặt kèm thời điểm trên.</p>`
         : html`<p class="badge badge-ok"><${Icon} name="check" size=${16} /> Không có lỗi nào gần đây</p>`}
       </section>
+      <${TodayCard} today=${s.today} />
     </div>`;
 }

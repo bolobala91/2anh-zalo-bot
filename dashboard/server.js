@@ -17,6 +17,8 @@ import { createSetupToken } from './lib/setup-token.js';
 import { createActivityLog } from './lib/activity-log.js';
 import { createSidecarClient } from './lib/sidecar-client.js';
 import { createTelegramLinker } from './lib/telegram.js';
+import { createStoreReader } from './lib/store-reader.js';
+import { createThreadNames } from './lib/thread-names.js';
 import { createWatchdog } from './lib/watchdog.js';
 import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
@@ -38,6 +40,8 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..') } 
   const watchedSidecar = { health: async () => { const h = await sidecar.health(); if (h?.zalo?.displayName) botName = h.zalo.displayName; return h; } };
   return {
     paths, config, sidecar, linker,
+    store: createStoreReader({ path: paths.sqliteFile }),
+    threadNames: createThreadNames({ loadGroups: () => sidecar.groups() }),
     users,
     sessions: createSessionStore(paths.sessionsFile),
     guard: createLoginGuard(),
