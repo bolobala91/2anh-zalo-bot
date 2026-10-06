@@ -7,6 +7,8 @@ export function createRuntimeHealth({ store, now = Date.now, staleAfterMs = 45_0
   // Đăng nhập xong chưa chắc đã nghe được tin: listener có thể đứt riêng.
   // null = chưa có ai báo (không tính vào sức khoẻ).
   let listener = null;
+  // Zalo đá phiên (mã 3000/3003): nối lại vô ích, cần quét QR đăng nhập lại.
+  let needsRelogin = false;
   let lastInboundAtMs = null;
   let lastOutboundAtMs = null;
   let lastError = null;
@@ -17,6 +19,11 @@ export function createRuntimeHealth({ store, now = Date.now, staleAfterMs = 45_0
       userId: profile.userId == null ? null : String(profile.userId),
       displayName: profile.displayName == null ? null : String(profile.displayName),
     };
+    if (zalo.status === 'logged-in') needsRelogin = false;
+  }
+
+  function setNeedsRelogin(flag) {
+    needsRelogin = Boolean(flag);
   }
 
   function setListenerState(state) {
@@ -82,12 +89,13 @@ export function createRuntimeHealth({ store, now = Date.now, staleAfterMs = 45_0
       || (listener != null && listener !== 'connected')
       || clients.size === 0
       || stale.length
+      || needsRelogin
     ) status = 'degraded';
 
     return {
       status,
       uptimeMs: Math.max(0, Number(now()) - startedAtMs),
-      zalo: { ...zalo, listener },
+      zalo: { ...zalo, listener, needsRelogin },
       bridge: {
         attachedClients: clients.size,
         heartbeatAgeMs: latestHeartbeat == null ? null : Math.max(0, Number(now()) - latestHeartbeat),
@@ -103,6 +111,7 @@ export function createRuntimeHealth({ store, now = Date.now, staleAfterMs = 45_0
   return {
     setZaloState,
     setListenerState,
+    setNeedsRelogin,
     bridgeConnected,
     bridgeHeartbeat,
     bridgeDisconnected,

@@ -35,6 +35,8 @@ function fakeHealth() {
     errors,
     setListenerState: (state) => states.push(state),
     recordError: (code) => errors.push(code),
+    needs: false,
+    setNeedsRelogin(flag) { this.needs = flag; },
   };
 }
 
@@ -68,7 +70,7 @@ test('listener bật retryOnClose và báo trạng thái kết nối cho health'
 test('listener đóng hẳn thì tự mở lại, kết nối lại được thì nhịp chờ quay về mức đầu', async () => {
   const listener = new FakeListener();
   const health = fakeHealth();
-  const cleanup = setupBotListener({ listener }, { user_id: 'bot' }, { health, restartDelaysMs: [5, 60_000] });
+  const cleanup = setupBotListener({ listener }, { user_id: 'bot' }, { health, restartDelaysMs: [5, 60_000], stableAfterMs: 10 });
 
   listener.emit('closed', 1006, '');
   assert.equal(health.states.at(-1), 'closed');
@@ -76,6 +78,7 @@ test('listener đóng hẳn thì tự mở lại, kết nối lại được th�
   await waitFor(() => listener.starts.length === 2, 'lần mở lại thứ nhất');
 
   listener.emit('connected');
+  await new Promise((r) => setTimeout(r, 40)); // giữ đủ lâu thì mới được đặt lại nhịp
   listener.emit('closed', 1006, '');
   await waitFor(() => listener.starts.length === 3, 'lần mở lại sau khi đã kết nối lại');
   cleanup();
@@ -246,4 +249,57 @@ test('disconnected /sethome without sender UID is ignored safely', async (t) => 
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   assert.equal(sent.length, 0);
+});
+
+test('kết nối chập chờn không đặt lại nhịp chờ: 5 → 15 → 30', async () => {
+  const listener = new FakeListener();
+  const health = fakeHealth();
+  const delays = [];
+  let clock = 0;
+  const stop = setupBotListener({ listener }, { user_id: 'bot' }, {
+    health, restartDelaysMs: [5, 15, 30], stableAfterMs: 1000, flapWindowMs: 50, now: () => clock,
+    onScheduleRestart: (ms) => delays.push(ms),
+  });
+  for (let i = 0; i < 3; i++) {
+    listener.emit('connected');
+    clock += 10;                       // rớt sau 10 ms: chập chờn
+    listener.emit('disconnected', 1006, '');
+    listener.emit('closed', 1006, '');
+    await waitFor(() => listener.starts.length === i + 2);
+  }
+  assert.deepEqual(delays, [5, 15, 30]);
+  stop();
+});
+
+test('kết nối giữ đủ lâu thì đặt lại nhịp chờ', async () => {
+  const listener = new FakeListener();
+  const delays = [];
+  let clock = 0;
+  const stop = setupBotListener({ listener }, { user_id: 'bot' }, {
+    health: fakeHealth(), restartDelaysMs: [5, 15, 30], stableAfterMs: 100, flapWindowMs: 50, now: () => clock,
+    onScheduleRestart: (ms) => delays.push(ms),
+  });
+  listener.emit('connected'); clock += 10; listener.emit('closed', 1006, '');
+  await waitFor(() => listener.starts.length === 2);
+  listener.emit('connected');
+  await new Promise((r) => setTimeout(r, 130)); // giữ > stableAfterMs (đồng hồ thật cho bộ hẹn giờ)
+  clock += 500; listener.emit('closed', 1006, '');
+  await waitFor(() => listener.starts.length === 3);
+  assert.deepEqual(delays, [5, 5]);
+  stop();
+});
+
+test('bị Zalo đá (3003) thì báo needsRelogin và chờ nhịp dài nhất', async () => {
+  const listener = new FakeListener();
+  const health = fakeHealth();
+  const delays = [];
+  const stop = setupBotListener({ listener }, { user_id: 'bot' }, {
+    health, restartDelaysMs: [5, 15, 30], onScheduleRestart: (ms) => delays.push(ms),
+  });
+  listener.emit('connected');
+  listener.emit('disconnected', 3003, 'kick');
+  listener.emit('closed', 3003, 'kick');
+  assert.equal(health.needs, true);
+  assert.deepEqual(delays, [30]);
+  stop();
 });
