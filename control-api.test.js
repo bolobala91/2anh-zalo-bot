@@ -57,6 +57,16 @@ test('mã đăng nhập chỉ nhận đúng 6 chữ số và UID hợp lệ', as
   assert.deepEqual(calls.at(-1), ['code', { zaloUid: '1234567890123456', code: '123456', actor: 'khach' }]);
 });
 
+test('QR: bị Zalo đá (needsRelogin) thì /qr không bao giờ báo logged-in', async (t) => {
+  const { call } = await serve(t, {
+    health: () => ({ zalo: { status: 'logged-in', needsRelogin: true } }),
+    qr: { start: async () => {}, state: () => ({ status: 'logged-in', image: null, user: { user_id: '1' } }) },
+  });
+  const state = await (await call('/qr')).json();
+  assert.equal(state.status, 'idle');
+  assert.equal(state.user, null);
+});
+
 test('QR: bắt đầu không chặn, đọc trạng thái', async (t) => {
   const { call, calls } = await serve(t);
   assert.equal((await call('/qr/start', { method: 'POST' })).status, 200);

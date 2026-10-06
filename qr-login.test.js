@@ -94,6 +94,62 @@ test('QR hết hạn: bỏ lần cũ, start() mở lần mới, lần cũ settle
   assert.equal(qr.state().user, null);
 });
 
+test('bị Zalo đá: state không báo logged-in, start() dỡ phiên cũ rồi mở QR mới', async () => {
+  const h = harness();
+  let stale = true;
+  const teardowns = [];
+  const qr = createQrLogin({
+    createZalo: h.createZalo, onLoggedIn: async () => ({ user_id: '2' }), health: h.health,
+    isStale: () => stale, teardown: async () => { teardowns.push(1); stale = false; },
+  });
+  qr.markLoggedIn({ user_id: '1' });
+  assert.deepEqual(qr.state(), { status: 'idle', image: null, user: null });
+  await qr.start();
+  assert.equal(teardowns.length, 1);
+  assert.equal(h.starts, 1);
+  assert.equal(qr.state().status, 'qr-pending');
+  await h.cb({ type: E.QRCodeGenerated, data: { image: 'NEW' } });
+  assert.equal(qr.state().image, 'data:image/png;base64,NEW');
+});
+
+test('phiên còn sống: start() không dỡ, không mở QR', async () => {
+  const h = harness();
+  const teardowns = [];
+  const qr = createQrLogin({
+    createZalo: h.createZalo, onLoggedIn: async () => ({}), health: h.health,
+    isStale: () => false, teardown: async () => { teardowns.push(1); },
+  });
+  qr.markLoggedIn({ user_id: '1' });
+  await qr.start();
+  assert.equal(teardowns.length, 0);
+  assert.equal(h.starts, 0);
+  assert.equal(qr.state().status, 'logged-in');
+});
+
+test('bị đá → quét lại thành công thì needsRelogin được xoá (runtime health thật)', async () => {
+  const { createRuntimeHealth } = await import('./runtime-health.js');
+  const health = createRuntimeHealth({ store: { getHealth: () => ({ ready: true }) } });
+  health.setZaloState('logged-in', { userId: '1' });
+  health.setListenerState('connected');
+  health.setNeedsRelogin(true);
+  const h = harness();
+  const qr = createQrLogin({
+    createZalo: h.createZalo, health,
+    isStale: () => health.zaloSession().needsRelogin || health.zaloSession().listener === 'closed',
+    teardown: async () => { health.setListenerState(null); health.setZaloState('idle'); },
+    onLoggedIn: async () => { health.setZaloState('logged-in', { userId: '1' }); return { user_id: '1' }; },
+  });
+  qr.markLoggedIn({ user_id: '1' });
+  assert.equal(qr.state().status, 'idle');
+  await qr.start();
+  assert.equal(health.zaloSession().needsRelogin, true); // vẫn cần quét cho tới khi xong
+  h.resolve({ api: true });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(qr.state().status, 'logged-in');
+  assert.equal(health.zaloSession().needsRelogin, false);
+  assert.equal(health.snapshot().zalo.needsRelogin, false);
+});
+
 test('createZalo/loginQR ném đồng bộ thì về idle', async () => {
   const states = [];
   const health = { setZaloState: (s) => states.push(s) };

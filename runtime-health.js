@@ -121,5 +121,7 @@ export function createRuntimeHealth({ store, now = Date.now, staleAfterMs = 45_0
     setBackfill,
     recordError,
     snapshot,
+    // Đọc nhẹ (không chạm SQLite như snapshot) cho các chỗ hỏi mỗi giây.
+    zaloSession: () => ({ status: zalo.status, listener, needsRelogin }),
   };
 }

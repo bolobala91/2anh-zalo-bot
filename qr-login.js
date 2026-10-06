@@ -11,7 +11,11 @@ export function toDataUrl(image) {
   return String(image).startsWith('data:') ? String(image) : `data:image/png;base64,${image}`;
 }
 
-export function createQrLogin({ createZalo, onLoggedIn, health, broadcast = () => {} }) {
+/**
+ * isStale(): phiên đang "logged-in" thực ra đã chết (Zalo đá phiên / listener đóng hẳn).
+ * teardown(): dỡ phiên cũ (listener, api…) để một lần quét QR mới thế chỗ.
+ */
+export function createQrLogin({ createZalo, onLoggedIn, health, broadcast = () => {}, isStale = () => false, teardown = async () => {} }) {
   let status = 'idle';
   let image = null;
   let user = null;
@@ -26,9 +30,7 @@ export function createQrLogin({ createZalo, onLoggedIn, health, broadcast = () =
     image = null;
     health?.setZaloState('qr-pending');
     let credentials = null;
-    let rejectRun;
     const result = new Promise((resolve, reject) => {
-      rejectRun = reject;
       // zca-js không tự kết thúc loginQR khi QR hết hạn/bị từ chối (chỉ chờ retry/abort),
       // nên ta bỏ lần chạy này và cho lần sau bắt đầu mới.
       const giveUp = (evt, type, reason) => {
@@ -80,9 +82,18 @@ export function createQrLogin({ createZalo, onLoggedIn, health, broadcast = () =
   }
 
   return {
-    async start() { if (status !== 'logged-in' && !pending) run(); },
+    async start() {
+      // Bị Zalo đá thì phiên cũ vô dụng nhưng vẫn mang nhãn logged-in — không dỡ đi thì
+      // không bao giờ mở được QR mới (start() thành no-op, UI báo đăng nhập thành công giả).
+      if (status === 'logged-in' && !pending && isStale()) {
+        await teardown();
+        status = 'idle'; user = null; image = null;
+      }
+      if (status !== 'logged-in' && !pending) run();
+    },
     waitForLogin() { return pending || run(); },
-    state: () => ({ status, image, user }),
+    // Không bao giờ báo logged-in cho một phiên đã chết.
+    state: () => (status === 'logged-in' && isStale() ? { status: 'idle', image: null, user: null } : { status, image, user }),
     markLoggedIn(u) { status = 'logged-in'; user = u; image = null; },
     markLoggedOut() { status = 'idle'; user = null; image = null; },
   };

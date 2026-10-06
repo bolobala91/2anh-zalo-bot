@@ -136,7 +136,7 @@ wss.on('connection', (ws) => {
   wsClients.push(ws);
   ws.on('close', () => { wsClients = wsClients.filter(c => c !== ws); });
   // push current state to new client
-  if (status === 'logged-in' && loginInfo) {
+  if (status === 'logged-in' && loginInfo && !zaloSessionStale()) {
     ws.send(JSON.stringify({ type: 'login-success', data: loginInfo }));
   } else if (qrLogin.state().image) {
     // Trang cũ tự thêm tiền tố data URL nên chỉ gửi base64 thuần.
@@ -145,10 +145,36 @@ wss.on('connection', (ws) => {
   }
 });
 
+// Phiên "đã đăng nhập" nhưng chết hẳn: Zalo đá (needsRelogin) hoặc listener đã đóng.
+function zaloSessionStale() {
+  const z = runtimeHealth.zaloSession();
+  return z.needsRelogin || z.listener === 'closed';
+}
+
+// Dỡ runtime của phiên hiện tại (listener, cầu nối, api). Không xoá phiên trên đĩa:
+// quét QR xong thì saveSession ghi đè, còn bỏ dở thì lần khởi động sau vẫn thử lại.
+function teardownZaloSession() {
+  stopBotListener();
+  stopBotListener = () => {};
+  stopHermesBridge();
+  api = null;
+  loginInfo = null;
+  status = 'idle';
+  runtimeHealth.setZaloState('idle');
+  qrLogin.markLoggedOut();
+  groupDirectory.clear();
+  sessionFromDisk = false;
+}
+
 const qrLogin = createQrLogin({
   createZalo: () => (zalo = new Zalo(zaloOptions())),
   health: runtimeHealth,
   broadcast,
+  isStale: zaloSessionStale,
+  teardown: async () => {
+    console.warn('[auth] phiên Zalo cũ đã chết — dỡ phiên để quét QR mới');
+    teardownZaloSession();
+  },
   onLoggedIn: async (loggedApi, credentials) => {
     try {
     api = loggedApi;
@@ -196,8 +222,9 @@ if (reconnectResult) {
 
 // --- QR Login ---
 app.post('/api/qr/start', async (req, res) => {
-  if (status === 'logged-in' && api) return res.json({ ok: true, user: loginInfo });
+  if (status === 'logged-in' && api && !zaloSessionStale()) return res.json({ ok: true, user: loginInfo });
   try {
+    await qrLogin.start(); // phiên đã chết thì dỡ trước, rồi mở QR mới
     const user = await qrLogin.waitForLogin();
     res.json({ ok: true, user });
   } catch (err) {
@@ -228,16 +255,7 @@ app.get('/api/health', (req, res) => {
 
 // --- Logout ---
 async function logoutZalo() {
-  stopBotListener();
-  stopBotListener = () => {};
-  stopHermesBridge();
-  api = null;
-  loginInfo = null;
-  status = 'idle';
-  runtimeHealth.setZaloState('idle');
-  qrLogin.markLoggedOut();
-  groupDirectory.clear();
-  sessionFromDisk = false;
+  teardownZaloSession();
   await clearSession();
   broadcast({ type: 'logout' });
 }

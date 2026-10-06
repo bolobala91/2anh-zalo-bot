@@ -37,7 +37,13 @@ export function createControlRouter({ token, health, qr, logout, send, loginCode
 
   router.get('/health', wrap(async () => ({ health: health() })));
   router.post('/qr/start', wrap(async () => { await qr.start(); return {}; }));
-  router.get('/qr', wrap(async () => qr.state()));
+  // Phiên bị Zalo đá vẫn mang nhãn logged-in: không bao giờ báo "đã đăng nhập" cho nó,
+  // nếu không trang QR tưởng thành công rồi chuyển đi trong khi bot đã điếc.
+  router.get('/qr', wrap(async () => {
+    const state = await qr.state();
+    if (state?.status === 'logged-in' && health()?.zalo?.needsRelogin) return { status: 'idle', image: null, user: null };
+    return state;
+  }));
   router.post('/logout', wrap(async () => { await logout(); return {}; }));
   router.post('/send', wrap(async (req) => {
     const { threadId, threadType, text, actor } = req.body || {};
