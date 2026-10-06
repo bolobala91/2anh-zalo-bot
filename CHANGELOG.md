@@ -15,7 +15,10 @@ Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
 ### Sửa
 
-- Giãn nhịp tự nối lại kết nối Zalo khi nó chết, tránh khởi động lại dồn dập.
+- Giãn nhịp tự nối lại kết nối Zalo khi nó chết (5 s → 5 phút), tránh khởi động lại dồn dập; bị Zalo đá phiên (mã 3000/3003) thì đánh dấu "cần quét QR lại" thay vì thử mãi.
+- Bị Zalo đá phiên thì quét QR lại được ngay, không phải khởi động lại bot.
+- Canh gác 30 giây: Zalo mất phiên → báo sau 2 phút; bot ngừng nhận tin quá 10 phút → báo; kết nối Zalo treo → tự khởi động lại một lần rồi báo; hồi phục → báo.
+- Tin nhắn chứa mã đăng nhập dashboard không bị lưu vào lịch sử chat.
 
 ## [1.18.0] — 2026-10-06
 
