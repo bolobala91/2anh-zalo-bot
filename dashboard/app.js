@@ -2,6 +2,8 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import { checkOrigin, securityHeaders, sessionMiddleware } from './lib/http-guards.js';
 import { authRoutes } from './routes/auth.js';
+import { statusRoutes } from './routes/status.js';
+import { zaloRoutes } from './routes/zalo.js';
 
 export function createDashboardApp(deps) {
   const app = express();
@@ -12,7 +14,9 @@ export function createDashboardApp(deps) {
   app.use('/api', checkOrigin(deps.config));
   app.use('/api', sessionMiddleware(deps));
   app.use('/api', authRoutes(deps));
-  // Các router khác được gắn thêm ở Task 6–8 theo cùng mẫu: app.use('/api', xxxRoutes(deps));
+  app.use('/api', statusRoutes(deps));
+  app.use('/api', zaloRoutes(deps));
+  // Các router khác được gắn thêm ở Task 7–8 theo cùng mẫu: app.use('/api', xxxRoutes(deps));
   app.get('/healthz', (req, res) => res.json({ ok: true }));
   if (deps.publicDir && existsSync(deps.publicDir)) app.use(express.static(deps.publicDir, { index: 'index.html' }));
   app.use('/api', (req, res) => res.status(404).json({ ok: false, error: 'Không có đường dẫn này' }));
