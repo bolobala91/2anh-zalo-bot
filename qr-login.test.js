@@ -71,3 +71,37 @@ test('start() hai lần khi đang chờ không mở lần đăng nhập thứ ha
   await qr.start();
   assert.equal(h.starts, 1);
 });
+
+test('QR hết hạn: bỏ lần cũ, start() mở lần mới, lần cũ settle muộn không ghi đè', async () => {
+  const runs = [];
+  const aborts = [];
+  const createZalo = () => ({
+    loginQR: (opts, cb) => new Promise((resolve, reject) => { runs.push({ cb, resolve, reject }); }),
+  });
+  const qr = createQrLogin({ createZalo, onLoggedIn: async () => ({ u: 1 }), health: { setZaloState() {} } });
+  const waiting = qr.waitForLogin();
+  const caught = assert.rejects(waiting, /hết hạn/);
+  await runs[0].cb({ type: E.QRCodeExpired, actions: { abort: () => aborts.push(1), retry() {} } });
+  await caught;
+  assert.equal(aborts.length, 1);
+  assert.equal(qr.state().status, 'idle');
+  await qr.start();
+  assert.equal(runs.length, 2);
+  assert.equal(qr.state().status, 'qr-pending');
+  runs[0].resolve({ stale: true });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(qr.state().status, 'qr-pending');
+  assert.equal(qr.state().user, null);
+});
+
+test('createZalo/loginQR ném đồng bộ thì về idle', async () => {
+  const states = [];
+  const health = { setZaloState: (s) => states.push(s) };
+  const qr = createQrLogin({ createZalo: () => { throw new Error('hỏng'); }, onLoggedIn: async () => ({}), health });
+  await qr.start();
+  assert.equal(qr.state().status, 'idle');
+  assert.equal(states.at(-1), 'idle');
+  const qr2 = createQrLogin({ createZalo: () => ({ loginQR: () => { throw new Error('hỏng'); } }), onLoggedIn: async () => ({}), health });
+  await assert.rejects(qr2.waitForLogin(), /hỏng/);
+  assert.equal(qr2.state().status, 'idle');
+});

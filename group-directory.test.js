@@ -29,3 +29,25 @@ test('chưa đăng nhập thì từ chối', async () => {
   const dir = createGroupDirectory({ getApi: () => null });
   await assert.rejects(dir.list(), /Zalo chưa đăng nhập/);
 });
+
+test('đổi tài khoản hoặc clear() thì không dùng nhóm cũ', async () => {
+  const a = fakeApi();
+  const b = fakeApi();
+  b.getAllGroups = async () => ({ gridVerMap: { 9: 1 } });
+  b.getGroupInfo = async () => ({ gridInfoMap: { 9: { name: 'Mới', totalMember: 1 } } });
+  let cur = a;
+  const dir = createGroupDirectory({ getApi: () => cur });
+  await dir.list();
+  cur = b;
+  assert.deepEqual(await dir.list(), [{ id: '9', name: 'Mới', members: 1 }]);
+  dir.clear();
+  await dir.list();
+  assert.equal(a.calls.all, 1);
+});
+
+test('nhiều list() đồng thời dùng chung một lần tải', async () => {
+  const api = fakeApi();
+  const dir = createGroupDirectory({ getApi: () => api });
+  await Promise.all([dir.list(), dir.list(), dir.list()]);
+  assert.deepEqual(api.calls, { all: 1, info: 1 });
+});

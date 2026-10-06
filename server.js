@@ -73,10 +73,10 @@ app.use('/control', createControlRouter({
     if (!api) throw new Error('Zalo chưa đăng nhập');
     return sendSystemNotice({ api, threadId, threadType, text, actorUid: actor, actorRole: 'dashboard', action: 'dashboard_send' });
   },
-  loginCode: ({ zaloUid, code }) => {
+  loginCode: ({ zaloUid, code, actor }) => {
     if (!api) throw new Error('Zalo chưa đăng nhập');
     return sendSystemNotice({
-      api, threadId: zaloUid, threadType: 0, actorUid: 'dashboard', actorRole: 'dashboard', action: 'dashboard_login_code',
+      api, threadId: zaloUid, threadType: 0, actorUid: actor, actorRole: 'dashboard', action: 'dashboard_login_code', remember: false,
       text: `Mã đăng nhập dashboard: ${code}
 Mã có hiệu lực 5 phút. Đừng đưa mã này cho ai.`,
     });
@@ -150,6 +150,7 @@ const qrLogin = createQrLogin({
   health: runtimeHealth,
   broadcast,
   onLoggedIn: async (loggedApi, credentials) => {
+    try {
     api = loggedApi;
     sessionFromDisk = false;
     loginInfo = await fetchProfile(api);
@@ -160,7 +161,15 @@ const qrLogin = createQrLogin({
     console.log(`[auth] ✅ đăng nhập thành công — ${loginInfo?.display_name || '?'} (${loginInfo?.user_id || '?'})`);
     broadcast({ type: 'login-success', data: loginInfo });
     activateZaloRuntime();
+    groupDirectory.clear();
     return loginInfo;
+    } catch (err) {
+      stopBotListener();
+      stopBotListener = () => {};
+      api = null; loginInfo = null; status = 'idle';
+      runtimeHealth.setZaloState('idle');
+      throw err;
+    }
   },
 });
 
@@ -200,7 +209,7 @@ app.post('/api/qr/start', async (req, res) => {
 // --- Status ---
 app.get('/api/status', (req, res) => {
   res.json({
-    status,
+    status: status === 'logged-in' ? status : qrLogin.state().status,
     user: loginInfo || null,
     hermesAttached: isHermesAttached(),
     mode: isHermesAttached() ? 'hermes-agent' : 'waiting-for-hermes',
@@ -227,6 +236,7 @@ async function logoutZalo() {
   status = 'idle';
   runtimeHealth.setZaloState('idle');
   qrLogin.markLoggedOut();
+  groupDirectory.clear();
   sessionFromDisk = false;
   await clearSession();
   broadcast({ type: 'logout' });

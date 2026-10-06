@@ -1099,6 +1099,22 @@ test('sendSystemNotice ghi đúng người gửi và hành động do dashboard 
   }
 });
 
+test('sendSystemNotice remember:false không lưu nội dung nhưng vẫn ghi audit', async (t) => {
+  const store = testStore(t);
+  const api = { sendMessage: () => Promise.resolve({ message: { msgId: 'r-1', cliMsgId: 'r-c1' } }) };
+  const server = startHermesBridge({ api, profile: { user_id: 'bot' }, port: 0, store });
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const before = store.getHealth();
+    await sendSystemNotice({ api, threadId: 'dm-1', threadType: 0, text: 'Mã 123456', remember: false });
+    const after = store.getHealth();
+    assert.equal(after.messageCount, before.messageCount);
+    assert.equal(after.auditCount, before.auditCount + 2);
+  } finally {
+    stopHermesBridge();
+  }
+});
+
 test('lời chào có tag bị Zalo từ chối (mã số) thì gửi lại chữ thường, lỗi mạng thì không', async (t) => {
   const store = testStore(t);
   const calls = [];

@@ -711,7 +711,7 @@ export async function acquireSendQuota() {
 
 export async function sendSystemNotice({
   api, threadId, threadType, text, mentions = null,
-  actorUid = 'system', actorRole = 'system', action = 'send_system_notice',
+  actorUid = 'system', actorRole = 'system', action = 'send_system_notice', remember = true,
 }) {
   if (!activeStore) throw new Error('Zalo store is not ready');
   const requestId = `system-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -737,7 +737,7 @@ export async function sendSystemNotice({
       if (!content.mentions || !/^-?\d+$/.test(String(err?.code ?? ''))) throw err;
       result = await api.sendMessage({ msg: content.msg }, String(threadId), threadType);
     }
-    rememberOutboundResult(result, threadId, threadType, text);
+    if (remember) rememberOutboundResult(result, threadId, threadType, text);
     activeStore.finishAudit(requestId, 'succeeded');
     activeHealth?.markOutbound();
     return result;
