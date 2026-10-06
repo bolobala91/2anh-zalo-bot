@@ -103,16 +103,16 @@ function Compose({ conv, onSent }) {
     setBusy(true); setMsg({});
     try {
       await api(`/api/chats/${encodeURIComponent(conv.threadId)}/send`, { method: 'POST', body: { text: body, threadType: conv.threadType } });
-      setText(''); setMsg({ ok: 'Đã gửi dưới tên bot.' }); onSent();
+      setText((cur) => (cur.trim() === body ? '' : cur)); setMsg({ ok: 'Đã gửi dưới tên bot.' }); onSent();
     } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
   }
   return html`<form class="compose" onSubmit=${send} novalidate>
     <label for="chat-compose" class="sr-only">Tin nhắn gửi dưới tên bot</label>
-    <textarea id="chat-compose" rows="2" maxlength=${MAX_TEXT} value=${text} placeholder="Nhắn dưới tên bot… (Ctrl+Enter để gửi)"
+    <textarea id="chat-compose" rows="2" maxlength=${MAX_TEXT} value=${text} readOnly=${busy} placeholder="Nhắn dưới tên bot… (Ctrl+Enter để gửi)"
       aria-describedby="chat-compose-help" onInput=${(e) => setText(e.currentTarget.value)}
       onKeyDown=${(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(e); }}></textarea>
     <div class="compose-foot">
-      <small id="chat-compose-help" class="muted">Tin gửi dưới tên bot, ghi vào Nhật ký kèm tên bạn. ${text.length}/${MAX_TEXT}</small>
+      <small class="muted"><span id="chat-compose-help">Tin gửi dưới tên bot, ghi vào Nhật ký kèm tên bạn.</span> ${text.length}/${MAX_TEXT}</small>
       <button class="btn btn-primary btn-sm" disabled=${busy}><${Icon} name="send" size=${16} /> ${busy ? 'Đang gửi…' : 'Gửi'}</button>
     </div>
     <${Live} error=${msg.error} ok=${msg.ok} />
@@ -190,7 +190,7 @@ function Thread({ conv, onBack }) {
     </header>
     <${Live} error=${error} />
     ${msgs === null ? html`<${Spinner} />` : html`
-      <ol class="msgs" ref=${box} onScroll=${onScroll} aria-label=${`Tin nhắn với ${conv.name}`}>
+      <ol class="msgs" ref=${box} tabindex="0" onScroll=${onScroll} aria-label=${`Tin nhắn với ${conv.name}`}>
         <li class="msgs-top">
           ${older
             ? html`<button type="button" class="btn btn-ghost btn-sm" disabled=${loadingOlder} onClick=${loadOlder}>${loadingOlder ? 'Đang tải…' : 'Tải tin cũ hơn'}</button>`

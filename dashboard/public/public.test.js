@@ -55,6 +55,13 @@ test('tô sáng kết quả tìm: tách chữ thành đoạn, không phân biệ
   assert.deepEqual(markMatches('<b>x</b> họp', 'họp'), [{ text: '<b>x</b> ', hit: false }, { text: 'họp', hit: true }]);
   assert.deepEqual(markMatches('không có', 'họp'), [{ text: 'không có', hit: false }]);
   assert.deepEqual(markMatches('abc', ''), [{ text: 'abc', hit: false }]);
+  // Từ khoá có ký tự đặc biệt của regex/LIKE được so nguyên văn.
+  assert.deepEqual(markMatches('a.b axb', 'a.b'), [{ text: 'a.b', hit: true }, { text: ' axb', hit: false }]);
+  assert.deepEqual(markMatches('f(x) = (1)', '('), [
+    { text: 'f', hit: false }, { text: '(', hit: true }, { text: 'x) = ', hit: false }, { text: '(', hit: true }, { text: '1)', hit: false },
+  ]);
+  assert.deepEqual(markMatches('giảm 50% hôm nay', '%'), [{ text: 'giảm 50', hit: false }, { text: '%', hit: true }, { text: ' hôm nay', hit: false }]);
+  assert.deepEqual(markMatches('abc', '%'), [{ text: 'abc', hit: false }]);
 });
 
 test('Nhật ký: mã kỹ thuật cho Quản trị gọn một dòng, bỏ trường rỗng', async () => {

@@ -52,7 +52,7 @@ export function Audit({ me }) {
   const admin = me.role === 'admin';
   let body;
   if (items === null) body = html`<${Spinner} />`;
-  else if (!items.length) body = html`<p class="muted">${failedOnly ? 'Không có lỗi nào.' : 'Chưa có hoạt động nào được ghi lại.'}</p>`;
+  else if (!items.length) body = error ? null : html`<p class="muted">${failedOnly ? 'Không có lỗi nào.' : 'Chưa có hoạt động nào được ghi lại.'}</p>`;
   else {
     body = html`
       <div class="table-wrap"><table class="table audit-table">

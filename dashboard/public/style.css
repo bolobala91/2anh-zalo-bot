@@ -323,7 +323,7 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
   .chat { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
   .chat.has-thread .chat-list, .chat:not(.has-thread) .chat-thread { display: none; }
   .chat-list { max-height: calc(100vh - 220px); }
-  .chat-thread { height: calc(100vh - 240px); min-height: 400px; }
+  .chat-thread { height: calc(100vh - 240px); height: calc(100dvh - 240px); min-height: 400px; }
   .only-mobile { display: inline-flex; }
   .msg { max-width: 90%; }
 }
