@@ -22,6 +22,7 @@ export const FEATURE_KEYS = FEATURES.map((f) => f.key);
 const SWITCHES = ['active', 'replyOnlyTagged'];
 export const GROUP_ID = /^\d{1,32}$/;
 const MAX_NAME = 120;
+const MAX_GROUPS = 500;
 
 export class InvalidPermissions extends Error {
   constructor(message) { super(message); this.name = 'InvalidPermissions'; this.status = 400; }
@@ -123,11 +124,17 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true }) {
       const defaults = merge(builtin(), data.defaults);
       const entry = {};
       for (const k of SWITCHES) if (settings[k] !== defaults[k]) entry[k] = settings[k];
+      // Cờ tag của bot lấy từ bí mật riêng của Hermes, có thể khác `globalReplyOnlyTagged` ở đây:
+      // khi mặc định trong tệp chưa ghi cờ này thì ghi hẳn vào nhóm để bot làm đúng điều giao diện đã hiện.
+      if (data.defaults.replyOnlyTagged === undefined) entry.replyOnlyTagged = settings.replyOnlyTagged;
       const features = Object.fromEntries(FEATURE_KEYS.filter((k) => settings.features[k] !== defaults.features[k]).map((k) => [k, settings.features[k]]));
       if (Object.keys(features).length) entry.features = features;
-      const changed = [...Object.keys(entry).filter((k) => k !== 'features'), ...Object.keys(features)];
+      const changed = [...SWITCHES.filter((k) => settings[k] !== defaults[k]), ...Object.keys(features)];
       const cleanName = String(name || data.groups[groupId]?.name || '').trim().slice(0, MAX_NAME);
-      if (changed.length) data.groups[groupId] = cleanName ? { name: cleanName, ...entry } : entry;
+      if (Object.keys(entry).length && !data.groups[groupId] && Object.keys(data.groups).length >= MAX_GROUPS) {
+        throw new InvalidPermissions(`Đã có ${MAX_GROUPS} nhóm được chỉnh riêng, chưa thêm được nhóm nữa — đưa bớt nhóm về mặc định rồi thử lại.`);
+      }
+      if (Object.keys(entry).length) data.groups[groupId] = cleanName ? { name: cleanName, ...entry } : entry;
       else delete data.groups[groupId];
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), changed };

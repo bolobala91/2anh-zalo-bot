@@ -90,3 +90,24 @@ test('danh sách nút khớp FEATURES của plugin Python', () => {
   const tuple = /^FEATURES = \(([^)]*)\)/m.exec(py)[1];
   assert.deepEqual([...tuple.matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]), FEATURE_KEYS);
 });
+
+test('mặc định trong tệp chưa ghi cờ tag: nhóm luôn ghi hẳn replyOnlyTagged, dù bằng cờ chung', (t) => {
+  const s = setup(t, { globalReplyOnlyTagged: true });
+  const { changed } = s.store.setGroup(G, settings({ active: false }));
+  assert.deepEqual(changed, ['active']);
+  assert.deepEqual(s.disk().groups[G], { active: false, replyOnlyTagged: true });
+  // Không có khác biệt thật nào: vẫn giữ cờ tag để bot không rơi về cờ chung khác.
+  assert.deepEqual(s.store.setGroup(G, settings()).changed, []);
+  assert.deepEqual(s.disk().groups[G], { replyOnlyTagged: true });
+  // Mặc định đã ghi cờ tag rõ ràng → quay lại kiểu chỉ ghi phần khác biệt.
+  s.store.setDefaults(settings());
+  s.store.setGroup(G, settings());
+  assert.deepEqual(s.disk().groups, {});
+});
+
+test('quá 500 nhóm riêng thì từ chối nhóm mới bằng InvalidPermissions', (t) => {
+  const s = setup(t);
+  for (let i = 1; i <= 500; i++) s.store.setGroup(String(i), settings({ active: false }));
+  assert.throws(() => s.store.setGroup(G, settings({ active: false })), (e) => e.name === 'InvalidPermissions' && /—/.test(e.message));
+  assert.equal(s.store.setGroup('7', settings({ active: true })).state.groups['7'].custom, true);
+});

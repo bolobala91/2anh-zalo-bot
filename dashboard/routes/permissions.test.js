@@ -37,7 +37,7 @@ test('Chủ bot xem và sửa được phân quyền (spec §6), có hiệu lự
   const saved = await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: owner, body: body({ active: false }, { web: false }) });
   assert.equal(saved.status, 200);
   assert.deepEqual(saved.json.groups[G], { name: 'Tổ Hoá', custom: true, active: false, replyOnlyTagged: true, features: { ...allOn(), web: false } });
-  assert.deepEqual(disk().groups[G], { name: 'Tổ Hoá', active: false, features: { web: false } });
+  assert.deepEqual(disk().groups[G], { name: 'Tổ Hoá', active: false, replyOnlyTagged: true, features: { web: false } }); // mặc định trong tệp chưa ghi cờ tag → ghi hẳn vào nhóm
 
   const log = deps.activity.list();
   assert.equal(log[0].actor, 'khach');
@@ -95,4 +95,22 @@ test('GET /api/groups: tên trùng ID thành tên dự phòng; bot tắt → 503
   const off = await down.call('/api/groups', { cookie: down.admin });
   assert.equal(off.status, 503);
   assert.match(off.json.error, /Kết nối Zalo đang tắt/);
+});
+
+test('Nhật ký hỏng không biến lần lưu thành công thành 500', async (t) => {
+  const { call, admin, disk, deps } = await ready(t);
+  deps.activity.append = () => { throw new Error('đĩa đầy'); };
+  const res = await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: admin, body: body({ active: false }) });
+  assert.equal(res.status, 200);
+  assert.equal(disk().groups[G].active, false);
+});
+
+test('quá 500 nhóm riêng → 400 có hướng dẫn; nhóm đã có vẫn sửa được', async (t) => {
+  const { call, admin, deps } = await ready(t);
+  for (let i = 1; i <= 500; i++) deps.permissions.setGroup(String(i), { active: false, replyOnlyTagged: true, features: allOn() });
+  const over = await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: admin, body: body({ active: false }) });
+  assert.equal(over.status, 400);
+  assert.match(over.json.error, /500.*—/);
+  const again = await call('/api/permissions/groups/1', { method: 'PUT', cookie: admin, body: body({ active: true }) });
+  assert.equal(again.status, 200);
 });

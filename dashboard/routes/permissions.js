@@ -47,7 +47,9 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity }
     try {
       const s = parseSettings(req.body);
       const state = permissions.setDefaults(s);
-      activity.append({ actor: req.user.username, action: 'permissions_defaults', detail: describeSettings(s) });
+      try {
+        activity.append({ actor: req.user.username, action: 'permissions_defaults', detail: describeSettings(s) });
+      } catch (err) { console.error('[dashboard] không ghi được Nhật ký phân quyền:', err); }
       res.json({ ok: true, features: FEATURES, ...state });
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
@@ -57,13 +59,15 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity }
     if (!GROUP_ID.test(groupId)) return res.status(400).json({ ok: false, error: 'Nhóm không hợp lệ — chọn lại từ danh sách.' });
     let s;
     try { s = parseSettings(req.body); } catch (err) { return fail(res, err, SAVE_FAIL); }
-    const name = (await threadNames.load()).get(groupId) || '';
     try {
+      const name = (await threadNames.load()).get(groupId) || '';
       const { state, changed } = permissions.setGroup(groupId, s, name);
-      activity.append({
-        actor: req.user.username, action: 'permissions_group',
-        detail: `${name || fallbackName(groupId, 1)}: ${changed.length ? describeSettings(s) : 'dùng mặc định'}`,
-      });
+      try {
+        activity.append({
+          actor: req.user.username, action: 'permissions_group',
+          detail: `${name || fallbackName(groupId, 1)}: ${changed.length ? describeSettings(s) : 'dùng mặc định'}`,
+        });
+      } catch (err) { console.error('[dashboard] không ghi được Nhật ký phân quyền:', err); }
       res.json({ ok: true, features: FEATURES, ...state });
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
