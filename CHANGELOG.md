@@ -2,6 +2,17 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.23.1] — 2026-10-07
+
+### Sửa (giao diện dashboard, rà theo UI/UX Pro Max)
+
+- **Nhắn riêng gọn lại:** chia 3 hộp (Ai được nhắn · Tính năng chung · Danh sách người). Mỗi người là một dòng gập có tóm tắt ("Riêng · 2 tính năng tắt"), bấm "Chỉnh" mới mở, mỗi lúc chỉ mở một người; ô thêm người gập sẵn; có lọc theo tên/UID và "Có chỉnh riêng". Trang 20 người từ ~6700px còn ~1900px.
+- **Thanh Lưu dính đáy** ở Phân quyền (nhắn riêng và nhóm): luôn thấy số thay đổi chưa lưu, có nút Hoàn tác. Cột danh sách nhóm đứng yên khi cuộn; khung nhóm chia 2 cột.
+- **Điện thoại:** thanh trên còn 4 mục chính + "Thêm ▾"; vùng bấm tối thiểu 44px; tiêu đề hội thoại không còn vỡ dòng.
+- **Nhật ký** viết thành câu dễ hiểu, chi tiết kỹ thuật gập vào "Chi tiết kỹ thuật", chỉ đánh dấu dòng lỗi.
+- **Sức khoẻ máy chủ:** dưới 4 ngày dữ liệu AI thì chỉ hiện số, biểu đồ 24 giờ có nhãn trục dọc và ghi rõ đã có dữ liệu bao lâu.
+- Chữ nhỏ nhất nâng lên 12,5px; phần bị tắt không còn làm mờ chữ giải thích; thẻ Tổng quan không còn khoảng trắng lớn.
+
 ## [1.23.0] — 2026-10-07
 
 ### Thêm
