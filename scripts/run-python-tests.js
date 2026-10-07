@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Chạy 7 test suite Python của repo (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_model_command.py, scripts/test_lay_token_facebook.py,
+// Chạy 8 test suite Python của repo (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_model_command.py, test_zalo_permissions.py, scripts/test_lay_token_facebook.py,
 // tts/test_vieneu_provider.py) mà `node --test` không bao giờ đụng tới.
 //
 // Dò Python theo thứ tự: biến PYTHON (nếu đặt, dùng đúng nó, không âm thầm rơi xuống lựa chọn
@@ -7,9 +7,9 @@
 // Hermes qua HERMES_HOME → python3 → python.
 // Không tìm thấy Python nào chạy được: cảnh báo rõ ràng rồi thoát 0, không làm hỏng `npm test`
 // trên máy khách chưa cài Python.
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { platform } from 'node:os';
+import { platform, tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveHermesLayout } from './hermes-install-lib.js';
@@ -53,8 +53,8 @@ function findPython() {
 const python = findPython();
 if (!python) {
   console.warn(
-    '[test:py] CẢNH BÁO: không tìm thấy Python khả dụng — BỎ QUA 6 test suite Python\n'
-    + '[test:py]   (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_model_command.py, scripts/test_lay_token_facebook.py, tts/test_vieneu_provider.py).\n'
+    '[test:py] CẢNH BÁO: không tìm thấy Python khả dụng — BỎ QUA 8 test suite Python\n'
+    + '[test:py]   (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_model_command.py, test_zalo_permissions.py, scripts/test_lay_token_facebook.py, tts/test_vieneu_provider.py).\n'
     + '[test:py]   Lớp phân quyền/bảo mật của hermes-plugin/zalo/adapter.py CHƯA được kiểm chứng trong lần chạy này.\n'
     + '[test:py]   Cài Python (hoặc đặt biến PYTHON) rồi chạy lại `npm run test:py` để test thật sự chạy.',
   );
@@ -71,12 +71,20 @@ const suites = [
   { label: 'test_zalo_pdf.py', module: 'test_zalo_pdf', cwd: REPO_ROOT, requires: 'import gateway, pymupdf, pdf2docx' },
   { label: 'test_zalo_academic.py', module: 'test_zalo_academic', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_model_command.py', module: 'test_zalo_model_command', cwd: REPO_ROOT, requires: 'import gateway, yaml' },
+  { label: 'test_zalo_permissions.py', module: 'test_zalo_permissions', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'scripts/test_lay_token_facebook.py', module: 'scripts.test_lay_token_facebook', cwd: REPO_ROOT },
   { label: 'tts/test_vieneu_provider.py', module: 'test_vieneu_provider', cwd: join(REPO_ROOT, 'tts') },
 ];
 
 let totalTests = 0;
 let anyFailed = false;
+
+// Test chạy với HERMES_HOME thật (để dùng venv của Hermes) nhưng không được đọc
+// permissions.json của bot đang chạy trên máy này: một nhóm bị tắt tính năng ở đó
+// sẽ làm đỏ test không liên quan. Trỏ plugin tới một tệp không tồn tại.
+const isolation = mkdtempSync(join(tmpdir(), 'zalo-py-tests-'));
+const testEnv = { ...process.env, ZALO_PERMISSIONS_FILE: join(isolation, 'permissions.json') };
+process.on('exit', () => rmSync(isolation, { recursive: true, force: true }));
 
 for (const suite of suites) {
   console.log(`\n[test:py] === ${suite.label} ===`);
@@ -90,6 +98,7 @@ for (const suite of suites) {
   const result = spawnSync(python, ['-m', 'unittest', suite.module, '-v'], {
     cwd: suite.cwd,
     encoding: 'utf8',
+    env: testEnv,
   });
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
