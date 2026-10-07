@@ -2,6 +2,25 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.21.0] — 2026-10-07
+
+### Thêm
+
+- **Dashboard: Phân quyền Bot theo nhóm.** Mỗi nhóm có công tắc Hoạt động, Chỉ trả lời khi được tag và 9 tính năng (tra cứu web, gửi và tạo tệp, tin nhắn thoại, nhắc hẹn, hẹn giờ cho nhóm, kho tài liệu, sổ người quen, tra cứu học thuật, video); có mục mặc định cho nhóm chưa chỉnh riêng. Quản trị và Chủ bot đều chỉnh được; mọi lần lưu ghi vào Nhật ký. Trang cảnh báo khi rời đi lúc còn thay đổi chưa lưu.
+- **Bot áp dụng phân quyền ngay khi lưu**, không cần khởi động lại: công cụ được kiểm tra đúng lúc gọi, nên thành viên nhờ việc thuộc tính năng đang tắt thì bot nói rõ nhóm chưa bật; chủ nhân không bao giờ bị chặn. Tắt "Hẹn giờ cho nhóm" chỉ chặn tạo việc mới.
+- **Nhóm tắt "Hoạt động":** bot không trả lời thành viên nhưng vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi, và biết "Nhóm này đang tắt".
+
+### Sửa
+
+- Hồ sơ người quen giờ thực sự được nạp (trước đó lệnh nạp mô-đun bị sai nên hồ sơ không bao giờ hiện).
+- Hồ sơ người quen được đóng khung là thông tin do chính người đó tự khai, không phải sự thật đã kiểm chứng.
+- `permissions.json` có BOM (ví dụ lưu bằng Notepad) vẫn đọc được.
+- Bản cài dở (chỉ cập nhật một phần tệp plugin) vẫn trả lời bình thường thay vì im lặng.
+
+### An toàn
+
+- Không có `permissions.json` → bot hoạt động y như bản trước. Tệp hỏng → bot dùng mặc định (mọi tính năng bật) và ghi cảnh báo, không bao giờ im lặng.
+
 ## [1.20.0] — 2026-10-07
 
 ### Thêm
