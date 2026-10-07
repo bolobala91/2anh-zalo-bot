@@ -2,10 +2,13 @@
 // Chỉ trả lời khi được tag và 9 nút tính năng. Lưu là có hiệu lực ngay.
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
-import { html, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
+import { html, Icon, Live, Notice, PageHead, Spinner, Toggle } from '../ui.js';
 import { fold } from '../fold.js';
+import { DmEditor, dmBadge } from './dm-permissions.js';
 
 export const DEFAULTS_KEY = 'defaults';
+// Mục "Nhắn riêng" ở đầu danh sách; mã nhóm Zalo luôn là số nên không trùng.
+export const DM_KEY = 'dm';
 const pick = (s) => ({ active: s.active, replyOnlyTagged: s.replyOnlyTagged, features: { ...s.features } });
 
 /**
@@ -41,14 +44,6 @@ export function groupBadge(g) {
   return g.custom ? { kind: 'idle', text: 'Chỉnh riêng' } : null;
 }
 
-function Toggle({ id, checked, onChange, label, hint }) {
-  return html`<div class="perm-row">
-    <label class="check" for=${id}><input id=${id} type="checkbox" checked=${checked}
-      aria-describedby=${hint ? `${id}-hint` : undefined} onChange=${(e) => onChange(e.currentTarget.checked)} />${label}</label>
-    ${hint ? html`<small id=${`${id}-hint`} class="muted">${hint}</small>` : null}
-  </div>`;
-}
-
 export const LEAVE_MSG = 'Bạn có thay đổi chưa lưu ở nhóm này. Bỏ thay đổi và chuyển nhóm?';
 export const SAVED_DEFAULT_MSG = 'Đã lưu — nhóm này đang dùng mặc định. Bot hiện không thấy nhóm này nên nhóm được ẩn khỏi danh sách.';
 
@@ -59,7 +54,7 @@ export function mayLeave(dirty, ask) {
 
 /** Sau khi lưu, nhóm còn trong danh sách không — nhóm chỉ có trong tệp, đưa về mặc định thì mất mục trong tệp. */
 export function staysListed(id, perms, groups) {
-  return id === DEFAULTS_KEY || Boolean(perms.groups[id]) || (groups || []).some((g) => g.id === id);
+  return id === DEFAULTS_KEY || id === DM_KEY || Boolean(perms.groups[id]) || (groups || []).some((g) => g.id === id);
 }
 
 function Editor({ target, value, defaults, features, onSaved, onBack, onDirty }) {
@@ -93,7 +88,7 @@ function Editor({ target, value, defaults, features, onSaved, onBack, onDirty })
     </header>
     <p class="muted small perm-note">${isGroup
       ? 'Chỉ áp cho thành viên trong nhóm này. Chủ nhân bot luôn dùng được mọi tính năng.'
-      : 'Áp cho mọi nhóm. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng không theo bảng này.'}</p>
+      : 'Áp cho mọi nhóm. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng chỉnh ở mục Nhắn riêng.'}</p>
     <fieldset class="perm-set">
       <legend>Cách bot trả lời</legend>
       <${Toggle} id=${`${p}-active`} checked=${draft.active} onChange=${(v) => set({ active: v })} label="Hoạt động"
@@ -116,7 +111,7 @@ function Editor({ target, value, defaults, features, onSaved, onBack, onDirty })
   </form>`;
 }
 
-export function Permissions() {
+export function Permissions({ me }) {
   const [perms, setPerms] = useState(null);
   const [groups, setGroups] = useState(null);
   const [groupsError, setGroupsError] = useState('');
@@ -185,11 +180,11 @@ export function Permissions() {
   };
 
   return html`
-    <${PageHead} title="Phân quyền Bot" sub="Chọn bot được làm gì trong từng nhóm. Lưu là có hiệu lực ngay." />
+    <${PageHead} title="Phân quyền Bot" sub="Chọn ai được nhắn riêng với bot và bot được làm gì trong từng nhóm. Lưu là có hiệu lực ngay." />
     ${perms.corrupt ? html`<${Notice} kind="warn">Tệp phân quyền bị hỏng nên bot đang dùng mặc định (mọi tính năng bật). Lưu lại một mục bất kỳ để ghi tệp mới.<//>` : null}
     ${groupsError ? html`<${Notice} kind="warn">Chưa lấy được danh sách nhóm: ${groupsError} Danh sách dưới đây chỉ có nhóm đã chỉnh trước đó hoặc đã có trong Phiên chat.<//>` : null}
     <${Live} ok=${flash} />
-    <div class=${`perm${target ? ' has-sel' : ''}`}>
+    <div class=${`perm${target || selected === DM_KEY ? ' has-sel' : ''}`}>
       <section class="card perm-list" aria-label="Nhóm">
         <div class="chat-search">
           <label for="perm-q" class="sr-only">Lọc nhóm theo tên</label>
@@ -197,6 +192,12 @@ export function Permissions() {
             onInput=${(e) => setQuery(e.currentTarget.value)} />
         </div>
         <ul class="conv-list">
+          <li><button type="button" class=${`conv${selected === DM_KEY ? ' active' : ''}`}
+            aria-current=${selected === DM_KEY ? 'true' : undefined} onClick=${() => choose(DM_KEY)}>
+            <span class="conv-top"><span class="conv-name"><${Icon} name="user" size=${16} /> Nhắn riêng</span>
+              <span class=${`badge badge-${dmBadge(perms.dm).kind}`}>${dmBadge(perms.dm).text}</span></span>
+            <span class="conv-preview">Ai được nhắn riêng với bot và bot được làm gì trong tin nhắn riêng.</span>
+          </button></li>
           <li><button type="button" class=${`conv${selected === DEFAULTS_KEY ? ' active' : ''}`}
             aria-current=${selected === DEFAULTS_KEY ? 'true' : undefined} onClick=${() => choose(DEFAULTS_KEY)}>
             <span class="conv-top"><span class="conv-name"><${Icon} name="shield" size=${16} /> Mặc định cho nhóm mới</span></span>
@@ -215,11 +216,14 @@ export function Permissions() {
         ${list.length && !shown.length ? html`<p class="muted small">Không có nhóm nào trùng tên — xoá bớt chữ trong ô lọc.</p>` : null}
         ${!list.length && !groupsError ? html`<p class="muted small">Bot chưa ở nhóm nào — thêm bot vào nhóm Zalo rồi tải lại trang.</p>` : null}
       </section>
-      <section class="card perm-edit" aria-label="Quyền của nhóm">
-        ${target
+      <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : 'Quyền của nhóm'}>
+        ${selected === DM_KEY
+          ? html`<${DmEditor} key=${DM_KEY} dm=${perms.dm} features=${perms.dmFeatures} admin=${me?.role === 'admin'}
+              onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} />`
+          : target
           ? html`<${Editor} key=${target.id} target=${target} value=${pick(target)}
               defaults=${pick(perms.defaults)} features=${perms.features} onSaved=${onSaved} onDirty=${setDirty} onBack=${() => choose(null)} />`
-          : html`<p class="muted chat-empty">Chọn "Mặc định" hoặc một nhóm bên trái để chỉnh.</p>`}
+          : html`<p class="muted chat-empty">Chọn "Nhắn riêng", "Mặc định" hoặc một nhóm bên trái để chỉnh.</p>`}
       </section>
     </div>`;
 }

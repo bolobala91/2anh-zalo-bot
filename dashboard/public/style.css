@@ -319,6 +319,16 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
 .perm-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .perm-row:last-child { border-bottom: 0; }
 .perm-row small { padding-left: 26px; }
+.check input[type="radio"] { accent-color: var(--brand); }
+.dm-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.dm-add input, .dm-add select { flex: 1 1 180px; min-width: 0; }
+.dm-add .btn { flex: none; }
+.dm-add-error { color: var(--danger); min-height: 1em; margin: 6px 0 0; }
+.dm-people { list-style: none; margin: 8px 0 0; padding: 0; }
+.dm-person { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.dm-person:last-child { border-bottom: 0; }
+.dm-person-head { display: flex; align-items: center; gap: 12px; }
+.dm-person-features { margin-left: 26px; padding-left: 12px; border-left: 2px solid var(--border); }
 
 /* ---------- Thương hiệu ---------- */
 .logo-img { object-fit: contain; background: transparent; }

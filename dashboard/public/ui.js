@@ -76,6 +76,15 @@ export function PoweredBy({ brand }) {
   return brand?.poweredBy ? html`<p class="powered">Vận hành bởi 2Anh AI</p>` : null;
 }
 
+/** Ô bật/tắt có nhãn và dòng gợi ý (Phân quyền Bot: nhóm và nhắn riêng). */
+export function Toggle({ id, checked, onChange, label, hint }) {
+  return html`<div class="perm-row">
+    <label class="check" for=${id}><input id=${id} type="checkbox" checked=${checked}
+      aria-describedby=${hint ? `${id}-hint` : undefined} onChange=${(e) => onChange(e.currentTarget.checked)} />${label}</label>
+    ${hint ? html`<small id=${`${id}-hint`} class="muted">${hint}</small>` : null}
+  </div>`;
+}
+
 export function PageHead({ title, sub }) {
   return html`<header class="page-head"><h1>${title}</h1>${sub ? html`<p class="muted">${sub}</p>` : null}</header>`;
 }

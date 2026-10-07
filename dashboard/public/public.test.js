@@ -147,6 +147,7 @@ test('phân quyền: hỏi trước khi bỏ thay đổi chưa lưu; nhóm chỉ
   assert.equal(LEAVE_MSG, 'Bạn có thay đổi chưa lưu ở nhóm này. Bỏ thay đổi và chuyển nhóm?');
   const perms = { groups: { '300': {} } };
   assert.equal(staysListed(DEFAULTS_KEY, perms, []), true);
+  assert.equal(staysListed('dm', perms, []), true, 'mục Nhắn riêng luôn còn');
   assert.equal(staysListed('300', perms, []), true, 'còn mục trong tệp');
   assert.equal(staysListed('200', perms, [{ id: '200' }]), true, 'bot còn thấy nhóm');
   assert.equal(staysListed('400', perms, []), false, 'chỉ có trong tệp, vừa về mặc định');
@@ -208,4 +209,47 @@ test('Tổng quan: lỗi gần nhất thành câu dễ hiểu có bước tiếp
     assert.notEqual(r.text, unknown.text, code);
     assert.doesNotMatch(`${r.text} ${r.next}`, /log|sidecar|bridge|toolset/i, code);
   }
+});
+
+test('nhắn riêng: bản nháp, thân gửi đi, thêm người (kiểm UID, trùng), gợi ý từ Phiên chat, nhãn danh sách', async () => {
+  const { dmDraft, dmPayload, sameDm, addPerson, suggestions, dmBadge, WHO_OPTIONS } = await import('./views/dm-permissions.js');
+  const on = { web: true, files: true, voice: true, reminders: true, kb: true, people: true, academic: true, video: true };
+  const dm = { who: 'list', explicit: true, gatewayOpen: true, features: { ...on, video: false },
+    people: [{ uid: '1234567890123456', name: 'Cô Lan', custom: true, features: { ...on, voice: false } }] };
+  const d = dmDraft(dm);
+  d.features.web = false;
+  assert.equal(dm.features.web, true, 'không sửa nhầm vào dữ liệu máy chủ');
+  assert.equal(sameDm(dmDraft(dm), dm), true);
+  assert.equal(sameDm(d, dm), false);
+  const added = addPerson(dmDraft(dm), ' 2234567890123456 ', 'Thầy Nam');
+  assert.equal(added.error, undefined);
+  assert.deepEqual(dmPayload(added.draft).people, [
+    { uid: '1234567890123456', name: 'Cô Lan', features: { ...on, voice: false } },
+    { uid: '2234567890123456', name: 'Thầy Nam', features: null },
+  ]);
+  assert.match(addPerson(d, '0912345678').error, /không phải số điện thoại — .*\/sethome/);
+  assert.match(addPerson(d, '1234567890123456').error, /đã có trong danh sách/);
+  const full = { ...d, people: Array.from({ length: 200 }, (_, i) => ({ uid: String(3234567890123456n + BigInt(i)) })) };
+  assert.match(addPerson(full, '2234567890123456').error, /tối đa 200/);
+  assert.deepEqual(suggestions([
+    { threadId: '1234567890123456', threadType: 0, name: 'Cô Lan' },
+    { threadId: '5234567890123456', threadType: 0, name: 'Khách' },
+    { threadId: '2054797107487294899', threadType: 1, name: 'Nhóm' },
+  ], d), [{ uid: '5234567890123456', name: 'Khách' }]);
+  assert.deepEqual(dmBadge(dm), { kind: 'ok', text: '1 người' });
+  assert.deepEqual(dmBadge({ ...dm, who: 'owners' }), { kind: 'idle', text: 'Chỉ chủ nhân' });
+  assert.deepEqual(WHO_OPTIONS.map((o) => o.value), ['owners', 'list', 'everyone']);
+});
+
+test('nhắn riêng: tên người lấy từ Phiên chat và người dùng dashboard có UID Zalo', async () => {
+  const { knownNames, suggestions, dmDraft } = await import('./views/dm-permissions.js');
+  const on = { web: true, files: true, voice: true, reminders: true, kb: true, people: true, academic: true, video: true };
+  const d = dmDraft({ who: 'list', features: on, people: [{ uid: '1234567890123456', name: '', custom: false, features: on }] });
+  const chats = [{ threadId: '5234567890123456', threadType: 0, name: 'Khách' }];
+  const users = [{ username: 'lan', zaloUid: '1234567890123456' }, { username: 'nam', zaloUid: '6234567890123456' },
+    { username: 'khach', zaloUid: '5234567890123456' }, { username: 'admin', zaloUid: '' }];
+  const names = knownNames(chats, users);
+  assert.equal(names.get('1234567890123456'), 'lan');
+  assert.equal(names.get('5234567890123456'), 'Khách', 'Phiên chat đứng trước tên đăng nhập');
+  assert.deepEqual(suggestions(chats, d, users), [{ uid: '5234567890123456', name: 'Khách' }, { uid: '6234567890123456', name: 'nam' }]);
 });
