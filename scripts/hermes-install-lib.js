@@ -1,6 +1,6 @@
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, cpSync,
-  renameSync, rmSync,
+  renameSync, rmSync, statSync,
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { homedir, platform } from 'node:os';
@@ -530,7 +530,34 @@ function addDashboardChecks(add, { layout, root, commandProbe, hostPlatform }) {
     add('dashboard-restart', true, missing.length
       ? `chưa có dịch vụ ${missing.map(([s]) => s).join(', ')} — đặt ${missing.map(([, v]) => v).join('/')} trong .env của bot để nút khởi động lại chạy được`
       : 'khởi động lại được kết nối Zalo và trợ lý từ dashboard');
+    const readable = permissionsReadableDetail(paths.permissionsFile, { commandProbe });
+    if (readable) add('permissions-readable', true, readable);
   }
+}
+
+/**
+ * Linux: user chạy dịch vụ hermes-gateway có đọc được permissions.json không (dashboard ghi tệp quyền 600,
+ * nên chạy dashboard dưới user khác là bot không đọc được và lặng lẽ dùng mặc định). Chỉ cảnh báo.
+ * Trả chuỗi chi tiết, hoặc null khi chưa có tệp.
+ */
+export function permissionsReadableDetail(file, { commandProbe = spawnSync, stat = statSync } = {}) {
+  if (!existsSync(file)) return null;
+  const opts = { encoding: 'utf8', timeout: 5000, windowsHide: true };
+  const run = (cmd, args) => { try { return commandProbe(cmd, args, opts); } catch { return null; } };
+  const svc = run('systemctl', ['show', '-p', 'User', '--value', 'hermes-gateway']);
+  if (svc?.status !== 0) return 'chưa kiểm được — không đọc được dịch vụ hermes-gateway';
+  const user = String(svc.stdout || '').trim() || 'root';
+  if (user === 'root') return 'hermes-gateway chạy bằng root — đọc được tệp phân quyền';
+  const uid = run('id', ['-u', user]);
+  const gids = run('id', ['-G', user]);
+  if (uid?.status !== 0 || gids?.status !== 0) return `chưa kiểm được — không tra được user ${user} của hermes-gateway`;
+  const st = stat(file);
+  const groups = String(gids.stdout || '').trim().split(/\s+/).map(Number);
+  const bits = st.uid === Number(String(uid.stdout || '').trim()) ? 0o400 : groups.includes(st.gid) ? 0o040 : 0o004;
+  return (st.mode & bits)
+    ? `hermes-gateway (user ${user}) đọc được tệp phân quyền`
+    : `CẢNH BÁO: hermes-gateway chạy bằng user ${user} nhưng không đọc được ${file} — bot đang bỏ qua Phân quyền Bot. `
+      + `Chạy dashboard bằng cùng user với hermes-gateway, rồi chown ${user} tệp này`;
 }
 
 export async function installHermes({

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,7 @@ import {
   renderPlatformManifest,
   installHermes as installHermesReal,
   doctorHermes,
+  permissionsReadableDetail,
   uninstallHermes as uninstallHermesReal,
 } from './hermes-install-lib.js';
 
@@ -399,4 +400,27 @@ test('doctorHermes trên Linux: thiếu dịch vụ systemd cho nút khởi đ�
   // Windows không có kiểm tra này.
   const win = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, commandProbe: probe([]), hostPlatform: 'win32' });
   assert.equal(win.checks.find((c) => c.name === 'dashboard-restart'), undefined);
+});
+
+test('doctor (Linux): cảnh báo khi user của hermes-gateway không đọc được permissions.json', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'perm-readable-'));
+  const file = join(dir, 'permissions.json');
+  assert.equal(permissionsReadableDetail(file, { commandProbe: () => { throw new Error('không được gọi'); } }), null);
+  writeFileSync(file, '{}');
+  const runner = (user, { uid = '1001', groups = '1001 27' } = {}) => (cmd, args) => {
+    if (cmd === 'systemctl') return user === null ? { status: 1 } : { status: 0, stdout: `${user}\n` };
+    if (cmd === 'id') return { status: 0, stdout: `${args[0] === '-u' ? uid : groups}\n` };
+    return { status: 1 };
+  };
+  const stat = (mode, uid, gid) => () => ({ mode, uid, gid });
+  const detail = (user, st, ids) => permissionsReadableDetail(file, { commandProbe: runner(user, ids), stat: st });
+  // Dashboard chạy bằng user khác ghi tệp 600 → gateway không đọc được.
+  assert.match(detail('hermes', stat(0o100600, 1000, 1000)), /CẢNH BÁO: .*user hermes .*không đọc được/);
+  assert.match(detail('hermes', stat(0o100600, 1001, 1000)), /đọc được tệp phân quyền/);
+  assert.match(detail('hermes', stat(0o100640, 1000, 27)), /đọc được tệp phân quyền/);
+  // Chủ tệp chỉ xét bit của chủ, dù bit "người khác" cho đọc.
+  assert.match(detail('hermes', stat(0o100004, 1001, 1001)), /CẢNH BÁO/);
+  assert.match(detail('', stat(0o100600, 1000, 1000)), /root — đọc được/);
+  assert.match(detail(null, stat(0o100600, 1000, 1000)), /chưa kiểm được/);
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
 });

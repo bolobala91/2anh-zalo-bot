@@ -145,6 +145,8 @@ The installer also sets up a separate web dashboard (service `zalo-dashboard`, l
 
 Phase 2 adds **Chats** (conversation list with full-text search, message view with the bot's messages on the right, scroll up for older messages, and a compose box that sends as the bot — 10 messages per minute per user, existing conversations only) and **Activity log** (bot actions merged with dashboard actions, "errors only" filter; admins also see technical codes). The dashboard reads the bot's message history read-only, so it stays visible while the Zalo connection is down. The Overview now shows today's message counts and the five busiest groups.
 
+Phase 3 adds **Bot permissions**: per-group switches stored in `<HERMES_HOME>/zalo/permissions.json` — *Active*, *Reply only when tagged*, and nine features (web search, files, voice, reminders, group schedules, knowledge base, people notes, academic search, video), plus a default for groups without their own entry. Saving takes effect on the bot's next turn without a restart: the Hermes plugin re-reads the file when it changes, refuses member tool calls for disabled features with a plain Vietnamese reason, and tells the model which features are off. The bot owner (`ZALO_ALLOWED_USERS`) is never restricted by this file, direct messages are not affected, and a missing or corrupt file means everything is on. The page warns before you leave with unsaved changes.
+
 ## Configuration
 
 The installer manages these Hermes configuration areas without overwriting explicit customer values:

@@ -27,6 +27,8 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from . import group_permissions
+
 logger = logging.getLogger(__name__)
 
 # Hai toolset, hai mức quyền.
@@ -277,6 +279,26 @@ def _cron_turn(kw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "text": "",
         "cron_job_id": job_id,
     }
+
+
+def group_cron_creator(job_id: str) -> Optional[str]:
+    """UID người tạo nếu ``job_id`` là việc hẹn giờ nhóm (``zalo_scope = "group"``).
+
+    None: không phải việc hẹn giờ nhóm (job cron gốc của chủ nhân, job không còn,
+    không đọc được job). Chuỗi rỗng: mang dấu cron nhóm nhưng thiếu người tạo.
+    Adapter dùng để không gửi kết quả vào nhóm đang tắt "Hoạt động".
+    """
+    job_id = str(job_id or "").strip()
+    if not job_id:
+        return None
+    try:
+        job = _cron_jobs().get_job(job_id)
+    except Exception as exc:
+        logger.warning("[zalo] không đọc được job cron %s: %s", job_id, exc)
+        return None
+    if not job or not _is_group_cron(job):
+        return None
+    return str(job["origin"].get("zalo_creator_uid") or "")
 
 
 def _with_cron_turn(handler, tool_name: str):
@@ -3507,6 +3529,48 @@ def _mcp_open_to_members(name: str, toolset: str) -> bool:
     )
 
 
+def _group_feature_block(turn: Dict[str, Any], name: str, args: Any) -> Optional[Dict[str, str]]:
+    """Lượt của thành viên trong nhóm gọi công cụ thuộc nút đang tắt ở nhóm đó → chặn.
+
+    Đọc ``permissions.json`` qua group_permissions (đọc lại khi tệp đổi). Chỉ áp
+    trong nhóm: tin nhắn riêng không có bảng quyền nhóm nào. ``zalo_group_cron``
+    chỉ bị chặn khi tạo mới — xem và xoá việc đã có vẫn được (spec §8.3).
+    """
+    if not turn.get("is_group"):
+        return None
+    real, real_args = name, args if isinstance(args, dict) else {}
+    if name == "tool_call":
+        try:
+            from tools.tool_search import resolve_underlying_call
+
+            real, real_args, error = resolve_underlying_call(real_args)
+        except Exception:
+            return None  # _member_may_call tự từ chối tool_call không tháo được
+        if error or not real:
+            return None
+        if not isinstance(real_args, dict):
+            real_args = {}
+    feature = group_permissions.feature_of(real)
+    if feature is None:
+        return None
+    if feature == "groupCron" and str((real_args or {}).get("action") or "").strip().lower() != "create":
+        return None
+    try:
+        if group_permissions.group_settings(str(turn.get("thread_id") or ""))["features"][feature]:
+            return None
+    except Exception as exc:  # đọc quyền hỏng không được làm hỏng lượt
+        logger.warning("[zalo] không đọc được quyền nhóm: %s", exc)
+        return None
+    label = group_permissions.FEATURE_LABELS[feature]
+    logger.info("[zalo] chặn %s — nhóm %s đang tắt %s", real, turn.get("thread_id"), feature)
+    return {
+        "action": "block",
+        "message": (f"Nhóm này chưa bật tính năng {label}. Hãy nói ngắn gọn với người hỏi rằng "
+                    f"chủ bot đã tắt {label} trong nhóm này; đừng gọi lại công cụ này và đừng "
+                    "dùng công cụ khác để làm thay."),
+    }
+
+
 def guard_member_tool_call(tool_name: str = "", args: Any = None, **_kw) -> Optional[Dict[str, str]]:
     """Hook ``pre_tool_call``: lượt không phải của riêng chủ nhân chỉ chạy được công cụ công khai.
 
@@ -3525,6 +3589,9 @@ def guard_member_tool_call(tool_name: str = "", args: Any = None, **_kw) -> Opti
     if (turn.get("is_owner") or turn.get("core_tools")) and not _outsider_spoke_after(turn):
         return None
     name = str(tool_name or "")
+    blocked = _group_feature_block(turn, name, args)
+    if blocked:
+        return blocked
     if _member_may_call(name, args):
         return None
     logger.warning("[zalo] chặn %s — lượt của %s không phải của riêng chủ nhân", name, turn.get("sender_uid"))
@@ -3534,12 +3601,23 @@ def guard_member_tool_call(tool_name: str = "", args: Any = None, **_kw) -> Opti
     # Nói luôn đường đi đúng: model chỉ nhìn thấy công cụ lõi đã bị ghim vào
     # phiên, còn công cụ Zalo công khai thì nằm sau tool_search — bị chặn mà
     # không được chỉ chỗ thì nó bỏ cuộc và trả lời "không tra được".
+    # Không gợi ý công cụ thuộc nút đang tắt ở nhóm này — gợi ý xong lại bị chặn.
+    off: set = set()
+    if turn.get("is_group"):
+        try:
+            off = set(group_permissions.disabled_features(str(turn.get("thread_id") or "")))
+        except Exception as exc:
+            logger.warning("[zalo] không đọc được quyền nhóm: %s", exc)
+    hints = ", ".join(text for feature, text in (
+        ("kb", "cần tra tài liệu thì dùng zalo_kb_list rồi zalo_kb_read"),
+        ("files", "cần gửi tệp thì zalo_send_file"),
+        (None, "cần xem lại tin cũ thì zalo_read_history"),
+    ) if feature not in off)
     return {
         "action": "block",
         "message": (f"Công cụ {name} chỉ dùng được trong lượt của riêng chủ nhân ({reason}). "
-                    "Cần tra tài liệu thì dùng zalo_kb_list rồi zalo_kb_read, cần gửi tệp thì "
-                    "zalo_send_file, cần xem lại tin cũ thì zalo_read_history — tìm bằng "
-                    "tool_search nếu chưa thấy. Đừng gọi lại công cụ này."),
+                    f"{hints[:1].upper()}{hints[1:]} — tìm bằng tool_search nếu chưa thấy. "
+                    "Đừng gọi lại công cụ này."),
     }
 
 

@@ -104,3 +104,48 @@ test('index.html không tải tài nguyên từ Internet', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   assert.doesNotMatch(html, /(src|href)=["']https?:/);
 });
+
+test('phân quyền: gộp nhóm của bot với tệp, so thay đổi, nhãn trong danh sách', async () => {
+  const { mergeGroups, sameSettings, groupBadge } = await import('./views/permissions.js');
+  const on = { web: true, kb: true };
+  const perms = {
+    defaults: { active: true, replyOnlyTagged: true, features: on },
+    groups: {
+      '300': { name: 'Tổ Hoá', custom: true, active: true, replyOnlyTagged: false, features: { web: false, kb: true } },
+      '400': { name: '', custom: true, active: false, replyOnlyTagged: true, features: on },
+    },
+  };
+  const list = mergeGroups([{ id: '200', name: 'Đoàn trường', members: 40 }, { id: '300', name: 'Tổ Hoá mới', members: 12 }], perms);
+  assert.deepEqual(list.map((g) => [g.id, g.name, g.members, g.custom]), [
+    ['200', 'Đoàn trường', 40, false], ['300', 'Tổ Hoá mới', 12, true], ['400', 'Nhóm …400', null, true],
+  ]);
+  assert.deepEqual(list[0].features, on);
+  assert.equal(list[1].replyOnlyTagged, false);
+  list[0].features.web = false;
+  assert.equal(perms.defaults.features.web, true, 'không sửa nhầm vào mặc định');
+  assert.equal(sameSettings(perms.defaults, { active: true, replyOnlyTagged: true, features: { kb: true, web: true } }), true);
+  assert.equal(sameSettings(perms.defaults, { active: true, replyOnlyTagged: true, features: { kb: true, web: false } }), false);
+  assert.deepEqual(groupBadge(list[2]), { kind: 'danger', text: 'Đang tắt' });
+  assert.deepEqual(groupBadge(list[1]), { kind: 'warn', text: 'Tắt 1 tính năng' });
+  assert.equal(groupBadge({ active: true, custom: false, features: on }), null);
+  assert.deepEqual(groupBadge({ active: true, custom: true, features: on }), { kind: 'idle', text: 'Chỉnh riêng' });
+  const same = mergeGroups([], { defaults: perms.defaults, groups: { '500': { name: 'Tổ Văn', custom: true, ...perms.defaults } } });
+  assert.equal(same[0].custom, false, 'mục trong tệp trùng hẳn mặc định thì không hiện "Chỉnh riêng"');
+});
+
+test('phân quyền: hỏi trước khi bỏ thay đổi chưa lưu; nhóm chỉ còn trong tệp về mặc định thì rời danh sách', async () => {
+  const { mayLeave, staysListed, LEAVE_MSG, DEFAULTS_KEY } = await import('./views/permissions.js');
+  const asked = [];
+  const ask = (answer) => (m) => { asked.push(m); return answer; };
+  assert.equal(mayLeave(false, ask(false)), true);
+  assert.deepEqual(asked, [], 'không có thay đổi thì không hỏi');
+  assert.equal(mayLeave(true, ask(false)), false);
+  assert.equal(mayLeave(true, ask(true)), true);
+  assert.deepEqual(asked, [LEAVE_MSG, LEAVE_MSG]);
+  assert.equal(LEAVE_MSG, 'Bạn có thay đổi chưa lưu ở nhóm này. Bỏ thay đổi và chuyển nhóm?');
+  const perms = { groups: { '300': {} } };
+  assert.equal(staysListed(DEFAULTS_KEY, perms, []), true);
+  assert.equal(staysListed('300', perms, []), true, 'còn mục trong tệp');
+  assert.equal(staysListed('200', perms, [{ id: '200' }]), true, 'bot còn thấy nhóm');
+  assert.equal(staysListed('400', perms, []), false, 'chỉ có trong tệp, vừa về mặc định');
+});

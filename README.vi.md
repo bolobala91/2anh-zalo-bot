@@ -456,6 +456,18 @@ Mục **Nhật ký** ghi ai đã làm gì: tin bot gửi, việc bot làm theo l
 
 Trang **Tổng quan** có thẻ "Tin nhắn hôm nay" (số tin nhận và gửi từ 0 giờ giờ Việt Nam) và 5 nhóm sôi nổi nhất hôm nay.
 
+### Phân quyền Bot
+
+Mục **Phân quyền Bot** chọn bot được làm gì trong từng nhóm. Bên trái là **Mặc định cho nhóm mới** và danh sách nhóm bot đang ở. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Bên phải là:
+
+- **Hoạt động** — tắt thì bot không trả lời thành viên trong nhóm đó (vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi). Việc hẹn giờ do thành viên tạo không còn gửi tin chữ vào nhóm đang tắt; muốn dừng hẳn, nhờ chủ nhân xoá việc đó. Việc hẹn giờ chủ nhân tạo vẫn gửi bình thường.
+- **Chỉ trả lời khi được tag** — tắt thì bot trả lời mọi tin trong nhóm. Khi chưa lưu lần nào, mục Mặc định hiện đúng cờ `ZALO_GROUP_REPLY_ONLY_TAGGED` bot đang dùng (đọc từ `.env` và `config.yaml` của Hermes); lần Lưu đầu tiên ghi giá trị đó vào Mặc định.
+- Chín tính năng: Tra cứu web, Gửi và tạo tệp, Tin nhắn thoại, Nhắc hẹn, Hẹn giờ cho nhóm, Kho tài liệu, Sổ người quen, Tra cứu học thuật, Video. Gửi nhãn dán, gửi liên kết và xem thành viên nhóm luôn bật.
+
+Bấm **Lưu** là bot áp dụng ngay, không cần khởi động lại. Thành viên nhờ việc thuộc tính năng đang tắt thì bot trả lời rằng nhóm chưa bật tính năng đó. **Chủ nhân bot luôn dùng được mọi thứ**, kể cả trong nhóm đang tắt. Tắt "Hẹn giờ cho nhóm" chỉ chặn tạo việc mới — việc đã tạo vẫn chạy và vẫn xem, xoá được. Tin nhắn riêng không theo bảng này.
+
+Bảng nằm ở `<HERMES_HOME>/zalo/permissions.json` (bản trước ở `permissions.json.bak`). Xoá tệp này thì bot trở lại như khi chưa có phân quyền. Tệp hỏng thì bot dùng mặc định (mọi tính năng bật) và dashboard báo để lưu lại.
+
 ### Kiểm tay sau khi cài (Giai đoạn 1)
 
 - [ ] `npm run doctor` không có dòng `[FAIL]`; `dashboard-running` báo "đang chạy".
@@ -477,6 +489,17 @@ Trang **Tổng quan** có thẻ "Tin nhắn hôm nay" (số tin nhận và gửi
 - [ ] Nhật ký có dòng "Nhắn tay từ dashboard" kèm tên mình; "Chỉ hiện lỗi" lọc đúng.
 - [ ] Tài khoản Chủ bot dùng được Phiên chat và Nhật ký, không thấy mã kỹ thuật.
 - [ ] Tắt kết nối Zalo của bot (dừng dịch vụ hoặc tiến trình): Phiên chat vẫn xem được; gửi tin báo lỗi tiếng Việt.
+
+### Kiểm tay sau khi cài (Giai đoạn 3)
+
+- [ ] Mục "Phân quyền Bot" hiện danh sách nhóm đúng tên, có cả mục "Mặc định cho nhóm mới".
+- [ ] Tắt "Tra cứu web" ở nhóm thử, Lưu; một thành viên tag bot nhờ tra web → bot nói nhóm chưa bật tính năng này. Chủ nhân nhờ y hệt → bot vẫn tra.
+- [ ] Tắt "Hoạt động" ở nhóm thử: thành viên tag bot → bot im; chủ nhân tag → bot trả lời.
+- [ ] Tắt "Chỉ trả lời khi được tag" ở nhóm thử: thành viên nhắn không tag → bot trả lời.
+- [ ] Nhật ký có dòng "Đổi phân quyền nhóm" kèm tên mình và tên nhóm.
+- [ ] Tài khoản Chủ bot chỉnh và lưu được phân quyền.
+- [ ] Bấm "Dùng mặc định" rồi Lưu → nhóm về như cũ, nhãn bên trái biến mất.
+- [ ] Sửa gì đó rồi bấm sang mục khác khi chưa lưu → dashboard hỏi có muốn bỏ thay đổi không.
 
 Gỡ cài đặt (`npm run uninstall:hermes`) cũng gỡ dịch vụ dashboard, nhưng giữ nguyên tài khoản và dữ liệu.
 

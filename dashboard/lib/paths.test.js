@@ -10,6 +10,7 @@ test('đường dẫn dựng từ HERMES_HOME và thư mục sidecar', () => {
   assert.equal(p.usersFile, join(resolve('/h'), 'zalo', 'dashboard', 'users.json'));
   assert.equal(p.permissionsFile, join(resolve('/h'), 'zalo', 'permissions.json'));
   assert.equal(p.hermesEnvFile, join(resolve('/h'), '.env'));
+  assert.equal(p.hermesConfigFile, join(resolve('/h'), 'config.yaml'));
   assert.equal(p.sqliteFile, join(resolve('/s'), 'data', 'zalo.sqlite'));
 });
 

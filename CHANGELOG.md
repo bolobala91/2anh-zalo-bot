@@ -2,6 +2,30 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.21.0] — 2026-10-07
+
+### Thêm
+
+- **Dashboard: Phân quyền Bot theo nhóm.** Mỗi nhóm có công tắc Hoạt động, Chỉ trả lời khi được tag và 9 tính năng (tra cứu web, gửi và tạo tệp, tin nhắn thoại, nhắc hẹn, hẹn giờ cho nhóm, kho tài liệu, sổ người quen, tra cứu học thuật, video); có mục Mặc định — nhóm chỉnh riêng chỉ giữ những mục khác mặc định, mục còn lại đi theo Mặc định. Quản trị và Chủ bot đều chỉnh được; mọi lần lưu ghi vào Nhật ký. Trang cảnh báo khi rời đi lúc còn thay đổi chưa lưu.
+- **Bot áp dụng phân quyền ngay khi lưu**, không cần khởi động lại: công cụ được kiểm tra đúng lúc gọi, và lượt của thành viên kèm một dòng "Nhóm này đang tắt: …" liệt kê tính năng đang tắt, nên bot không hứa việc mình không được làm; chủ nhân không bao giờ bị chặn. Tắt "Hẹn giờ cho nhóm" chỉ chặn tạo việc mới.
+- **Nhóm tắt "Hoạt động":** bot bỏ qua tin của thành viên (không trả lời) nhưng vẫn giữ làm ngữ cảnh khi chủ nhân hỏi. Việc hẹn giờ do thành viên tạo không còn gửi tin chữ vào nhóm đang tắt; muốn dừng hẳn, nhờ chủ nhân xoá việc đó. Việc chủ nhân hẹn vẫn gửi.
+
+### Sửa
+
+- Hồ sơ người quen giờ thực sự được nạp (trước đó lệnh nạp mô-đun bị sai nên hồ sơ không bao giờ hiện).
+- Hồ sơ người quen được đóng khung là thông tin do chính người đó tự khai, không phải sự thật đã kiểm chứng.
+- `permissions.json` có BOM (ví dụ lưu bằng Notepad) vẫn đọc được.
+- Bản cài dở (chỉ cập nhật một phần tệp plugin) vẫn trả lời bình thường thay vì im lặng.
+- Tắt một tính năng trong nhóm không còn âm thầm đổi cách trả lời khi được tag: dashboard đọc cờ `ZALO_GROUP_REPLY_ONLY_TAGGED` đúng chỗ bot đọc (`.env` và `config.yaml` của Hermes), lần lưu đầu ghi cờ đó vào Mặc định một lần, không ghi vào từng nhóm. Tệp đã lưu bằng bản trước được dọn khi lưu lại mà không đổi hành vi.
+- Dashboard cũng đọc được `permissions.json` có BOM.
+- Nhóm tắt "Sổ người quen": bot không kèm hồ sơ người nhắn vào lượt của thành viên; câu từ chối công cụ không gợi ý công cụ thuộc tính năng đang tắt.
+- Bot không đọc được `permissions.json` vì quyền tệp thì log ERROR nói rõ, không gọi là tệp hỏng; `npm run doctor` trên Linux cảnh báo khi user chạy hermes-gateway không đọc được tệp này.
+- Lưu phân quyền trên Windows thử lại khi tệp đang bị khoá tạm.
+
+### An toàn
+
+- Không có `permissions.json` → bot hoạt động y như bản trước. Tệp hỏng → bot dùng mặc định (mọi tính năng bật) và ghi cảnh báo, không bao giờ im lặng.
+
 ## [1.20.0] — 2026-10-07
 
 ### Thêm

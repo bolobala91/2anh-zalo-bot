@@ -300,6 +300,21 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
 .audit-table td:first-child { white-space: nowrap; }
 .load-more { margin-top: 12px; }
 
+/* ---------- Phân quyền Bot ---------- */
+.perm { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: start; }
+.perm > .card { margin: 0; display: flex; flex-direction: column; min-height: 0; }
+.perm-list { max-height: calc(100vh - 190px); }
+.perm-list .conv-name .icon { margin-right: 4px; }
+.perm-list .conv-top { align-items: center; }
+.perm-list .badge { flex: none; white-space: nowrap; padding: 2px 8px; font-size: 12.5px; }
+.perm-note { margin-top: 12px; }
+.perm-set { border: 1px solid var(--border); border-radius: 10px; margin: 14px 0; padding: 6px 14px 10px; min-width: 0; }
+.perm-set legend { padding: 0 6px; font-weight: 650; font-size: 14px; }
+.perm-set:disabled { opacity: .6; }
+.perm-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.perm-row:last-child { border-bottom: 0; }
+.perm-row small { padding-left: 26px; }
+
 /* ---------- Điện thoại ---------- */
 @media (max-width: 760px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -325,6 +340,9 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
   .chat-list { max-height: calc(100vh - 220px); }
   .chat-thread { height: calc(100vh - 240px); height: calc(100dvh - 240px); min-height: 400px; }
   .only-mobile { display: inline-flex; }
+  .perm { grid-template-columns: minmax(0, 1fr); }
+  .perm.has-sel .perm-list, .perm:not(.has-sel) .perm-edit { display: none; }
+  .perm-list { max-height: none; }
   .msg { max-width: 90%; }
 
   /* Bảng → thẻ xếp chồng (vẫn là <table> cho trình đọc màn hình) */

@@ -11,6 +11,7 @@ import { createTelegramApi, createTelegramLinker } from './lib/telegram.js';
 import { openZaloStore } from '../zalo-store.js';
 import { createStoreReader } from './lib/store-reader.js';
 import { createThreadNames } from './lib/thread-names.js';
+import { createPermissionsStore } from './lib/permissions.js';
 
 export function fakeSidecar(overrides = {}) {
   const calls = [];
@@ -58,6 +59,7 @@ export function makeDeps(t, overrides = {}) {
     guard: createLoginGuard({}),
     setupToken: createSetupToken(join(dir, 'setup.json')),
     activity: createActivityLog(join(dir, 'activity.jsonl')),
+    permissions: createPermissionsStore({ file: join(dir, 'zalo', 'permissions.json') }),
     sidecar,
     store: createStoreReader({ path: join(dir, 'zalo.sqlite') }),
     threadNames: createThreadNames({ loadGroups: () => sidecar.groups() }),

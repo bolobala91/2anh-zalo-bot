@@ -24,7 +24,7 @@ test('buildDeps returns all required keys', () => {
 
     const requiredKeys = [
       'config', 'users', 'sessions', 'guard', 'setupToken', 'activity',
-      'sidecar', 'linker', 'watchdog', 'restartAssistant', 'publicDir', 'paths', 'store', 'threadNames'
+      'sidecar', 'linker', 'watchdog', 'restartAssistant', 'publicDir', 'paths', 'store', 'threadNames', 'permissions'
     ];
 
     for (const key of requiredKeys) {

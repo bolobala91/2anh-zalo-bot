@@ -8,12 +8,14 @@ import { Alerts } from './alerts.js';
 import { Profile } from './profile.js';
 import { Chats } from './chats.js';
 import { Audit } from './audit.js';
+import { Permissions } from './permissions.js';
 
 const STATUS_MS = 3000;
 
 const ROUTES = {
   '/': { view: Overview },
   '/chats': { view: Chats },
+  '/permissions': { view: Permissions },
   '/zalo': { view: Zalo },
   '/audit': { view: Audit },
   '/users': { view: Users, admin: true },
@@ -23,7 +25,10 @@ const ROUTES = {
 
 const GROUPS = [
   { label: 'Tổng quan', items: [{ path: '/', text: 'Tổng quan', icon: 'home' }] },
-  { label: 'Hội thoại', items: [{ path: '/chats', text: 'Phiên chat', icon: 'chat' }] },
+  { label: 'Hội thoại', items: [
+    { path: '/chats', text: 'Phiên chat', icon: 'chat' },
+    { path: '/permissions', text: 'Phân quyền Bot', icon: 'shield' },
+  ] },
   { label: 'Hệ thống', items: [
     { path: '/zalo', text: 'Tài khoản Zalo', icon: 'phone' },
     { path: '/audit', text: 'Nhật ký', icon: 'list' },
