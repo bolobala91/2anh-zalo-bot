@@ -135,3 +135,17 @@ test('spawn lỗi bất đồng bộ (ENOENT): route trả 5xx, không sập', a
   assert.equal(res.status, 500);
   assert.ok(!res.json.error.includes('ENOENT'));
 });
+
+test('danh sách người dùng có "đăng nhập gần nhất": đăng nhập đúng mới ghi, sai thì không', async (t) => {
+  const deps = makeDeps(t); const { call } = await startApp(t, deps);
+  deps.users.create({ username: 'khach', role: 'owner', password: 'matkhau-dai' });
+  const admin = await loginAs(t, deps, call);
+  assert.equal((await call('/api/auth/verify', { method: 'POST', body: { username: 'khach', password: 'sai-mat-khau' } })).status, 401);
+  let list = (await call('/api/admin/users', { cookie: admin })).json.users;
+  assert.equal(list.find((u) => u.username === 'khach').lastLoginAt, null);
+  assert.ok(list.find((u) => u.username === 'anh').lastLoginAt > 0);
+  const before = Date.now();
+  await call('/api/auth/verify', { method: 'POST', body: { username: 'khach', password: 'matkhau-dai' } });
+  list = (await call('/api/admin/users', { cookie: admin })).json.users;
+  assert.ok(list.find((u) => u.username === 'khach').lastLoginAt >= before);
+});

@@ -72,7 +72,7 @@ function ResetRow({ user, onCancel, onDone }) {
       onDone(`Đã đặt mật khẩu mới cho ${user.username}. Người này cần đăng nhập lại.`);
     } catch (err) { setError(err.message); setBusy(false); }
   }
-  return html`<tr class="reset-row"><td colspan="6">
+  return html`<tr class="reset-row"><td colspan="7">
     <form class="reset-form" onSubmit=${save} novalidate>
       <div class="field">
         <label for=${id}>Mật khẩu mới cho ${user.username}</label>
@@ -112,7 +112,7 @@ function EditRow({ user, self, onCancel, onDone }) {
       onDone(`Đã cập nhật ${user.username}.`);
     } catch (err) { setError(err.message); setBusy(false); }
   }
-  return html`<tr class="reset-row"><td colspan="6">
+  return html`<tr class="reset-row"><td colspan="7">
     <form class="reset-form" onSubmit=${save} novalidate>
       <div class="field">
         <label for=${`${id}-uid`}>UID Zalo của ${user.username}</label>
@@ -166,9 +166,10 @@ export function Users({ me }) {
       <h2>Danh sách</h2>
       ${loadError ? html`<${Live} error=${loadError} />` : !list ? html`<${Spinner} />` : html`
         <div class="table-wrap">
-          <table class="table table-cards">
+          <table class="table table-cards users-table">
             <thead><tr><th scope="col">Tên đăng nhập</th><th scope="col">Vai trò</th><th scope="col">UID Zalo</th>
-              <th scope="col">Trạng thái</th><th scope="col">Tạo lúc</th><th scope="col"><span class="sr-only">Thao tác</span></th></tr></thead>
+              <th scope="col">Trạng thái</th><th scope="col" class="th-wrap">Đăng nhập gần nhất</th><th scope="col">Tạo lúc</th>
+              <th scope="col"><span class="sr-only">Thao tác</span></th></tr></thead>
             <tbody>
               ${list.map((u) => html`<tr key=${u.username}>
                 <td data-label="Tên đăng nhập"><strong>${u.username}</strong>${u.username === me.username ? html` <span class="tag">bạn</span>` : null}</td>
@@ -176,6 +177,7 @@ export function Users({ me }) {
                 <td data-label="UID Zalo" class="mono">${u.zaloUid || html`<span class="muted">Chưa có</span>`}</td>
                 <td data-label="Trạng thái">${u.disabled ? html`<span class="badge badge-danger"><${Icon} name="lock" size=${14} /> Đã khoá</span>`
                   : html`<span class="badge badge-ok"><${Icon} name="check" size=${14} /> Đang dùng</span>`}</td>
+                <td data-label="Đăng nhập gần nhất">${u.lastLoginAt ? fmtTime(u.lastLoginAt) : html`<span class="muted">Chưa đăng nhập</span>`}</td>
                 <td data-label="Tạo lúc">${fmtTime(u.createdAt)}</td>
                 <td data-label="Thao tác"><div class="actions">
                   <button class="btn btn-secondary btn-sm" disabled=${busy === u.username || u.username === me.username}

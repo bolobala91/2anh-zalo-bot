@@ -189,3 +189,23 @@ test('thanh bên: đủ mục spec §9 theo đúng nhóm, mục Quản trị ch�
   assert.match(src, /'\/owners': \{ view: Owners, admin: true \}/);
   assert.match(src, /'\/brand': \{ view: Brand \}/);
 });
+
+test('Tổng quan: lỗi gần nhất thành câu dễ hiểu có bước tiếp theo; mã kỹ thuật chỉ cho Quản trị', async () => {
+  const { errorText } = await import('./views/overview.js');
+  const e = { code: 'zalo_listener_closed', message: 'Đã ghi nhận lỗi nội bộ; xem log cục bộ để biết chi tiết.', atMs: 1 };
+  assert.deepEqual(errorText(e, 'owner'), {
+    text: 'Kết nối nhận tin Zalo bị ngắt.',
+    next: 'Bot thường tự nối lại sau ít phút. Nếu thanh trên cùng báo mất kết nối, hãy quét mã đăng nhập lại.',
+    code: null,
+  });
+  assert.equal(errorText(e, 'admin').code, 'zalo_listener_closed');
+  const unknown = errorText({ code: 'something_new' }, 'owner');
+  assert.equal(unknown.text, 'Bot ghi nhận một lỗi nội bộ.');
+  assert.match(unknown.next, /báo người cài đặt/);
+  for (const code of ['bridge_command_failed', 'system_notice_failed', 'bridge_server_error', 'history_retention_failed',
+    'legacy_history_import_failed', 'automatic_backfill_failed', 'dashboard_server_error']) {
+    const r = errorText({ code }, 'owner');
+    assert.notEqual(r.text, unknown.text, code);
+    assert.doesNotMatch(`${r.text} ${r.next}`, /log|sidecar|bridge|toolset/i, code);
+  }
+});

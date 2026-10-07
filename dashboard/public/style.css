@@ -203,7 +203,7 @@ input:focus-visible, select:focus-visible { outline: none; border-color: var(--b
 .facts > div:last-child { border-bottom: 0; }
 .facts dt { color: var(--muted); display: inline-flex; align-items: center; gap: 8px; }
 .facts dd { margin: 0; font-weight: 600; text-align: right; }
-.error-text { margin: 10px 0 8px; padding: 10px 12px; border-radius: 9px; background: var(--bg); font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.last-error { margin: 10px 0 6px; font-weight: 600; }
 .empty { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 24px; }
 .empty .icon { color: var(--muted); }
 .empty h1 { font-size: 20px; }
@@ -249,7 +249,9 @@ input:focus-visible, select:focus-visible { outline: none; border-color: var(--b
 .table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
 .table tbody tr:hover { background: #f8fafc; }
 .table tbody tr:last-child td { border-bottom: 0; }
-.table .actions { display: flex; gap: 8px; justify-content: flex-end; }
+.table .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+@media (min-width: 761px) { .users-table .actions { min-width: 290px; } }
+.table th.th-wrap { white-space: normal; }
 
 .subhead { font-size: 14px; font-weight: 650; margin: 16px 0 6px; }
 .list .push { margin-left: auto; white-space: nowrap; }

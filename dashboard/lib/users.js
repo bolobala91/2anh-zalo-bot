@@ -36,7 +36,10 @@ export function verifyHash(password, stored) {
   return timingSafeEqual(got, want);
 }
 
-const toPublic = (u) => ({ username: u.username, role: u.role, zaloUid: u.zaloUid, disabled: Boolean(u.disabled), hasPassword: Boolean(u.passwordHash), createdAt: u.createdAt });
+const toPublic = (u) => ({
+  username: u.username, role: u.role, zaloUid: u.zaloUid, disabled: Boolean(u.disabled), hasPassword: Boolean(u.passwordHash),
+  createdAt: u.createdAt, lastLoginAt: Number.isFinite(u.lastLoginAt) ? u.lastLoginAt : null,
+});
 
 export function createUserStore(path) {
   const load = () => readJson(path, { users: [] });
@@ -76,6 +79,14 @@ export function createUserStore(path) {
       const user = data.users.find((u) => u.username === username);
       if (!user) throw Object.assign(new Error('Không có người dùng này'), { statusCode: 404 });
       user.passwordHash = hashPassword(password);
+      save(data);
+    },
+    /** Ghi thời điểm đăng nhập thành công gần nhất (hiện ở màn Người dùng). Không có người này thì bỏ qua. */
+    recordLogin(username, at = Date.now()) {
+      const data = load();
+      const user = data.users.find((u) => u.username === username);
+      if (!user) return;
+      user.lastLoginAt = at;
       save(data);
     },
     verifyPassword(username, password) {
