@@ -450,7 +450,7 @@ Dashboard đọc lịch sử thẳng từ tệp `data/zalo.sqlite` của bot ở
 
 ### Nhật ký
 
-Mục **Nhật ký** ghi ai đã làm gì: tin bot gửi, việc bot làm theo lệnh chủ nhân, tin nhắn tay từ dashboard, đăng nhập dashboard, tạo/sửa tài khoản, quét QR, đăng xuất Zalo. Tích **Chỉ hiện lỗi** để xem việc không thành công. Quản trị thấy thêm mã kỹ thuật dưới mỗi dòng.
+Mục **Nhật ký** ghi ai đã làm gì: tin bot gửi, việc bot làm theo lệnh chủ nhân, tin nhắn tay từ dashboard, đăng nhập dashboard, tạo/sửa tài khoản, quét QR, đăng xuất Zalo. Chọn **Chỉ lỗi** để xem việc không thành công, hoặc **Việc của bot** / **Thao tác dashboard** để lọc theo loại. Quản trị mở **Chi tiết kỹ thuật** dưới mỗi dòng để xem mã.
 
 ### Tổng quan
 
@@ -512,7 +512,7 @@ Bản này đổi ở ba chỗ: plugin Hermes, kết nối Zalo và dashboard. *
 - [ ] Kéo lên đầu hội thoại thì tải thêm tin cũ.
 - [ ] Tìm một từ có dấu (ví dụ "họp") ra đúng tin.
 - [ ] Nhắn tay một tin vào nhóm thử: tin tới Zalo thật và hiện trong khung.
-- [ ] Nhật ký có dòng "Nhắn tay từ dashboard" kèm tên mình; "Chỉ hiện lỗi" lọc đúng.
+- [ ] Nhật ký có dòng "Nhắn tay từ dashboard" kèm tên mình; "Chỉ lỗi" lọc đúng.
 - [ ] Tài khoản Chủ bot dùng được Phiên chat và Nhật ký, không thấy mã kỹ thuật.
 - [ ] Tắt kết nối Zalo của bot (dừng dịch vụ hoặc tiến trình): Phiên chat vẫn xem được; gửi tin báo lỗi tiếng Việt.
 

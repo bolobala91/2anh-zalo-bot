@@ -536,7 +536,7 @@ fieldset:disabled .radio-card { cursor: not-allowed; }
   .table-cards, .table-cards tbody, .table-cards tr, .table-cards td { display: block; width: 100%; }
   .table-cards tbody tr { border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px; margin-bottom: 12px; background: #fff; }
   .table-cards tbody tr:hover { background: #fff; }
-  .table-cards td, .table-cards .audit-table td:first-child { white-space: normal; overflow-wrap: anywhere; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .table-cards td { white-space: normal; overflow-wrap: anywhere; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .table-cards tbody tr td:last-child, .table-cards tbody tr:last-child td:last-child { border-bottom: 0; }
   .table-cards td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 12px; font-weight: 700;
     text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
