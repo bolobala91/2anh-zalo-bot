@@ -392,6 +392,26 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
 .owner-list .btn { flex: none; }
 .owner-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; overflow-wrap: anywhere; }
 
+/* ---------- Sức khoẻ máy chủ ---------- */
+.grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.stat-value { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.stat-ok { color: var(--ok); }
+.stat-warn { color: var(--warn); }
+.stat-danger { color: var(--danger); }
+.stat-idle { color: var(--muted); }
+.charts { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-top: 12px; }
+.chart-box { margin: 0; min-width: 0; }
+.chart-box figcaption { margin-bottom: 6px; }
+.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-grid { stroke: var(--border); stroke-width: 1; }
+.chart-limit { stroke: var(--danger); stroke-width: 1; stroke-dasharray: 6 4; }
+.chart-line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.chart-bar { fill: var(--brand); }
+.chart-axis { font-size: 12px; fill: var(--muted); }
+.svc-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.svc-list li:last-child { border-bottom: 0; }
+.svc-main { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+
 /* ---------- Điện thoại ---------- */
 @media (max-width: 760px) {
   /* Thanh trên cùng chỉ cao đúng nội dung; phần còn lại của màn hình thuộc về nội dung (trang ngắn không bị giãn thanh). */

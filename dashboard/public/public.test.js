@@ -253,3 +253,32 @@ test('nhắn riêng: tên người lấy từ Phiên chat và người dùng das
   assert.equal(names.get('5234567890123456'), 'Khách', 'Phiên chat đứng trước tên đăng nhập');
   assert.deepEqual(suggestions(chats, d, users), [{ uid: '5234567890123456', name: 'Khách' }, { uid: '6234567890123456', name: 'nam' }]);
 });
+
+test('sức khoẻ máy chủ: đoạn biểu đồ ngắt ở chỗ thiếu số đo, thời gian chạy dễ đọc, mức màu, nhãn dịch vụ', async () => {
+  const { chartSegments, peak, fmtUptime, fmtPct, level, serviceBadge, usageRows } = await import('./views/health.js');
+  const to = 24 * 3600_000;
+  const pts = [[0, 0, 50, 100], [60_000, 100, 50, null], [120_000, 50, 50, 100], [10 * 60_000, 20, 50, 100], [to + 1, 5, 5, 5]];
+  assert.deepEqual(chartSegments(pts, 1, { to }), ['0.0,120.0 0.4,0.0 0.8,60.0', '4.2,96.0 4.2,96.0']);
+  assert.deepEqual(chartSegments(pts, 3, { to }), ['0.0,0.0 0.0,0.0', '0.8,0.0 0.8,0.0', '4.2,0.0 4.2,0.0'], 'null ngắt đoạn; điểm lẻ thành chấm');
+  assert.deepEqual(chartSegments([], 1, { to }), []);
+  assert.equal(peak(pts, 3), 100);
+  assert.equal(peak([[0, null, null, null]], 1), null);
+  assert.equal(fmtUptime(45 * 60), '45 phút');
+  assert.equal(fmtUptime(5 * 3600 + 12 * 60), '5 giờ 12 phút');
+  assert.equal(fmtUptime(2 * 86400 + 3 * 3600), '2 ngày 3 giờ');
+  assert.equal(fmtUptime(24 * 86400), '3 tuần 3 ngày');
+  assert.equal(fmtPct(null), 'Chưa đo được');
+  assert.deepEqual([level(10), level(80), level(90), level(90.1), level(null)], ['ok', 'warn', 'warn', 'danger', 'idle']);
+  assert.deepEqual(serviceBadge('missing'), { kind: 'idle', text: 'Không có trên máy này' });
+  assert.equal(serviceBadge('lạ').text, 'Không rõ');
+  const days = Array.from({ length: 20 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, '0')}`, calls: i }));
+  assert.deepEqual(usageRows({ days }).map((d) => d.calls).slice(0, 2), [19, 18]);
+  assert.equal(usageRows({ days }).length, 14);
+  assert.deepEqual(usageRows(undefined), []);
+});
+
+test('thanh bên: Sức khoẻ máy chủ nằm trong nhóm Hệ thống, cả hai vai trò đều thấy', () => {
+  const src = readFileSync(join(root, 'views', 'shell.js'), 'utf8');
+  assert.match(src, /'\/health': \{ view: Health \}/);
+  assert.ok(src.indexOf("'Sức khoẻ máy chủ'") > src.indexOf("'Thương hiệu'") && src.indexOf("'Sức khoẻ máy chủ'") < src.indexOf("label: 'Quản trị'"));
+});
