@@ -116,7 +116,7 @@ def _load() -> Dict[str, Any]:
         if _cache["key"] == key:
             return _cache["data"]
     try:
-        data = _parse(path.read_text(encoding="utf-8"))
+        data = _parse(path.read_text(encoding="utf-8-sig"))
     except Exception as exc:
         logger.warning("[zalo] permissions.json hỏng (%s) — dùng mặc định, mọi tính năng bật: %s", path, exc)
         data = {}

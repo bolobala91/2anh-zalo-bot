@@ -103,6 +103,13 @@ class GroupPermissionsTest(PermissionsFile, unittest.TestCase):
         self.assertEqual(set(gp.FEATURE_LABELS), set(gp.FEATURES))
 
 
+class BomTest(PermissionsFile, unittest.TestCase):
+    def test_hand_edited_file_with_bom_is_read(self):
+        with open(self.path, "w", encoding="utf-8-sig") as fh:
+            fh.write(json.dumps({"version": 1, "defaults": {}, "groups": {GROUP_A: {"active": False}}}))
+        self.assertFalse(gp.group_settings(GROUP_A)["active"])
+
+
 class GuardFeatureTest(PermissionsFile, unittest.TestCase):
     def setUp(self):
         super().setUp()
@@ -144,6 +151,13 @@ class GuardFeatureTest(PermissionsFile, unittest.TestCase):
             verdict = zalo_tools.guard_member_tool_call(
                 "tool_call", {"name": "zalo_web_read", "arguments": {"url": "https://a.vn"}})
         self.assertEqual(verdict["action"], "block")
+
+    def test_tool_call_with_non_dict_arguments_does_not_crash(self):
+        self.turn()
+        with patch("tools.tool_search.resolve_underlying_call",
+                   return_value=("zalo_group_cron", ["lạ"], None)):
+            verdict = zalo_tools.guard_member_tool_call("tool_call", {"name": "zalo_group_cron"})
+        self.assertIsNone(verdict)
 
     def test_owner_turn_with_outsider_interjection_is_held_to_group_rules(self):
         zalo_tools.bind_turn({"sender_uid": OWNER, "thread_id": GROUP_A, "is_group": True,

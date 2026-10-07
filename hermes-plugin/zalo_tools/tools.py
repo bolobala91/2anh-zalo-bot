@@ -3528,6 +3528,8 @@ def _group_feature_block(turn: Dict[str, Any], name: str, args: Any) -> Optional
             return None  # _member_may_call tự từ chối tool_call không tháo được
         if error or not real:
             return None
+        if not isinstance(real_args, dict):
+            real_args = {}
     feature = group_permissions.feature_of(real)
     if feature is None:
         return None
