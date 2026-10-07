@@ -533,5 +533,93 @@ class GuardDmFeatureTest(PermissionsFile, unittest.TestCase):
         self.assertNotIn("notice", zalo_tools.current_authorization())
 
 
+class AdapterDmTest(PermissionsFile, AdapterHarness, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(patch.dict(os.environ, {"ZALO_ALLOWED_USERS": OWNER}))
+
+    def dm_adapter(self, policy="owner-only"):
+        adapter = self.make_adapter()
+        adapter._dm_policy = policy
+        return adapter
+
+    async def dm(self, adapter, msg_id, sender, text):
+        frame = {"type": "message", "id": msg_id, "threadId": sender,
+                 "threadType": zalo_adapter.THREAD_TYPE_USER, "senderUid": sender,
+                 "senderName": "Lan", "text": text}
+        with patch.object(zalo_adapter, "_zalo_tools", return_value=zalo_tools):
+            await adapter._on_message(frame)
+
+    async def test_without_dm_section_env_policy_decides_as_before(self):
+        adapter = self.dm_adapter("owner-only")
+        await self.dm(adapter, "d1", STRANGER, "chào bot")
+        self.assertEqual(self.handled, [])
+        await self.dm(adapter, "d2", OWNER, "chào bot")
+        self.assertEqual(len(self.handled), 1)
+        adapter = self.dm_adapter("open")  # adapter mới, self.handled làm lại từ đầu
+        await self.dm(adapter, "d3", STRANGER, "chào bot")
+        self.assertEqual(len(self.handled), 1)
+
+    async def test_dashboard_list_overrides_env_policy_both_ways(self):
+        self.write({"version": 1, "dm": {"who": "list", "people": {MEMBER: {}}}})
+        adapter = self.dm_adapter("owner-only")
+        await self.dm(adapter, "d1", MEMBER, "chào bot")
+        await self.dm(adapter, "d2", STRANGER, "chào bot")
+        self.assertEqual([e.source.user_id for e in self.handled], [MEMBER])
+        adapter = self.dm_adapter("open")  # adapter mới, self.handled làm lại từ đầu
+        await self.dm(adapter, "d3", STRANGER, "chào bot")
+        self.assertEqual(self.handled, [], "tệp nói danh sách thì ZALO_DM_POLICY=open không mở thêm")
+        self.write({"version": 1, "dm": {"who": "owners", "people": {MEMBER: {}}}})
+        await self.dm(adapter, "d4", MEMBER, "chào bot")
+        await self.dm(adapter, "d5", OWNER, "chào bot")
+        self.assertEqual([e.source.user_id for e in self.handled], [OWNER], "chỉ chủ nhân: người trong danh sách cũng không vào")
+
+    async def test_member_dm_lists_disabled_features_and_skips_people_profile(self):
+        from plugins.zalo_tools import people
+
+        self.enterContext(patch.dict(os.environ, {"ZALO_PEOPLE_FILE": os.path.join(self.dir, "people.json")}))
+        people.remember_person(MEMBER, name="Lan", note="Giáo viên Hoá")
+        self.write({"version": 1, "dm": {"who": "everyone", "features": {"web": False, "people": False}}})
+        adapter = self.dm_adapter()
+        await self.dm(adapter, "d1", MEMBER, "tra giá vàng")
+        self.assertIn("Tin nhắn riêng này đang tắt: tra cứu web, sổ người quen", self.handled[0].channel_context)
+        self.assertNotIn("Giáo viên Hoá", self.handled[0].text)
+        await self.dm(adapter, "d2", OWNER, "tra giá vàng")
+        self.assertNotIn("đang tắt", self.handled[1].channel_context or "")
+
+    async def test_errors_and_half_install_fall_back_to_env_policy_never_wider(self):
+        self.write({"version": 1, "dm": {"who": "everyone"}})
+        adapter = self.dm_adapter("owner-only")
+        with patch.object(gp, "dm_allows", side_effect=RuntimeError("hỏng")), \
+                patch.object(gp, "dm_settings", side_effect=RuntimeError("hỏng")), \
+                self.assertLogs(zalo_adapter.logger, level="WARNING"):
+            await self.dm(adapter, "d1", STRANGER, "chào bot")
+        self.assertEqual(self.handled, [])
+        with patch.object(zalo_adapter, "_group_permissions", None):
+            await self.dm(adapter, "d2", STRANGER, "chào bot")
+        self.assertEqual(self.handled, [])
+        self.write("{hỏng")
+        adapter = self.dm_adapter("open")
+        with self.assertLogs(gp.logger, level="WARNING"):
+            await self.dm(adapter, "d3", STRANGER, "chào bot")
+        self.assertEqual(len(self.handled), 1, "tệp hỏng → ZALO_DM_POLICY=open như trước")
+
+    async def test_stranger_sethome_reply_carries_the_sethome_notice(self):
+        self.write({"version": 1, "dm": {"who": "list", "people": {}}})
+        adapter = self.dm_adapter()
+        sent = []
+
+        async def command(payload, expect_ack=False):
+            sent.append(zalo_tools.current_authorization())
+            return {"ok": True, "msgId": "1"}
+
+        adapter._command = command
+        await self.dm(adapter, "d1", STRANGER, "/sethome")
+        self.assertEqual(self.handled, [])
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0]["notice"], "sethome")
+        self.assertEqual(sent[0]["actorUid"], STRANGER)
+
+
 if __name__ == "__main__":
     unittest.main()

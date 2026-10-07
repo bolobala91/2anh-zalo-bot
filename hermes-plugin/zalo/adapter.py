@@ -867,6 +867,8 @@ class ZaloAdapter(BasePlatformAdapter):
         # đổi). Nhóm bị tắt: tin của thành viên chỉ giữ làm ngữ cảnh như trên;
         # chủ nhân không bao giờ bị chặn bởi tệp này.
         group_rules = self._group_rules(thread_id) if is_group else None
+        # Nút tính năng khi nhắn riêng (mục "dm"); chủ nhân không bao giờ bị chặn.
+        dm_rules = self._dm_rules(sender_uid) if not is_group and not is_owner else None
         if group_rules and not group_rules["active"] and not is_owner:
             logger.debug("[zalo] nhóm %s đang tắt trên dashboard — %s chỉ giữ làm ngữ cảnh", thread_id, sender_uid)
             return
@@ -882,8 +884,9 @@ class ZaloAdapter(BasePlatformAdapter):
 
         # Nhắn riêng: mặc định chỉ chủ nhân. Cửa vào nhóm mở cho tất cả, nhưng
         # cửa nhắn riêng thì không — một tin nhắn riêng là hội thoại kín, không
-        # có ai khác trong nhóm nhìn thấy để mà kiểm chứng.
-        if not is_group and self._dm_policy != "open" and not self._is_owner(sender_uid):
+        # có ai khác trong nhóm nhìn thấy để mà kiểm chứng. Dashboard mở thêm
+        # được (mục "Nhắn riêng" của permissions.json); không có thì theo ZALO_DM_POLICY.
+        if not is_group and not self._dm_allowed(sender_uid):
             if text.strip().lower() == "/sethome":
                 await self._reply_sethome(thread_id, sender_uid, msg_id, text)
                 return
@@ -1012,6 +1015,13 @@ class ZaloAdapter(BasePlatformAdapter):
                 note = (f"[Nhóm này đang tắt: {labels}. Đừng hứa hay thử làm những việc đó; "
                         "nếu được nhờ, nói rõ chủ bot chưa bật tính năng này trong nhóm.]")
                 channel_context = f"{channel_context}\n{note}" if channel_context else note
+        if dm_rules and _group_permissions is not None:
+            off = [feature for feature in _group_permissions.DM_FEATURES if not dm_rules["features"][feature]]
+            if off:
+                labels = ", ".join(_group_permissions.FEATURE_LABELS[feature] for feature in off)
+                note = (f"[Tin nhắn riêng này đang tắt: {labels}. Đừng hứa hay thử làm những việc đó; "
+                        "nếu được nhờ, nói rõ chủ bot chưa bật tính năng này khi nhắn riêng.]")
+                channel_context = f"{channel_context}\n{note}" if channel_context else note
         reply_to_text = None
         if quote:
             reply_to_text = str(quote.get("text") or "").strip() or None
@@ -1047,7 +1057,8 @@ class ZaloAdapter(BasePlatformAdapter):
                         f"— có thể là bản quét ảnh.]")
             prompt_text = f"{note}\n\n{prompt_text}"
         # Nhóm tắt "Sổ người quen": thành viên không được bot dùng hồ sơ đã ghi.
-        people_off = bool(group_rules and not is_owner and not group_rules["features"].get("people", True))
+        people_off = bool(group_rules and not is_owner and not group_rules["features"].get("people", True)) \
+            or bool(dm_rules and not dm_rules["features"].get("people", True))
         try:
             known = "" if people_off else _zalo_people().describe_person(sender_uid)
         except Exception as exc:
@@ -1138,6 +1149,37 @@ class ZaloAdapter(BasePlatformAdapter):
             logger.warning("[zalo] không đọc được quyền nhóm %s: %s", thread_id, exc)
             return None
 
+    @staticmethod
+    def _dm_rules(sender_uid: str) -> Optional[Dict[str, Any]]:
+        """Quyền nhắn riêng của người này từ permissions.json; lỗi bất ngờ → None (mọi nút bật như trước)."""
+        if _group_permissions is None:
+            return None
+        try:
+            return _group_permissions.dm_settings(sender_uid)
+        except Exception as exc:
+            logger.warning("[zalo] không đọc được quyền nhắn riêng của %s: %s", sender_uid, exc)
+            return None
+
+    def _dm_allowed(self, sender_uid: str) -> bool:
+        """Người này có được nhắn riêng với bot không.
+
+        Chủ nhân: luôn được. Còn lại: mục "Nhắn riêng" trên dashboard nếu đã chọn
+        (chỉ chủ nhân / danh sách / mọi người); chưa chọn, bản cài dở hoặc đọc
+        lỗi → ZALO_DM_POLICY như trước giai đoạn 5 — không bao giờ rộng hơn thế
+        chỉ vì một lỗi đọc tệp.
+        """
+        if self._is_owner(sender_uid):
+            return True
+        if _group_permissions is not None:
+            try:
+                verdict = _group_permissions.dm_allows(sender_uid)
+            except Exception as exc:
+                logger.warning("[zalo] không đọc được quyền nhắn riêng — theo ZALO_DM_POLICY: %s", exc)
+                verdict = None
+            if verdict is not None:
+                return verdict
+        return self._dm_policy == "open"
+
     def _skip_inactive_group_cron(self, chat_id: str, metadata: Dict[str, Any]) -> bool:
         """Kết quả việc hẹn giờ nhóm do thành viên tạo sắp gửi vào nhóm đang tắt "Hoạt động" → không gửi.
 
@@ -1187,10 +1229,11 @@ class ZaloAdapter(BasePlatformAdapter):
         """
         if self._flood.check(sender_uid) in (FLOOD_MUTED, FLOOD_JUST_MUTED):
             return
-        _zalo_tools().set_turn_context(
-            sender_uid=sender_uid, thread_id=thread_id, is_group=False,
-            is_owner=False, text=text, msg_id=msg_id,
-        )
+        # Dấu "sethome": kết nối Zalo cho câu này đi dù người lạ chưa được nhắn riêng.
+        _zalo_tools().bind_turn({
+            "sender_uid": str(sender_uid), "thread_id": str(thread_id), "is_group": False,
+            "is_owner": False, "text": str(text or ""), "msg_id": str(msg_id or ""), "sethome": True,
+        })
         await self.send(
             thread_id,
             "\n".join([
