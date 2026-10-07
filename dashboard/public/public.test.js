@@ -318,3 +318,126 @@ test('thanh bên: Sức khoẻ máy chủ nằm trong nhóm Hệ thống, cả h
   assert.match(src, /'\/health': \{ view: Health \}/);
   assert.ok(src.indexOf("'Sức khoẻ máy chủ'") > src.indexOf("'Thương hiệu'") && src.indexOf("'Sức khoẻ máy chủ'") < src.indexOf("label: 'Quản trị'"));
 });
+
+const DM_F = [
+  { key: 'web', label: 'Tra cứu web' }, { key: 'files', label: 'Gửi và tạo tệp' }, { key: 'voice', label: 'Tin nhắn thoại' },
+  { key: 'reminders', label: 'Nhắc hẹn' }, { key: 'kb', label: 'Kho tài liệu' }, { key: 'people', label: 'Sổ người quen' },
+  { key: 'academic', label: 'Tra cứu học thuật' }, { key: 'video', label: 'Video' },
+];
+const ALL_ON = Object.fromEntries(DM_F.map((f) => [f.key, true]));
+
+test('nhắn riêng: tóm tắt từng người trên hàng gập', async () => {
+  const { personSummary, shortUid } = await import('./views/dm-permissions.js');
+  assert.deepEqual(personSummary({ custom: false, features: { ...ALL_ON, web: false } }, DM_F), { kind: 'idle', text: 'Theo cài đặt chung', detail: '' });
+  assert.deepEqual(personSummary({ custom: true, features: ALL_ON }, DM_F), { kind: 'ok', text: 'Riêng · bật tất cả', detail: '' });
+  assert.deepEqual(personSummary({ custom: true, features: { ...ALL_ON, voice: false, video: false } }, DM_F),
+    { kind: 'warn', text: 'Riêng · 2 tính năng tắt', detail: 'Đang tắt: Tin nhắn thoại, Video' });
+  assert.equal(shortUid('1234567890123456'), '…0123456');
+  assert.equal(shortUid('12345'), '12345');
+});
+
+test('nhắn riêng: lọc người theo tên không dấu, UID, "có chỉnh riêng"; đếm thay đổi', async () => {
+  const { filterPeople, dmChangeCount, dmDraft, addPerson } = await import('./views/dm-permissions.js');
+  const people = [
+    { uid: '1234567890123456', name: 'Cô Lan', custom: true, features: ALL_ON },
+    { uid: '2234567890123456', name: '', custom: false, features: ALL_ON },
+    { uid: '3234567890123456', name: 'Thầy Nam', custom: false, features: ALL_ON },
+  ];
+  const names = new Map([['2234567890123456', 'Hoà']]);
+  assert.deepEqual(filterPeople(people, { q: 'co lan' }).map((p) => p.name), ['Cô Lan']);
+  assert.deepEqual(filterPeople(people, { q: 'hoa', names }).map((p) => p.uid), ['2234567890123456'], 'tên đã biết theo UID');
+  assert.deepEqual(filterPeople(people, { q: '323456' }).map((p) => p.name), ['Thầy Nam']);
+  assert.deepEqual(filterPeople(people, { customOnly: true }).map((p) => p.name), ['Cô Lan']);
+  assert.equal(filterPeople(people, {}).length, 3);
+  const dm = { who: 'list', explicit: true, features: ALL_ON, people };
+  const d = dmDraft(dm);
+  assert.equal(dmChangeCount(d, dm), 0);
+  d.who = 'everyone'; d.features.web = false; d.features.kb = false;
+  d.people = d.people.filter((p) => p.uid !== '3234567890123456');
+  d.people[0] = { ...d.people[0], features: { ...ALL_ON, voice: false } };
+  assert.equal(dmChangeCount(d, dm), 5, 'ai + 2 nút chung + 1 người sửa + 1 người bỏ');
+  assert.equal(dmChangeCount(addPerson(dmDraft(dm), '4234567890123456').draft, dm), 1);
+  // Bật "tính năng riêng" nhưng giữ đúng nút chung vẫn là một thay đổi (thân gửi đi khác).
+  const c = dmDraft(dm); c.people[1] = { ...c.people[1], custom: true };
+  assert.equal(dmChangeCount(c, dm), 1);
+});
+
+test('phân quyền nhóm: đếm thay đổi, câu "a/b đang bật", chữ thanh Lưu', async () => {
+  const { changeCount } = await import('./views/permissions.js');
+  const { onText, changesText } = await import('./ui.js');
+  const a = { active: true, replyOnlyTagged: true, features: { web: true, kb: true } };
+  assert.equal(changeCount(a, a), 0);
+  assert.equal(changeCount({ active: false, replyOnlyTagged: false, features: { web: false, kb: true } }, a), 3);
+  assert.equal(onText({ web: true, kb: false }, [{ key: 'web' }, { key: 'kb' }]), '1/2 đang bật');
+  assert.equal(onText(ALL_ON, DM_F), '8/8 đang bật');
+  assert.equal(changesText(3), '3 thay đổi chưa lưu');
+  assert.equal(changesText(0), 'Chưa có thay đổi.');
+  assert.equal(changesText(0, 'Chưa từng lưu'), 'Chưa từng lưu');
+});
+
+test('Nhật ký: câu tự nhiên từ what/who/where, nhóm theo ngày, lọc theo loại', async () => {
+  const { auditSentence, groupByDay, filterKind, AUDIT_KINDS } = await import('./views/audit.js');
+  assert.equal(auditSentence({ source: 'zalo', what: 'Bot trả lời tin nhắn', who: 'Chủ nhân Cô Lan', where: 'Tổ Hoá' }),
+    'Bot trả lời tin nhắn ở Tổ Hoá, theo yêu cầu của Chủ nhân Cô Lan.');
+  assert.equal(auditSentence({ source: 'zalo', what: 'Bot trả lời tin nhắn', who: 'Thành viên Cô Lan', where: 'Cô Lan' }),
+    'Bot trả lời tin nhắn (nhắn riêng), theo yêu cầu của Thành viên Cô Lan.');
+  assert.equal(auditSentence({ source: 'zalo', what: 'Bot gửi thông báo hệ thống', who: 'Bot (tự động)', where: '—' }),
+    'Bot gửi thông báo hệ thống (bot tự làm).');
+  assert.equal(auditSentence({ source: 'zalo', what: 'Nhắn tay từ dashboard', who: 'khach (dashboard)', where: 'Lan' }),
+    'Nhắn tay từ dashboard ở Lan, do khach gửi từ dashboard.');
+  assert.equal(auditSentence({ source: 'zalo', what: 'typing_x', who: 'Thành viên', where: '—' }), 'Thao tác typing_x, theo yêu cầu của Thành viên.');
+  assert.equal(auditSentence({ source: 'dashboard', what: 'Đăng nhập dashboard', who: 'anh (dashboard)', where: 'Dashboard' }), 'anh đăng nhập dashboard.');
+  assert.equal(auditSentence({ source: 'dashboard', what: 'Đổi phân quyền nhóm', who: 'anh (dashboard)', where: 'Dashboard' }), 'anh đổi phân quyền nhóm trên dashboard.');
+  assert.equal(auditSentence({ source: 'dashboard', what: 'Đăng nhập dashboard', who: 'Người lạ', where: 'Dashboard' }), 'Người lạ đăng nhập dashboard.');
+  assert.equal(auditSentence({ source: 'dashboard', what: 'brand_new', who: 'anh (dashboard)', where: 'Dashboard' }), 'anh làm thao tác brand_new trên dashboard.');
+  const now = Date.UTC(2026, 9, 7, 5); // 12:00 giờ Việt Nam
+  const items = [{ at: now - 3600_000 }, { at: now - 2 * 3600_000 }, { at: now - 86_400_000 }, { at: now - 3 * 86_400_000 }];
+  const g = groupByDay(items, { now, tz: 'Asia/Ho_Chi_Minh' });
+  assert.deepEqual(g.map((x) => [x.label, x.items.length]), [['Hôm nay', 2], ['Hôm qua', 1], [g[2].label, 1]]);
+  assert.match(g[2].label, /04\/10\/2026$/);
+  assert.equal(g[2].label[0], g[2].label[0].toLocaleUpperCase('vi'), 'viết hoa chữ đầu');
+  assert.deepEqual(groupByDay([], { now }), []);
+  const mix = [{ source: 'zalo' }, { source: 'dashboard' }, { source: 'zalo' }];
+  assert.equal(filterKind(mix, 'zalo').length, 2);
+  assert.equal(filterKind(mix, 'dashboard').length, 1);
+  assert.equal(filterKind(mix, 'all').length, 3);
+  assert.equal(filterKind(mix, 'failed').length, 3, '"Chỉ lỗi" lọc ở máy chủ');
+  assert.deepEqual(AUDIT_KINDS.map((k) => k.value), ['all', 'zalo', 'dashboard', 'failed']);
+});
+
+test('thanh điều hướng điện thoại: 4 mục chính + "Thêm" theo vai trò', async () => {
+  const { navSplit } = await import('./views/shell.js');
+  const admin = navSplit('admin', '/audit');
+  assert.deepEqual(admin.primary.map((i) => [i.path, i.short]), [['/', 'Tổng quan'], ['/chats', 'Phiên chat'], ['/zalo', 'Zalo'], ['/permissions', 'Phân quyền']]);
+  assert.deepEqual(admin.more.map((i) => i.path), ['/audit', '/brand', '/health', '/users', '/owners', '/alerts', '/profile']);
+  assert.equal(admin.activeMore.text, 'Nhật ký');
+  const owner = navSplit('owner', '/');
+  assert.equal(owner.primary.length, 4);
+  assert.deepEqual(owner.more.map((i) => i.path), ['/audit', '/brand', '/health', '/profile'], 'Chủ bot không thấy mục Quản trị');
+  assert.equal(owner.activeMore, null);
+  assert.equal(navSplit('owner', '/users').activeMore, null);
+});
+
+test('sức khoẻ máy chủ: ghi chú "Mới có dữ liệu N giờ", ngưỡng 4 ngày cho biểu đồ dùng AI', async () => {
+  const { historyHours, historyNote, USAGE_CHART_MIN } = await import('./views/health.js');
+  const to = 100 * 3600_000;
+  assert.equal(historyHours([], to), null);
+  assert.equal(historyNote([], to), null);
+  assert.equal(historyHours([[to - 5.5 * 3600_000, 1], [to, 1]], to), 5);
+  assert.equal(historyNote([[to - 5.5 * 3600_000, 1]], to), 'Mới có dữ liệu 5 giờ — biểu đồ đầy dần trong 24 giờ.');
+  assert.match(historyNote([[to - 60_000, 1]], to), /chưa tới 1 giờ/);
+  assert.equal(historyNote([[to - 30 * 3600_000, 1], [to - 23.5 * 3600_000, 1]], to), null, 'đủ 24 giờ');
+  assert.equal(USAGE_CHART_MIN, 4);
+});
+
+test('Phân quyền: thanh Lưu dính, hộp gập, không còn làm mờ cả hộp bị tắt', () => {
+  const css = readFileSync(join(root, 'style.css'), 'utf8');
+  assert.match(css, /\.save-bar \{[^}]*position: sticky; bottom: 0;/);
+  assert.match(css, /env\(safe-area-inset-bottom\)/);
+  assert.doesNotMatch(css, /:disabled \{ opacity: \.6/);
+  assert.match(css, /\.perm-row \.check \{ min-height: 44px; \}/);
+  const dm = readFileSync(join(root, 'views', 'dm-permissions.js'), 'utf8');
+  assert.match(dm, /aria-expanded=/);
+  assert.match(dm, /aria-controls=/);
+  assert.match(dm, /<details class="dm-add-box">/, '"+ Thêm người" gập sẵn');
+});
