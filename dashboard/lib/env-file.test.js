@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readEnvKey, writeEnvKey } from './env-file.js';
@@ -85,4 +85,14 @@ test('ghi giữ quyền tệp cũ (POSIX); .bak vẫn 600', { skip: process.plat
   writeEnvKey(f, K, '2');
   assert.equal(statSync(f).mode & 0o777, 0o640);
   assert.equal(statSync(`${f}.bak`).mode & 0o777, 0o600);
+});
+
+test('ghi qua symlink: sửa tệp đích, symlink vẫn là symlink', (t) => {
+  const d = tmp(t);
+  const real = join(d, 'real.env'); const link = join(d, '.env');
+  writeFileSync(real, 'X=1\nZALO_ALLOWED_USERS=1234567890123456\n');
+  try { symlinkSync(real, link); } catch (err) { t.skip(`không tạo được symlink (${err.code})`); return; }
+  writeEnvKey(link, K, '2234567890123456');
+  assert.ok(lstatSync(link).isSymbolicLink());
+  assert.equal(readFileSync(real, 'utf8'), 'X=1\nZALO_ALLOWED_USERS=2234567890123456\n');
 });

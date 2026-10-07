@@ -1,6 +1,6 @@
 // Đọc/sửa .env của Hermes (spec §11.5): chỉ khoá trong danh sách cho phép, chỉ sửa dòng của khoá đó,
 // giữ bản trước ở .env.bak, ghi tệp tạm rồi đổi tên. Không bao giờ trả về giá trị của khoá khác.
-import { chmodSync, chownSync, copyFileSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { chmodSync, chownSync, copyFileSync, existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { parseEnv } from 'node:util';
 import { writeFileAtomic } from './json-store.js';
 
@@ -26,9 +26,12 @@ export function readEnvKey(file, key) {
  * Đặt `key=value`: thay mọi dòng của khoá này (giữ "export " và kiểu xuống dòng của tệp), không có thì thêm cuối tệp.
  * `value` chỉ được chứa chữ số và dấu phẩy — không bao giờ chèn được dòng hay khoá khác.
  */
-export function writeEnvKey(file, key, value) {
+export function writeEnvKey(link, key, value) {
   allowed(key);
   if (!/^[0-9,]*$/.test(value)) throw new Error('env-file: giá trị chỉ được gồm chữ số và dấu phẩy');
+  // .env là symlink thì ghi vào tệp đích, không thay symlink bằng tệp thường.
+  let file = link;
+  try { file = realpathSync(link); } catch { /* chưa có tệp */ }
   const exists = existsSync(file);
   const raw = exists ? readFileSync(file, 'utf8') : '';
   const bom = raw.startsWith('﻿') ? '﻿' : '';
