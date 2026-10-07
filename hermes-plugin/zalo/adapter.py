@@ -204,6 +204,24 @@ def _zalo_tools():
     return fallback
 
 
+def _zalo_people():
+    """Mô-đun ``people`` của plugin ``zalo_tools`` (adapter không có bản riêng).
+
+    Cùng lý do với ``_zalo_tools()``: lấy theo package mà Hermes đã nạp công cụ
+    (``hermes_plugins.zalo_tools``), rơi về ``plugins.zalo_tools`` khi chạy ngoài
+    Hermes (test trong repo).
+    """
+    import importlib
+
+    package = getattr(_zalo_tools(), "__package__", None)
+    for name in ([f"{package}.people"] if package else []) + ["plugins.zalo_tools.people"]:
+        try:
+            return importlib.import_module(name)
+        except ImportError:
+            continue
+    raise ImportError("không tìm thấy zalo_tools.people")
+
+
 def _get_scoped_secret(name, default=None):
     """Scope-aware credential read with the default-profile startup fallback.
 
@@ -1022,9 +1040,9 @@ class ZaloAdapter(BasePlatformAdapter):
                         f"— có thể là bản quét ảnh.]")
             prompt_text = f"{note}\n\n{prompt_text}"
         try:
-            from .people import describe_person
-            known = describe_person(sender_uid)
+            known = _zalo_people().describe_person(sender_uid)
         except Exception:
+            logger.debug("[zalo] không tra được hồ sơ người nhắn %s", sender_uid, exc_info=True)
             known = ""
         if known:
             prompt_text = f"[Người nhắn — {sender_name}: {known}]\n{prompt_text}"

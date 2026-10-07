@@ -1114,6 +1114,28 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(auth["actorUid"], "2222222222222222222")
         self.assertEqual(auth["sourceThreadId"], "group-1")
 
+    async def test_known_person_profile_is_injected_into_message(self):
+        from plugins.zalo_tools import people
+
+        adapter = self.make_adapter()
+        handled = []
+
+        async def handle(event):
+            handled.append(event)
+
+        adapter.handle_message = handle
+        uid = "2222222222222222222"
+        frame = {**self.group_frame("m-people", uid, "@Lăng Tiêu nhắc họp"), "senderName": "Yến"}
+        with tempfile.TemporaryDirectory() as tmp,                 patch.dict(os.environ, {"ZALO_PEOPLE_FILE": os.path.join(tmp, "people.json")}):
+            people.remember_person(uid, name="Yến", note="Giáo viên Hoá")
+            # Gói công cụ Hermes nạp không import được → rơi về plugins.zalo_tools.
+            with patch.object(adapter, "_is_owner", return_value=False),                     patch.object(zalo_adapter, "_zalo_tools",
+                                 return_value=SimpleNamespace(__package__="hermes_plugins.khong_co",
+                                                              set_turn_context=lambda **kw: None)):
+                await adapter._on_message(frame)
+
+        self.assertIn("[Người nhắn — Yến: Yến · Giáo viên Hoá]", handled[0].text)
+
     async def test_turn_remembers_sender_display_name(self):
         adapter = self.make_adapter()
         adapter.handle_message = lambda _event: asyncio.sleep(0)
