@@ -1,8 +1,9 @@
 import express from 'express';
 import { requireAuth, requireRole } from '../lib/http-guards.js';
-import { validatePassword, validateZaloUid } from '../lib/users.js';
+import { ZALO_UID, validatePassword, validateZaloUid } from '../lib/users.js';
+import { parseOwners } from '../lib/owners.js';
 
-export function adminRoutes({ users, sessions, activity, restartAssistant }) {
+export function adminRoutes({ users, sessions, activity, restartAssistant, restartSidecar, owners, store }) {
   const r = express.Router();
   const guard = [requireAuth, requireRole('admin')];
   // Cùng quy ước với routes/zalo.js: chỉ lộ err.message khi lỗi có statusCode 4xx rõ ràng.
@@ -42,11 +43,71 @@ export function adminRoutes({ users, sessions, activity, restartAssistant }) {
     } catch (err) { fail(res, err, 'Chưa cập nhật được tài khoản — thử lại, nếu vẫn lỗi hãy báo người cài đặt.'); }
   });
 
+  // Chủ nhân bot (spec §7.1, §9): tên lấy từ lịch sử tin nhắn (tin riêng trước) và tài khoản dashboard có cùng UID.
+  function ownersView() {
+    const uids = owners.list();
+    let names = new Map();
+    try { if (uids.length && store?.available()) names = store.senderNames(uids); } catch (err) {
+      console.error('[dashboard] đọc tên chủ nhân lỗi:', err?.message || err);
+    }
+    const accounts = users.list();
+    // .env của thư mục bot ghi đè → kết nối Zalo đang chạy theo danh sách khác. Đặt cờ chờ để dải vàng hiện và vẫn còn
+    // sau khi người dùng xoá dòng đó: lúc ấy shadowed() đã là false nhưng kết nối Zalo vẫn cần khởi động lại.
+    const over = owners.overrides();
+    const shadowed = over.sidecar;
+    if (shadowed) {
+      try { owners.markPending('shadowed'); } catch (err) { console.error('[dashboard] không đặt được cờ chờ khởi động lại:', err?.message || err); }
+    }
+    return {
+      ok: true,
+      owners: uids.map((uid) => ({
+        uid, valid: ZALO_UID.test(uid), name: names.get(uid) || '',
+        dashboardUsers: accounts.filter((u) => u.zaloUid === uid).map((u) => u.username),
+      })),
+      pendingRestart: Boolean(owners.pending()),
+      shadowed,
+      osOverride: over.os,
+    };
+  }
+
+  r.get('/admin/owners', ...guard, (req, res) => {
+    try { res.json(ownersView()); } catch (err) { fail(res, err, 'Chưa đọc được danh sách chủ nhân — tải lại trang, nếu vẫn lỗi hãy báo người cài đặt.'); }
+  });
+
+  r.put('/admin/owners', ...guard, (req, res) => {
+    try {
+      const uids = parseOwners(req.body?.owners);
+      const before = owners.list();
+      if (owners.set(uids, req.user.username)) {
+        const diff = [...uids.filter((u) => !before.includes(u)).map((u) => `+${u}`), ...before.filter((u) => !uids.includes(u)).map((u) => `-${u}`)];
+        activity.append({ actor: req.user.username, action: 'owners_update', detail: diff.join(' ') });
+      }
+      res.json(ownersView());
+    } catch (err) { fail(res, err, 'Chưa lưu được danh sách chủ nhân — thử lại, nếu vẫn lỗi hãy báo người cài đặt.'); }
+  });
+
+  // Khởi động lại trợ lý. Có thay đổi chủ nhân đang chờ thì khởi động lại cả kết nối Zalo trước —
+  // nó cũng chỉ đọc ZALO_ALLOWED_USERS lúc khởi động (quyền lệnh chủ nhân, ai được nhận tin báo lỗi).
   r.post('/admin/restart-assistant', ...guard, async (req, res) => {
     try {
+      const pendingAtStart = owners?.pending();
+      // Kết nối Zalo lỗi không được chặn việc khởi động lại trợ lý: vẫn khởi động trợ lý, giữ cờ chờ, báo thành công một phần.
+      let sidecarFailed = false;
+      if (pendingAtStart) {
+        try { await restartSidecar(); } catch (err) {
+          sidecarFailed = true;
+          console.error('[dashboard] khởi động lại kết nối Zalo lỗi:', err?.message || err);
+        }
+      }
       await restartAssistant();
-      activity.append({ actor: req.user.username, action: 'restart_assistant' });
-      res.json({ ok: true });
+      const applied = Boolean(pendingAtStart) && !sidecarFailed;
+      // Chỉ xoá cờ nếu kết nối Zalo đã khởi động lại và không có thay đổi mới chen vào (thay đổi đó chưa được áp dụng).
+      if (applied && owners.pending()?.since === pendingAtStart.since) owners.clearPending();
+      activity.append({ actor: req.user.username, action: 'restart_assistant', detail: sidecarFailed ? 'kết nối Zalo chưa khởi động lại được' : applied ? 'áp dụng danh sách chủ nhân mới' : '' });
+      res.json({
+        ok: true, appliedOwners: applied, sidecarFailed,
+        ...(sidecarFailed ? { warning: 'Đã khởi động lại trợ lý, nhưng chưa khởi động lại được kết nối Zalo — chạy lại trình cài đặt hoặc đặt ZALO_SIDECAR_RESTART_CMD.' } : {}),
+      });
     } catch (err) { fail(res, err, 'Chưa khởi động lại được trợ lý — thử lại sau ít phút, nếu vẫn lỗi hãy báo người cài đặt.'); }
   });
   return r;

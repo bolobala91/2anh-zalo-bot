@@ -52,6 +52,7 @@ export function authRoutes({ users, sessions, guard, setupToken, activity, sidec
     try {
       const user = users.create({ username, role: 'admin', zaloUid, password });
       setSessionCookie(res, req, sessions.create(user.username));
+      try { users.recordLogin(user.username); } catch (err) { console.error('[dashboard] không ghi được lần đăng nhập gần nhất:', err?.message || err); }
       activity.append({ actor: user.username, action: 'setup_admin' });
       res.json({ ok: true, user });
     } catch (err) { fail(res, err, 'Không tạo được tài khoản — thử lại, nếu vẫn lỗi hãy xem nhật ký dịch vụ.'); }
@@ -89,6 +90,7 @@ export function authRoutes({ users, sessions, guard, setupToken, activity, sidec
     // Chỉ xoá khoá theo tài khoản — không xoá khoá IP, để một tài khoản hợp lệ không dùng được để reset IP khi đoán mật khẩu tài khoản khác.
     guard.succeed([userKey(username)]);
     setSessionCookie(res, req, sessions.create(username));
+    try { users.recordLogin(username); } catch (err) { console.error('[dashboard] không ghi được lần đăng nhập gần nhất:', err?.message || err); }
     activity.append({ actor: username, action: 'login', detail: code ? 'mã Zalo' : 'mật khẩu' });
     res.json({ ok: true });
   });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
-import { html, Icon, roleLabel } from '../ui.js';
+import { html, BrandMark, Icon, PoweredBy, roleLabel } from '../ui.js';
 import { Overview } from './overview.js';
 import { Zalo } from './zalo.js';
 import { Users } from './users.js';
@@ -9,6 +9,8 @@ import { Profile } from './profile.js';
 import { Chats } from './chats.js';
 import { Audit } from './audit.js';
 import { Permissions } from './permissions.js';
+import { Brand } from './brand.js';
+import { Owners } from './owners.js';
 
 const STATUS_MS = 3000;
 
@@ -18,7 +20,9 @@ const ROUTES = {
   '/permissions': { view: Permissions },
   '/zalo': { view: Zalo },
   '/audit': { view: Audit },
+  '/brand': { view: Brand },
   '/users': { view: Users, admin: true },
+  '/owners': { view: Owners, admin: true },
   '/alerts': { view: Alerts, admin: true },
   '/profile': { view: Profile },
 };
@@ -32,9 +36,11 @@ const GROUPS = [
   { label: 'Hệ thống', items: [
     { path: '/zalo', text: 'Tài khoản Zalo', icon: 'phone' },
     { path: '/audit', text: 'Nhật ký', icon: 'list' },
+    { path: '/brand', text: 'Thương hiệu', icon: 'image' },
   ] },
   { label: 'Quản trị', admin: true, items: [
     { path: '/users', text: 'Người dùng', icon: 'users' },
+    { path: '/owners', text: 'Chủ nhân bot', icon: 'crown' },
     { path: '/alerts', text: 'Cảnh báo Telegram', icon: 'bell' },
   ] },
 ];
@@ -92,7 +98,7 @@ function Sidebar({ me, brand, path }) {
   const link = (it) => html`<a class=${`nav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`}
     aria-current=${path === it.path ? 'page' : undefined}><${Icon} name=${it.icon} /><span>${it.text}</span></a>`;
   return html`<aside class="sidebar">
-    <div class="side-brand"><span class="logo" aria-hidden="true"><${Icon} name="bot" size=${20} /></span><span>${brand}</span></div>
+    <div class="side-brand"><${BrandMark} brand=${brand} /><span>${brand.name}</span></div>
     <nav class="nav" aria-label="Điều hướng chính">
       ${GROUPS.filter((g) => !g.admin || me.role === 'admin').map((g) => html`
         <div class="nav-group" role="group" aria-label=${g.label}>
@@ -104,6 +110,7 @@ function Sidebar({ me, brand, path }) {
           <span class="avatar avatar-sm" aria-hidden="true">${me.username.slice(0, 1).toUpperCase()}</span>
           <span class="me"><span>Tài khoản của tôi</span><small>${me.username} · ${roleLabel(me.role)}</small></span>
         </a>
+        <${PoweredBy} brand=${brand} />
       </div>
     </nav>
   </aside>`;

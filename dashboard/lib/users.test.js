@@ -35,7 +35,7 @@ test('reset-admin (tiến trình khác) sửa users.json thì dashboard đang ch
 test('bản công khai không lộ mật khẩu băm', (t) => {
   const { s } = store(t);
   const u = s.create({ username: 'khach', role: 'owner', password: 'abcdefgh' });
-  assert.deepEqual(Object.keys(u).sort(), ['createdAt', 'disabled', 'hasPassword', 'role', 'username', 'zaloUid']);
+  assert.deepEqual(Object.keys(u).sort(), ['createdAt', 'disabled', 'hasPassword', 'lastLoginAt', 'role', 'username', 'zaloUid']);
 });
 
 test('từ chối dữ liệu sai', (t) => {
@@ -70,4 +70,15 @@ test('mật khẩu tối đa 256 ký tự; verify mật khẩu quá dài trả f
   assert.throws(() => s.setPassword('abc', long), /tối đa 256/);
   assert.equal(s.verifyPassword('abc', 'a'.repeat(256)), true);
   assert.equal(s.verifyPassword('abc', long), false);
+});
+
+test('recordLogin: ghi lần đăng nhập gần nhất, list() trả lastLoginAt (chưa đăng nhập = null); người lạ bỏ qua', (t) => {
+  const { s, file } = store(t);
+  s.create({ username: 'anh', role: 'admin', password: 'matkhau-dai' });
+  assert.equal(s.list()[0].lastLoginAt, null);
+  s.recordLogin('anh', 1234);
+  assert.equal(s.list()[0].lastLoginAt, 1234);
+  s.recordLogin('khongco', 99);
+  assert.equal(s.list().length, 1);
+  assert.ok(!readFileSync(file, 'utf8').includes('khongco'));
 });

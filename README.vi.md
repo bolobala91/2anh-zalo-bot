@@ -468,6 +468,18 @@ Bấm **Lưu** là bot áp dụng ngay, không cần khởi động lại. Thàn
 
 Bảng nằm ở `<HERMES_HOME>/zalo/permissions.json` (bản trước ở `permissions.json.bak`). Xoá tệp này thì bot trở lại như khi chưa có phân quyền. Tệp hỏng thì bot dùng mặc định (mọi tính năng bật) và dashboard báo để lưu lại.
 
+### Thương hiệu
+
+Mục **Thương hiệu** (Quản trị và Chủ bot đều dùng được) đổi logo, tên và màu của dashboard. Logo nhận ảnh PNG, JPG hoặc WebP (không nhận SVG); trình duyệt tự thu về tối đa 256×256 điểm ảnh — nên dùng ảnh vuông, nền trong suốt. Màu chọn một trong 6 gợi ý hoặc nhập mã (vd. `#1d4ed8`); màu quá nhạt để chữ trắng đọc được (dưới 4,5 : 1) thì không lưu được. Khung **Xem trước** cho thấy thanh bên và trang đăng nhập trước khi bấm Lưu. Có thể ẩn dòng "Vận hành bởi 2Anh AI". **Khôi phục mặc định** đưa tên, màu, logo về như lúc cài.
+
+Trang đăng nhập hiện tên, màu và logo này cả khi chưa đăng nhập. Dữ liệu nằm ở `<HERMES_HOME>/zalo/dashboard/brand.json` và `brand/logo.png`.
+
+### Chủ nhân bot
+
+Mục **Chủ nhân bot** (chỉ Quản trị) sửa danh sách UID Zalo có toàn quyền với bot — chính là `ZALO_ALLOWED_USERS` trong `.env` của Hermes (bản trước giữ ở `.env.bak`; dashboard không đọc hay đổi dòng nào khác). Mỗi UID hiện kèm tên Zalo nếu người đó từng nhắn cho bot. Muốn biết UID của ai, nhờ người đó nhắn `/sethome` cho bot. Bot luôn phải còn ít nhất một chủ nhân.
+
+Lưu xong, dashboard hiện dải vàng **Cần khởi động lại trợ lý**: bấm nút trên dải để khởi động lại kết nối Zalo và trợ lý (bot ngừng trả lời tới vài phút). Gateway Hermes nạp lại `.env` mỗi lượt nên trợ lý thấy danh sách mới ngay; chỉ kết nối Zalo cần khởi động lại — trước đó người mới thêm chưa dùng được đủ lệnh chủ nhân. Nếu thư mục cài bot có `.env` riêng cũng ghi `ZALO_ALLOWED_USERS`, dòng đó được ưu tiên — trang sẽ báo đỏ; xoá dòng đó rồi khởi động lại. Biến `ZALO_ALLOWED_USERS` đặt sẵn trong môi trường hệ thống/dịch vụ cũng ghi đè và cũng bị báo đỏ — nhờ người cài đặt xoá khỏi môi trường đó.
+
 ### Kiểm tay sau khi cài (Giai đoạn 1)
 
 - [ ] `npm run doctor` không có dòng `[FAIL]`; `dashboard-running` báo "đang chạy".
@@ -501,6 +513,17 @@ Bảng nằm ở `<HERMES_HOME>/zalo/permissions.json` (bản trước ở `perm
 - [ ] Bấm "Dùng mặc định" rồi Lưu → nhóm về như cũ, nhãn bên trái biến mất.
 - [ ] Sửa gì đó rồi bấm sang mục khác khi chưa lưu → dashboard hỏi có muốn bỏ thay đổi không.
 
+### Kiểm tay sau khi cài (Giai đoạn 4)
+
+- [ ] Thương hiệu: đổi tên + chọn màu gợi ý + tải logo JPG, Lưu → thanh bên, tab trình duyệt đổi ngay; đăng xuất → trang đăng nhập đúng tên, màu, logo.
+- [ ] Nhập mã màu nhạt (vd. `#fde68a`) → báo khó đọc, không lưu được. Chọn tệp `.svg` → báo không nhận SVG.
+- [ ] Tắt "Vận hành bởi 2Anh AI" → dòng đó biến mất ở thanh bên và trang đăng nhập. Khôi phục mặc định → về như lúc cài.
+- [ ] Chủ nhân bot: thêm UID một người thứ hai → dải vàng; bấm Khởi động lại trợ lý → khoảng một phút sau người đó dùng được công cụ chủ nhân; dải vàng biến mất.
+- [ ] Còn một chủ nhân thì không bỏ được; nhập số điện thoại → báo lỗi.
+- [ ] Người dùng: cột "Đăng nhập gần nhất" đúng giờ vừa đăng nhập.
+- [ ] Nhật ký có các dòng "Đổi thương hiệu", "Đổi logo", "Đổi chủ nhân bot" kèm tên mình.
+- [ ] Tài khoản Chủ bot vào được Thương hiệu, không thấy Chủ nhân bot.
+
 Gỡ cài đặt (`npm run uninstall:hermes`) cũng gỡ dịch vụ dashboard, nhưng giữ nguyên tài khoản và dữ liệu.
 
 ---
@@ -513,7 +536,7 @@ Sidecar không còn tệp cấu hình nào. Ai được dùng bot, trả lời k
 
 | Việc | Đặt ở đâu |
 |---|---|
-| Ai là chủ nhân | `ZALO_ALLOWED_USERS` trong `.env` của Hermes |
+| Ai là chủ nhân | `ZALO_ALLOWED_USERS` trong `.env` của Hermes (sửa được ở mục **Chủ nhân bot** của dashboard) |
 | Ai được nhắn riêng | `ZALO_DM_POLICY` |
 | Trong nhóm chỉ trả lời khi được tag | `ZALO_GROUP_REPLY_ONLY_TAGGED` |
 | Bật công cụ kết bạn (mặc định tắt) | `ZALO_FRIEND_TOOLS` |

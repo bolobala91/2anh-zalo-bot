@@ -2,6 +2,26 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.22.0] — 2026-10-07
+
+### Thêm
+
+- **Dashboard: Thương hiệu.** Đổi tên, logo và màu; 6 màu gợi ý hoặc nhập mã, kiểm chữ trắng đọc được (≥ 4,5 : 1); xem trước thanh bên và trang đăng nhập trước khi lưu; bật/tắt dòng "Vận hành bởi 2Anh AI"; khôi phục mặc định. Trang đăng nhập hiện thương hiệu ngay khi chưa đăng nhập. Quản trị và Chủ bot đều chỉnh được; mọi lần đổi ghi vào Nhật ký.
+- **Dashboard: Chủ nhân bot** (chỉ Quản trị). Thêm/bỏ UID chủ nhân ngay trên dashboard, kèm tên Zalo của từng người; không bao giờ để bot mất chủ nhân cuối cùng. Lưu xong có dải vàng nhắc khởi động lại trợ lý — nút khởi động lại áp dụng cho cả kết nối Zalo lẫn trợ lý. Nếu `.env` riêng của bot cũng ghi danh sách chủ nhân (và đang đè lên), trang báo đỏ.
+- **Người dùng** có cột "Đăng nhập gần nhất".
+
+### Sửa
+
+- Thẻ "Lỗi gần nhất" ở Tổng quan nói rõ chuyện gì xảy ra và nên làm gì, thay cho câu chung "xem log cục bộ"; Quản trị thấy thêm mã lỗi.
+- Thanh bên cao đủ chiều cao màn hình.
+- Nút chọn tệp ảnh hiện tiếng Việt.
+- Thanh trên cùng trên điện thoại không còn giãn/nổi lơ lửng ở trang ngắn.
+
+### An toàn
+
+- Logo chỉ lưu dạng PNG ≤ 256 px đã kiểm từng byte, không nhận SVG; logo và màu phục vụ cùng nguồn, giữ nguyên chính sách bảo mật nội dung (CSP).
+- Dashboard chỉ đọc và sửa đúng dòng `ZALO_ALLOWED_USERS` trong `.env` của Hermes, giữ bản trước ở `.env.bak`.
+
 ## [1.21.0] — 2026-10-07
 
 ### Thêm

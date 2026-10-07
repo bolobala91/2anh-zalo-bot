@@ -6,8 +6,15 @@ import { Login } from './views/login.js';
 import { Setup } from './views/setup.js';
 import { Shell } from './views/shell.js';
 
-const DEFAULT_BRAND = 'Dashboard Zalo';
+const DEFAULT_BRAND = { name: 'Dashboard Zalo', poweredBy: true, logoUrl: null };
+const pickBrand = (r) => ({ name: String(r?.name || DEFAULT_BRAND.name), poweredBy: r?.poweredBy !== false, logoUrl: r?.logoUrl || null });
 const route = () => location.hash.replace(/^#/, '') || '/';
+
+/** Tải lại /brand.css sau khi đổi màu (đổi ?v= để trình duyệt không dùng bản cũ). */
+function reloadBrandCss() {
+  const link = document.getElementById('brand-css');
+  if (link) link.href = `brand.css?v=${Date.now()}`;
+}
 
 function App() {
   const [path, setPath] = useState(route());
@@ -16,13 +23,16 @@ function App() {
   useEffect(() => {
     const onHash = () => setPath(route());
     const onLogout = () => setMe(null);
-    addEventListener('hashchange', onHash); addEventListener('zd:logout', onLogout);
+    // Trang Thương hiệu lưu xong thì báo qua sự kiện này để thanh bên, tab trình duyệt và màu đổi ngay.
+    const onBrand = (e) => { setBrand(pickBrand(e.detail)); reloadBrandCss(); };
+    addEventListener('hashchange', onHash); addEventListener('zd:logout', onLogout); addEventListener('zd:brand', onBrand);
     api('/api/me').then((r) => setMe(r.user)).catch(() => setMe(null));
-    // Trang Thương hiệu làm ở giai đoạn sau; chưa có thì giữ tên mặc định.
-    api('/api/brand').then((r) => { if (r.name) setBrand(String(r.name)); }).catch(() => {});
-    return () => { removeEventListener('hashchange', onHash); removeEventListener('zd:logout', onLogout); };
+    api('/api/brand').then((r) => setBrand(pickBrand(r))).catch(() => {});
+    return () => {
+      removeEventListener('hashchange', onHash); removeEventListener('zd:logout', onLogout); removeEventListener('zd:brand', onBrand);
+    };
   }, []);
-  useEffect(() => { document.title = brand; }, [brand]);
+  useEffect(() => { document.title = brand.name; }, [brand.name]);
 
   if (path.startsWith('/setup/')) {
     return html`<${Setup} brand=${brand} token=${path.slice(7)}

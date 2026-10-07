@@ -100,9 +100,11 @@ test('giao diện không dùng innerHTML và không có style nội tuyến (CSP
   }
 });
 
-test('index.html không tải tài nguyên từ Internet', () => {
+test('index.html không tải tài nguyên từ Internet; nạp brand.css sau style.css để màu thương hiệu đè lên', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   assert.doesNotMatch(html, /(src|href)=["']https?:/);
+  assert.ok(html.indexOf('href="brand.css"') > html.indexOf('href="style.css"'));
+  assert.match(html, /id="brand-css"/);
 });
 
 test('phân quyền: gộp nhóm của bot với tệp, so thay đổi, nhãn trong danh sách', async () => {
@@ -148,4 +150,62 @@ test('phân quyền: hỏi trước khi bỏ thay đổi chưa lưu; nhóm chỉ
   assert.equal(staysListed('300', perms, []), true, 'còn mục trong tệp');
   assert.equal(staysListed('200', perms, [{ id: '200' }]), true, 'bot còn thấy nhóm');
   assert.equal(staysListed('400', perms, []), false, 'chỉ có trong tệp, vừa về mặc định');
+});
+
+test('thương hiệu: thu nhỏ logo giữ tỉ lệ, kiểm loại tệp, câu tương phản', async () => {
+  const { fitSize, checkLogoFile, contrastInfo } = await import('./views/brand.js');
+  assert.deepEqual(fitSize(1024, 512), { width: 256, height: 128 });
+  assert.deepEqual(fitSize(100, 3000), { width: 9, height: 256 });
+  assert.deepEqual(fitSize(64, 64), { width: 64, height: 64 }, 'ảnh nhỏ giữ nguyên');
+  assert.deepEqual(fitSize(5000, 1), { width: 256, height: 1 });
+  assert.equal(checkLogoFile({ type: 'image/png', size: 1000 }), '');
+  assert.equal(checkLogoFile({ type: 'image/webp', size: 5 * 1024 * 1024 }), '');
+  assert.match(checkLogoFile({ type: 'image/svg+xml', size: 100 }), /không nhận SVG/);
+  assert.match(checkLogoFile({ type: 'image/gif', size: 100 }), /PNG, JPG hoặc WebP/);
+  assert.match(checkLogoFile({ type: 'image/png', size: 5 * 1024 * 1024 + 1 }), /5 MB/);
+  assert.match(checkLogoFile(undefined), /—/);
+  assert.deepEqual(contrastInfo('#0F766E'), { hex: '#0f766e', ok: true, text: 'Chữ trắng trên màu này: 5,47 : 1 — dễ đọc.' });
+  assert.equal(contrastInfo('#777777').ok, false);
+  assert.match(contrastInfo('#777777').text, /4,48 : 1 — dưới 4,5 : 1/);
+  assert.deepEqual(contrastInfo('xanh'), { hex: null, ok: false, text: 'Mã màu chưa đúng — nhập dạng #0f766e hoặc chọn một màu gợi ý.' });
+});
+
+test('chủ nhân: kiểm UID trước khi gửi, nhãn tên dễ hiểu', async () => {
+  const { uidProblem, ownerLabel } = await import('./views/owners.js');
+  const A = '1234567890123456';
+  assert.equal(uidProblem('2234567890123456', [A]), '');
+  assert.match(uidProblem('0912345678', [A]), /không phải số điện thoại/);
+  assert.match(uidProblem(A, [A]), /đã là chủ nhân/);
+  assert.match(uidProblem('2234567890123456', Array.from({ length: 20 }, (_, i) => String(i))), /Tối đa 20/);
+  assert.equal(ownerLabel({ name: 'Cô Hà', dashboardUsers: ['ha'] }), 'Cô Hà · tài khoản dashboard: ha');
+  assert.equal(ownerLabel({ name: '', dashboardUsers: ['anh'] }), 'Tài khoản dashboard: anh');
+  assert.equal(ownerLabel({ name: '', dashboardUsers: [] }), 'Chưa rõ tên — người này chưa nhắn cho bot');
+});
+
+test('thanh bên: đủ mục spec §9 theo đúng nhóm, mục Quản trị chỉ hiện cho Quản trị', async () => {
+  const src = readFileSync(join(root, 'views', 'shell.js'), 'utf8');
+  const order = ['Tài khoản Zalo', 'Nhật ký', 'Thương hiệu', 'Người dùng', 'Chủ nhân bot', 'Cảnh báo Telegram'].map((t) => src.indexOf(`'${t}'`));
+  assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), order.join(','));
+  assert.match(src, /'\/owners': \{ view: Owners, admin: true \}/);
+  assert.match(src, /'\/brand': \{ view: Brand \}/);
+});
+
+test('Tổng quan: lỗi gần nhất thành câu dễ hiểu có bước tiếp theo; mã kỹ thuật chỉ cho Quản trị', async () => {
+  const { errorText } = await import('./views/overview.js');
+  const e = { code: 'zalo_listener_closed', message: 'Đã ghi nhận lỗi nội bộ; xem log cục bộ để biết chi tiết.', atMs: 1 };
+  assert.deepEqual(errorText(e, 'owner'), {
+    text: 'Kết nối nhận tin Zalo bị ngắt.',
+    next: 'Bot thường tự nối lại sau ít phút. Nếu thanh trên cùng báo mất kết nối, hãy quét mã đăng nhập lại.',
+    code: null,
+  });
+  assert.equal(errorText(e, 'admin').code, 'zalo_listener_closed');
+  const unknown = errorText({ code: 'something_new' }, 'owner');
+  assert.equal(unknown.text, 'Bot ghi nhận một lỗi nội bộ.');
+  assert.match(unknown.next, /báo người cài đặt/);
+  for (const code of ['bridge_command_failed', 'system_notice_failed', 'bridge_server_error', 'history_retention_failed',
+    'legacy_history_import_failed', 'automatic_backfill_failed', 'dashboard_server_error']) {
+    const r = errorText({ code }, 'owner');
+    assert.notEqual(r.text, unknown.text, code);
+    assert.doesNotMatch(`${r.text} ${r.next}`, /log|sidecar|bridge|toolset/i, code);
+  }
 });

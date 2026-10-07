@@ -2,7 +2,7 @@ import { spawn, execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { waitSpawned } from './spawn-detached.js';
+import { childEnv, waitSpawned } from './spawn-detached.js';
 import { systemctlRestart } from './restart.js';
 
 const execFileP = promisify(execFile);
@@ -21,13 +21,13 @@ export function makeRestartAssistant({
       return;
     }
     let child;
-    if (cmd) child = spawnImpl(cmd, { ...opts, shell: true });
+    if (cmd) child = spawnImpl(cmd, { ...opts, shell: true, env: childEnv() });
     else {
       const bundled = join(hermesHome, 'bin', 'hermes.exe');
       const exe = existsImpl(bundled) ? bundled : 'hermes';
       await execImpl(exe, ['gateway', 'stop'], { windowsHide: true, timeout: 30_000 })
         .catch((e) => console.warn('[restart] hermes gateway stop lỗi, vẫn chạy lại:', e.message));
-      child = spawnImpl(exe, ['gateway', 'run', '--accept-hooks'], { ...opts, cwd: hermesHome });
+      child = spawnImpl(exe, ['gateway', 'run', '--accept-hooks'], { ...opts, cwd: hermesHome, env: childEnv() });
     }
     await waitSpawned(child);
   };

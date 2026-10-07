@@ -21,6 +21,25 @@ export function zaloCard(s) {
   return { kind: 'danger', state: 'Chưa đăng nhập — cần quét QR', qr: true };
 }
 
+// Mã lỗi runtime-health của bot → câu dễ hiểu + bước tiếp theo. Mã lạ dùng câu chung.
+const ERRORS = {
+  zalo_listener_closed: ['Kết nối nhận tin Zalo bị ngắt.', 'Bot thường tự nối lại sau ít phút. Nếu thanh trên cùng báo mất kết nối, hãy quét mã đăng nhập lại.'],
+  bridge_command_failed: ['Bot chưa làm được một việc trên Zalo (gửi tin hoặc thao tác nhóm).', 'Thường do Zalo từ chối hoặc mạng chập chờn — xem Nhật ký, bật "Chỉ hiện lỗi" để biết việc nào.'],
+  system_notice_failed: ['Bot chưa gửi được một tin thông báo.', 'Xem Nhật ký, bật "Chỉ hiện lỗi" để biết tin nào; nếu lặp lại hãy báo người cài đặt.'],
+  bridge_server_error: ['Trợ lý gặp lỗi khi trao đổi với Zalo.', 'Nếu bot ngừng trả lời, nhờ Quản trị khởi động lại trợ lý.'],
+  history_retention_failed: ['Bot chưa dọn được lịch sử tin nhắn cũ.', 'Bot vẫn trả lời bình thường; báo người cài đặt nếu lỗi lặp lại.'],
+  legacy_history_import_failed: ['Bot chưa nhập được lịch sử tin nhắn cũ.', 'Bot vẫn trả lời bình thường; báo người cài đặt nếu Phiên chat thiếu tin cũ.'],
+  automatic_backfill_failed: ['Bot chưa tải bù được tin nhắn lúc mất kết nối.', 'Bot vẫn trả lời bình thường; vài tin trong lúc mất kết nối có thể không hiện ở Phiên chat.'],
+  dashboard_server_error: ['Bot không mở được cổng nội bộ của nó.', 'Báo người cài đặt kèm thời điểm trên.'],
+};
+const GENERIC = ['Bot ghi nhận một lỗi nội bộ.', 'Nếu lỗi lặp lại hoặc bot ngừng trả lời, hãy báo người cài đặt kèm thời điểm trên.'];
+
+/** { text, next, code } cho thẻ "Lỗi gần nhất"; mã kỹ thuật chỉ dành cho Quản trị. */
+export function errorText(lastError, role) {
+  const [text, next] = ERRORS[lastError?.code] || GENERIC;
+  return { text, next, code: role === 'admin' && lastError?.code ? String(lastError.code) : null };
+}
+
 function TodayCard({ today }) {
   return html`<section class="card">
     <h2>Tin nhắn hôm nay</h2>
@@ -47,12 +66,14 @@ export function Overview({ me, status: s }) {
     if (!confirm('Khởi động lại trợ lý? Bot sẽ tạm ngừng trả lời trong khoảng một phút.')) return;
     setBusy(true); setMsg({});
     try {
-      await api('/api/admin/restart-assistant', { method: 'POST' });
-      setMsg({ ok: 'Đã gửi lệnh khởi động lại — đợi khoảng một phút rồi xem lại thẻ Trợ lý.' });
+      const r = await api('/api/admin/restart-assistant', { method: 'POST' });
+      if (r.sidecarFailed) setMsg({ error: r.warning });
+      else setMsg({ ok: 'Đã gửi lệnh khởi động lại — đợi khoảng một phút rồi xem lại thẻ Trợ lý.' });
     } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
   }
 
   const z = zaloCard(s);
+  const err = s.lastError ? errorText(s.lastError, me.role) : null;
   const down = s.sidecar === 'down';
   const assistant = down ? { kind: 'idle', state: 'Chưa rõ — đang chờ kết nối Zalo bật lại' }
     : s.assistant === 'connected' ? { kind: 'ok', state: 'Đang kết nối — sẵn sàng trả lời' }
@@ -85,10 +106,11 @@ export function Overview({ me, status: s }) {
       </section>
       <section class="card">
         <h2>Lỗi gần nhất</h2>
-        ${s.lastError ? html`
+        ${err ? html`
           <p class="badge badge-warn"><${Icon} name="warn" size=${16} /> ${fmtTime(s.lastError.atMs)}</p>
-          <p class="error-text">${s.lastError.message || 'Không có mô tả'}</p>
-          <p class="muted small">Nếu lỗi này lặp lại hoặc bot ngừng trả lời, hãy báo người cài đặt kèm thời điểm trên.</p>`
+          <p class="last-error">${err.text}</p>
+          <p class="muted small">${err.next}</p>
+          ${err.code ? html`<p class="muted small">Mã: <span class="mono">${err.code}</span></p>` : null}`
         : html`<p class="badge badge-ok"><${Icon} name="check" size=${16} /> Không có lỗi nào gần đây</p>`}
       </section>
       <${TodayCard} today=${s.today} />

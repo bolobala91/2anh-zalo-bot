@@ -1,6 +1,6 @@
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { waitSpawned } from './spawn-detached.js';
+import { childEnv, waitSpawned } from './spawn-detached.js';
 
 const execFileP = promisify(execFile);
 const defaultExec = (file, args, opts) => execFileP(file, args, opts);
@@ -64,10 +64,10 @@ export function makeRestartSidecar({
       return;
     }
     let child;
-    if (cmd) child = spawnImpl(cmd, { ...opts, shell: true });
+    if (cmd) child = spawnImpl(cmd, { ...opts, shell: true, env: childEnv() });
     else {
       await freePort().catch((e) => console.warn('[restart] không giải phóng được cổng:', e.message));
-      child = spawnImpl(process.execPath, ['server.js'], { ...opts, cwd: sidecarRoot });
+      child = spawnImpl(process.execPath, ['server.js'], { ...opts, cwd: sidecarRoot, env: childEnv() });
     }
     await waitSpawned(child);
   };
