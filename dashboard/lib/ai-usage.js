@@ -21,20 +21,28 @@ export class UsageUnavailable extends Error {
   constructor(message) { super(message); this.name = 'UsageUnavailable'; }
 }
 
-/** Tổng cộng dồn `{ calls, input, output, cached }` — mở CSDL chỉ đọc rồi đóng ngay. */
+/** Tổng cộng dồn `{ calls, input, output, cached, source }` — mở CSDL chỉ đọc rồi đóng ngay. */
 export function readUsageTotals(dbPath) {
   if (!existsSync(dbPath)) throw new UsageUnavailable('Chưa có state.db của Hermes');
-  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const db = new DatabaseSync(dbPath, { readOnly: true, timeout: 1500 });
   try {
     db.exec('PRAGMA query_only = ON');
     let row;
-    try { row = db.prepare(SQL_USAGE).get(); } catch { row = db.prepare(SQL_SESSIONS).get(); }
-    return Object.fromEntries(FIELDS.map((k) => [k, Number(row[k]) || 0]));
+    let source = 'session_model_usage';
+    try { row = db.prepare(SQL_USAGE).get(); } catch (e) {
+      // Chỉ bản Hermes cũ (không có bảng) mới dùng bảng sessions; lỗi khác (khoá tệp, I/O…) là lỗi đọc thật.
+      if (!/no such table: session_model_usage/i.test(String(e?.message))) throw e;
+      source = 'sessions';
+      row = db.prepare(SQL_SESSIONS).get();
+    }
+    return { ...Object.fromEntries(FIELDS.map((k) => [k, Number(row[k]) || 0])), source };
   } finally { db.close(); }
 }
 
 /** Ngày theo giờ Việt Nam (UTC+7), dạng YYYY-MM-DD. */
 export const vnDate = (ms) => new Date(ms + 7 * 3600_000).toISOString().slice(0, 10);
+
+const GAP_MS = 2 * 3600_000; // dashboard tắt lâu hơn mức này thì phần tăng dồn vào một ngày — đánh dấu để trang ghi chú
 
 export function createAiUsage({ dbPath, file, now = Date.now, keepDays = 30, readTotals = readUsageTotals }) {
   let state = readJson(file, { v: 1, since: null, last: null, days: {} });
@@ -54,18 +62,24 @@ export function createAiUsage({ dbPath, file, now = Date.now, keepDays = 30, rea
         return;
       }
       const t = now();
-      if (state.last) {
+      const source = cur.source || 'session_model_usage';
+      // Hai bảng cho tổng khác nhau: đổi nguồn thì lấy mốc mới, không tính phần chênh là lượt gọi.
+      const switched = Boolean(state.last) && Boolean(state.source) && state.source !== source;
+      if (state.last && !switched) {
         const day = vnDate(t);
         const bucket = state.days[day] || Object.fromEntries(FIELDS.map((k) => [k, 0]));
         // Tổng giảm (Hermes dọn phiên cũ, thay CSDL): coi phần giảm là 0, lấy mốc mới.
         for (const k of FIELDS) bucket[k] += Math.max(0, cur[k] - (Number(state.last[k]) || 0));
+        if (state.lastAt && t - state.lastAt > GAP_MS) bucket.includesGap = true;
         state.days[day] = bucket;
         const cut = vnDate(t - (keepDays - 1) * 86_400_000);
         for (const d of Object.keys(state.days)) if (d < cut) delete state.days[d];
-      } else {
+      } else if (!state.last) {
         state.since = t;
       }
-      state.last = cur;
+      state.last = Object.fromEntries(FIELDS.map((k) => [k, cur[k]]));
+      state.source = source;
+      state.lastAt = t;
       save();
     },
     /** `{ since, error: null|'missing'|'unreadable', errorAt, days: [{ date, calls, input, output, cached }] }` — cũ trước. */

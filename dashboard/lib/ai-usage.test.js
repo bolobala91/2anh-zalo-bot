@@ -33,10 +33,10 @@ const at = (iso) => Date.parse(iso);
 test('readUsageTotals: cộng mọi phiên; bản Hermes cũ không có session_model_usage thì đọc bảng sessions; không có tệp → UsageUnavailable', (t) => {
   const h = hermesDb(t);
   h.put('a', 3, 1000, 50, 400); h.put('b', 2, 500, 20, 0);
-  assert.deepEqual(readUsageTotals(h.path), { calls: 5, input: 1500, output: 70, cached: 400 });
+  assert.deepEqual(readUsageTotals(h.path), { calls: 5, input: 1500, output: 70, cached: 400, source: 'session_model_usage' });
   const old = hermesDb(t, { legacy: true });
   old.put('a', 7, 70, 7, 0);
-  assert.deepEqual(readUsageTotals(old.path), { calls: 7, input: 70, output: 7, cached: 0 });
+  assert.deepEqual(readUsageTotals(old.path), { calls: 7, input: 70, output: 7, cached: 0, source: 'sessions' });
   assert.throws(() => readUsageTotals(join(h.dir, 'khong-co.db')), { name: 'UsageUnavailable' });
 });
 
@@ -92,4 +92,58 @@ test('tổng giảm (Hermes dọn phiên) không ra số âm; giữ 30 ngày; l�
   missing.sample();
   assert.equal(missing.report().error, 'missing');
   assert.equal(vnDate(at('2026-10-06T17:00:00Z')), '2026-10-07');
+});
+
+const tot = (calls, source) => ({ calls, input: calls * 10, output: calls, cached: 0, source });
+
+test('lỗi đọc thoáng qua không đổi mốc: 6599 → lỗi → 6610 chỉ cộng 11', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zd-usage-'));
+  try {
+    let step = 0;
+    const seq = [() => tot(6599), () => { throw new Error('database is locked'); }, () => tot(6610)];
+    const u = createAiUsage({ dbPath: 'x', file: join(dir, 'u.json'), now: () => at('2026-10-07T03:00:00Z') + step * 60_000, readTotals: () => seq[step]() });
+    u.sample(); step = 1; u.sample();
+    assert.equal(u.report().error, 'unreadable');
+    step = 2; u.sample();
+    assert.equal(u.report().days[0].calls, 11);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('đổi nguồn (session_model_usage ↔ sessions) lấy mốc mới, không cộng phần chênh', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zd-usage-'));
+  try {
+    let step = 0;
+    const seq = [tot(6599, 'session_model_usage'), tot(5613, 'sessions'), tot(5620, 'sessions')];
+    const u = createAiUsage({ dbPath: 'x', file: join(dir, 'u.json'), now: () => at('2026-10-07T03:00:00Z') + step * 60_000, readTotals: () => seq[step] });
+    u.sample(); step = 1; u.sample();
+    assert.deepEqual(u.report().days, [], "đổi nguồn: không thêm gì");
+    step = 2; u.sample();
+    assert.equal(u.report().days[0].calls, 7);
+    assert.equal(JSON.parse(readFileSync(join(dir, 'u.json'), 'utf8')).source, 'sessions');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('thiếu bảng session_model_usage thì dùng bảng sessions; lỗi khác thì ném', (t) => {
+  const old = hermesDb(t, { legacy: true });
+  old.put('a', 3, 30, 3, 0);
+  const u = createAiUsage({ dbPath: old.path, file: join(old.dir, 'u.json') });
+  u.sample();
+  assert.equal(u.report().error, null);
+  assert.equal(JSON.parse(readFileSync(join(old.dir, 'u.json'), 'utf8')).source, 'sessions');
+});
+
+test('dashboard tắt hơn 2 giờ: ngày nhận phần tăng được đánh dấu includesGap', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zd-usage-'));
+  try {
+    let clock = at('2026-10-01T03:00:00Z'); let calls = 10;
+    const u = createAiUsage({ dbPath: 'x', file: join(dir, 'u.json'), now: () => clock, readTotals: () => tot(calls) });
+    u.sample();
+    clock += 5 * 60_000; calls = 12; u.sample();
+    assert.equal(u.report().days[0].includesGap, undefined);
+    clock = at('2026-10-06T03:00:00Z'); calls = 500; u.sample();
+    const days = u.report().days;
+    assert.equal(days.at(-1).date, '2026-10-06');
+    assert.equal(days.at(-1).includesGap, true);
+    assert.equal(days[0].includesGap, undefined);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
