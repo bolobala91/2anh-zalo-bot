@@ -132,6 +132,17 @@ class GuardFeatureTest(PermissionsFile, unittest.TestCase):
         zalo_tools.bind_turn({"sender_uid": OWNER if owner else MEMBER, "thread_id": thread,
                               "is_group": group, "is_owner": owner, "text": ""})
 
+    def test_owner_tool_refusal_hints_only_tools_enabled_in_this_group(self):
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"features": {"kb": False}}}})
+        self.turn()
+        message = zalo_tools.guard_member_tool_call("terminal", {"command": "ls"})["message"]
+        self.assertNotIn("zalo_kb_list", message)
+        self.assertIn("Cần gửi tệp thì zalo_send_file", message)
+        self.turn(thread=GROUP_B)
+        message = zalo_tools.guard_member_tool_call("terminal", {"command": "ls"})["message"]
+        self.assertIn("Cần tra tài liệu thì dùng zalo_kb_list", message)
+        self.assertIn("zalo_send_file", message)
+
     def test_member_in_group_with_web_off_is_refused_in_plain_vietnamese(self):
         self.turn()
         verdict = zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "giá vàng"})
@@ -248,6 +259,30 @@ class AdapterGroupRulesTest(PermissionsFile, AdapterHarness, unittest.IsolatedAs
         self.assertIn("Nhóm này đang tắt: tra cứu web, tải và xem thông tin video", context)
         await self.say(adapter, "m2", OWNER, "@Lăng Tiêu tra giá vàng")
         self.assertNotIn("đang tắt", self.handled[1].channel_context or "")
+
+    async def test_member_turn_with_everything_on_has_no_disabled_line(self):
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"replyOnlyTagged": True}}})
+        adapter = self.make_adapter()
+        await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu tra giá vàng")
+        self.assertEqual(len(self.handled), 1)
+        self.assertNotIn("Nhóm này đang tắt", self.handled[0].channel_context or "")
+        self.assertNotIn("Nhóm này đang tắt", self.handled[0].text)
+
+    async def test_people_off_skips_profile_for_members_but_not_owner(self):
+        from plugins.zalo_tools import people
+
+        self.enterContext(patch.dict(os.environ, {"ZALO_PEOPLE_FILE": os.path.join(self.dir, "people.json")}))
+        people.remember_person(MEMBER, name="Lan", note="Giáo viên Hoá")
+        people.remember_person(OWNER, name="Chủ", note="Hiệu trưởng")
+        adapter = self.make_adapter()
+        await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu chào", thread=GROUP_B)
+        self.assertIn("Giáo viên Hoá", self.handled[-1].text)
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"features": {"people": False}}}})
+        await self.say(adapter, "m2", MEMBER, "@Lăng Tiêu chào")
+        self.assertNotIn("Người nhắn", self.handled[-1].text)
+        self.assertNotIn("Giáo viên Hoá", self.handled[-1].text)
+        await self.say(adapter, "m3", OWNER, "@Lăng Tiêu chào")
+        self.assertIn("Hiệu trưởng", self.handled[-1].text)
 
     async def test_half_updated_install_without_group_permissions_keeps_answering(self):
         self.write({"version": 1, "defaults": {"features": {"web": False}},

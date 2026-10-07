@@ -3601,12 +3601,23 @@ def guard_member_tool_call(tool_name: str = "", args: Any = None, **_kw) -> Opti
     # Nói luôn đường đi đúng: model chỉ nhìn thấy công cụ lõi đã bị ghim vào
     # phiên, còn công cụ Zalo công khai thì nằm sau tool_search — bị chặn mà
     # không được chỉ chỗ thì nó bỏ cuộc và trả lời "không tra được".
+    # Không gợi ý công cụ thuộc nút đang tắt ở nhóm này — gợi ý xong lại bị chặn.
+    off: set = set()
+    if turn.get("is_group"):
+        try:
+            off = set(group_permissions.disabled_features(str(turn.get("thread_id") or "")))
+        except Exception as exc:
+            logger.warning("[zalo] không đọc được quyền nhóm: %s", exc)
+    hints = ", ".join(text for feature, text in (
+        ("kb", "cần tra tài liệu thì dùng zalo_kb_list rồi zalo_kb_read"),
+        ("files", "cần gửi tệp thì zalo_send_file"),
+        (None, "cần xem lại tin cũ thì zalo_read_history"),
+    ) if feature not in off)
     return {
         "action": "block",
         "message": (f"Công cụ {name} chỉ dùng được trong lượt của riêng chủ nhân ({reason}). "
-                    "Cần tra tài liệu thì dùng zalo_kb_list rồi zalo_kb_read, cần gửi tệp thì "
-                    "zalo_send_file, cần xem lại tin cũ thì zalo_read_history — tìm bằng "
-                    "tool_search nếu chưa thấy. Đừng gọi lại công cụ này."),
+                    f"{hints[:1].upper()}{hints[1:]} — tìm bằng tool_search nếu chưa thấy. "
+                    "Đừng gọi lại công cụ này."),
     }
 
 
