@@ -63,6 +63,15 @@ test('decodeLogo: chỉ PNG thật ≤ 256 px; SVG, JPEG, PNG cụt, PNG quá to
   }
   const huge = Buffer.concat([pngOf(4, 4).subarray(0, 33), Buffer.alloc(400 * 1024), pngOf(4, 4).subarray(-12)]);
   assert.throws(() => decodeLogo(dataUrl(huge)), /quá lớn/);
+  assert.throws(() => decodeLogo(dataUrl(pngOf(257, 10))), /tối đa 256×256/);
+});
+
+test('decodeLogo: chuỗi base64 quá dài bị từ chối trước khi giải mã', (t) => {
+  const orig = Buffer.from;
+  let decoded = 0;
+  t.mock.method(Buffer, 'from', (...a) => { if (typeof a[0] === 'string' && a[1] === 'base64') decoded += 1; return orig.apply(Buffer, a); });
+  assert.throws(() => decodeLogo(`data:image/png;base64,${'A'.repeat(Math.ceil(400 * 1024 * 4 / 3) + 8)}`), /quá lớn/);
+  assert.equal(decoded, 0);
 });
 
 test('brandCss: màu mặc định không ghi đè; màu khác chỉ có biến trong :root', () => {

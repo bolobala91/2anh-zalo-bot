@@ -67,3 +67,13 @@ test('Windows: đổi tên lỗi EPERM/EBUSY tạm thời thì thử lại, quá
   assert.throws(() => writeJsonAtomic(p, { n: 3 }, { rename: flaky(['ENOENT']), platform: 'win32' }), { code: 'ENOENT' });
   assert.equal(calls, 2);
 });
+
+test('tệp tạm cũ còn sót không giữ lại nội dung/quyền cũ', (t) => {
+  const d = tmp(t);
+  const p = join(d, 'k.json');
+  writeFileSync(`${p}.tmp`, 'rác cũ dài dài dài', { mode: 0o644 });
+  writeJsonAtomic(p, { n: 1 });
+  assert.deepEqual(readJson(p, {}), { n: 1 });
+  if (process.platform !== 'win32') assert.equal(statSync(p).mode & 0o777, 0o600);
+  assert.deepEqual(readdirSync(d), ['k.json']);
+});

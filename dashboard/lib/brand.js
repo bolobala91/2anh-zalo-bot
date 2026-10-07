@@ -37,6 +37,7 @@ const IEND = Buffer.from([0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 
 export function decodeLogo(dataUrl) {
   const m = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(dataUrl ?? ''));
   if (!m) throw new InvalidBrand('Logo phải là ảnh PNG, JPG hoặc WebP — chọn ảnh khác.');
+  if (m[1].length > Math.ceil(LOGO_MAX_BYTES * 4 / 3) + 4) throw new InvalidBrand('Logo quá lớn — chọn ảnh đơn giản hơn hoặc nhỏ hơn.');
   const buf = Buffer.from(m[1], 'base64');
   if (buf.length > LOGO_MAX_BYTES) throw new InvalidBrand('Logo quá lớn — chọn ảnh đơn giản hơn hoặc nhỏ hơn.');
   const ok = buf.length >= 8 + 25 + 12
@@ -47,7 +48,7 @@ export function decodeLogo(dataUrl) {
   const width = buf.readUInt32BE(16);
   const height = buf.readUInt32BE(20);
   if (width < 1 || height < 1 || width > LOGO_MAX_SIDE || height > LOGO_MAX_SIDE) {
-    throw new InvalidBrand(`Logo phải nhỏ hơn ${LOGO_MAX_SIDE}×${LOGO_MAX_SIDE} điểm ảnh — tải lại trang rồi chọn lại ảnh.`);
+    throw new InvalidBrand(`Logo phải tối đa ${LOGO_MAX_SIDE}×${LOGO_MAX_SIDE} điểm ảnh — tải lại trang rồi chọn lại ảnh.`);
   }
   return buf;
 }

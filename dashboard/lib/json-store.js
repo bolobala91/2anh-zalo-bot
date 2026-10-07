@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export function readJson(path, fallback) {
@@ -28,6 +28,7 @@ export function writeJsonAtomic(path, value, opts) {
 export function writeFileAtomic(path, data, { rename = renameSync, platform = process.platform } = {}) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const tmp = `${path}.tmp`;
+  rmSync(tmp, { force: true }); // tệp tạm cũ còn sót giữ nguyên quyền cũ — xoá để tạo mới đúng 600
   writeFileSync(tmp, data, { mode: 0o600 });
   for (let retry = 0; ; retry += 1) {
     try {
