@@ -250,7 +250,6 @@ input:focus-visible, select:focus-visible { outline: none; border-color: var(--b
 .table tbody tr:hover { background: #f8fafc; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-@media (min-width: 761px) { .users-table .actions { min-width: 290px; } }
 .table th.th-wrap { white-space: normal; }
 
 .subhead { font-size: 14px; font-weight: 650; margin: 16px 0 6px; }
