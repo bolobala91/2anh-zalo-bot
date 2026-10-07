@@ -446,5 +446,92 @@ class DashboardContractTest(AdapterHarness, unittest.IsolatedAsyncioTestCase):
         self.assertTrue(gp.group_settings(GROUP_B)["features"]["web"])
 
 
+STRANGER = "5555555555555555555"
+
+
+class DmPermissionsTest(PermissionsFile, unittest.TestCase):
+    """Mục "dm" của permissions.json (spec §16)."""
+
+    def test_missing_dm_section_means_env_policy_and_everything_on(self):
+        self.assertIsNone(gp.dm_allows(MEMBER))
+        self.write({"version": 1, "defaults": {"features": {"web": False}}, "groups": {}})
+        self.assertIsNone(gp.dm_allows(MEMBER))
+        self.assertEqual(gp.dm_disabled_features(MEMBER), [], "bảng nhóm không áp cho tin nhắn riêng")
+
+    def test_who_list_everyone_owners(self):
+        self.write({"version": 1, "dm": {"who": "list", "people": {MEMBER: {"name": "Cô Lan"}}}})
+        self.assertIs(gp.dm_allows(MEMBER), True)
+        self.assertIs(gp.dm_allows(STRANGER), False)
+        self.write({"version": 1, "dm": {"who": "everyone"}})
+        self.assertIs(gp.dm_allows(STRANGER), True)
+        self.write({"version": 1, "dm": {"who": "owners", "people": {MEMBER: {}}}})
+        self.assertIs(gp.dm_allows(MEMBER), False)
+        self.write({"version": 1, "dm": {"who": "ai cũng được"}})
+        self.assertIsNone(gp.dm_allows(MEMBER), "who lạ → theo ZALO_DM_POLICY")
+
+    def test_features_merge_default_dm_then_person(self):
+        self.write({"version": 1, "dm": {"who": "everyone", "features": {"web": False, "groupCron": False},
+                                         "people": {MEMBER: {"features": {"web": True, "video": False, "kb": "no"}}}}})
+        self.assertEqual(gp.dm_disabled_features(STRANGER), ["web"])
+        self.assertEqual(gp.dm_disabled_features(MEMBER), ["video"])
+        self.assertNotIn("groupCron", gp.dm_settings(MEMBER)["features"])
+        self.assertEqual(gp.DM_FEATURES, tuple(f for f in gp.FEATURES if f != "groupCron"))
+
+    def test_non_digit_uid_keys_and_garbage_are_ignored(self):
+        self.write({"version": 1, "dm": {"who": "list", "people": {"abc": {}, "１２３": {}, MEMBER: "rác"}}})
+        self.assertIs(gp.dm_allows("abc"), False)
+        self.assertIs(gp.dm_allows("１２３"), False, "chữ số toàn khổ không phải UID")
+        self.assertIs(gp.dm_allows(MEMBER), True, "mục rác vẫn là có tên trong danh sách — giống dm-rules.js")
+        self.write({"version": 1, "dm": "rác"})
+        self.assertIsNone(gp.dm_allows(MEMBER))
+
+
+class GuardDmFeatureTest(PermissionsFile, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.write({"version": 1, "dm": {"who": "everyone", "features": {"web": False},
+                                         "people": {MEMBER: {"features": {"web": True, "kb": False}}}}})
+        self.addCleanup(zalo_tools.bind_turn, None)
+
+    def dm_turn(self, uid, owner=False):
+        zalo_tools.bind_turn({"sender_uid": uid, "thread_id": uid, "is_group": False, "is_owner": owner, "text": ""})
+
+    def test_dm_feature_off_is_refused_with_dm_wording(self):
+        self.dm_turn(STRANGER)
+        verdict = zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"})
+        self.assertEqual(verdict["action"], "block")
+        self.assertIn("khi nhắn riêng", verdict["message"])
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_kb_list", {}))
+
+    def test_per_person_override_and_owner_exempt(self):
+        self.dm_turn(MEMBER)
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
+        self.assertEqual(zalo_tools.guard_member_tool_call("zalo_kb_read", {"name": "a"})["action"], "block")
+        message = zalo_tools.guard_member_tool_call("terminal", {"command": "ls"})["message"]
+        self.assertNotIn("zalo_kb_list", message, "không gợi ý công cụ đang tắt với người này")
+        self.dm_turn(OWNER, owner=True)
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
+
+    def test_group_cron_is_not_a_dm_switch_and_group_turns_ignore_dm_section(self):
+        self.write({"version": 1, "dm": {"who": "everyone", "features": {"web": False}}})
+        self.dm_turn(STRANGER)
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_group_cron", {"action": "create"}))
+        zalo_tools.bind_turn({"sender_uid": STRANGER, "thread_id": GROUP_A, "is_group": True, "is_owner": False, "text": ""})
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
+
+    def test_unreadable_dm_rules_do_not_block(self):
+        self.dm_turn(STRANGER)
+        with patch.object(gp, "dm_settings", side_effect=RuntimeError("hỏng")), \
+                self.assertLogs(zalo_tools.logger, level="WARNING"):
+            self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
+
+    def test_sethome_turn_marks_the_authorization(self):
+        zalo_tools.bind_turn({"sender_uid": STRANGER, "thread_id": STRANGER, "is_group": False,
+                              "is_owner": False, "text": "/sethome", "sethome": True})
+        self.assertEqual(zalo_tools.current_authorization()["notice"], "sethome")
+        self.dm_turn(STRANGER)
+        self.assertNotIn("notice", zalo_tools.current_authorization())
+
+
 if __name__ == "__main__":
     unittest.main()

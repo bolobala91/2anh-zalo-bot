@@ -54,6 +54,11 @@ FEATURE_LABELS: Dict[str, str] = {
 
 _TOOL_FEATURE = {tool: feature for feature, tools in FEATURE_TOOLS.items() for tool in tools}
 
+# Nhắn riêng (mục ``dm`` của tệp, spec §16). "Hẹn giờ cho nhóm" không có nghĩa
+# ngoài nhóm — zalo_group_cron tự từ chối khi nhắn riêng — nên không có nút này.
+DM_FEATURES = tuple(feature for feature in FEATURES if feature != "groupCron")
+DM_WHO = ("owners", "list", "everyone")
+
 _lock = threading.Lock()
 _cache: Dict[str, Any] = {"key": None, "data": None}
 
@@ -93,6 +98,23 @@ def _layer(raw: Any) -> Dict[str, Any]:
     return out
 
 
+def _dm(raw: Any) -> Dict[str, Any]:
+    """Mục ``dm``: ``who`` hợp lệ, 8 nút đúng kiểu, ``people`` khoá là UID số — giống ``normalizeDm`` (dm-rules.js)."""
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, Any] = {"features": _bools(raw.get("features"), DM_FEATURES), "people": {}}
+    if raw.get("who") in DM_WHO:
+        out["who"] = raw["who"]
+    people = raw.get("people") if isinstance(raw.get("people"), dict) else {}
+    for uid, entry in people.items():
+        if not (str(uid).isascii() and str(uid).isdigit()) or len(str(uid)) > 32:
+            continue
+        out["people"][str(uid)] = {
+            "features": _bools(entry.get("features") if isinstance(entry, dict) else None, DM_FEATURES),
+        }
+    return out
+
+
 def _parse(text: str) -> Dict[str, Any]:
     data = json.loads(text)
     if not isinstance(data, dict) or data.get("version") != 1:
@@ -101,6 +123,7 @@ def _parse(text: str) -> Dict[str, Any]:
     return {
         "defaults": _layer(data.get("defaults")),
         "groups": {str(gid): _layer(entry) for gid, entry in groups.items()},
+        "dm": _dm(data.get("dm")),
     }
 
 
@@ -151,3 +174,33 @@ def disabled_features(group_id: str) -> List[str]:
     """Các nút đang tắt ở nhóm này, theo thứ tự FEATURES."""
     features = group_settings(group_id)["features"]
     return [feature for feature in FEATURES if not features[feature]]
+
+
+def dm_settings(uid: str) -> Dict[str, Any]:
+    """Quyền nhắn riêng của một người KHÔNG phải chủ nhân (bên gọi tự miễn trừ chủ nhân).
+
+    ``who``: "owners" | "list" | "everyone", hoặc None khi tệp chưa chọn (theo
+    ``ZALO_DM_POLICY`` của adapter). ``listed``: người này có trong danh sách.
+    ``features``: đủ 8 nút — mặc định bật ← ``dm.features`` ← ``dm.people[uid].features``.
+    """
+    dm = _load().get("dm") or {}
+    person = (dm.get("people") or {}).get(str(uid or ""))
+    features = {feature: True for feature in DM_FEATURES}
+    features.update(dm.get("features") or {})
+    if person:
+        features.update(person.get("features") or {})
+    return {"who": dm.get("who"), "listed": person is not None, "features": features}
+
+
+def dm_allows(uid: str) -> Optional[bool]:
+    """Người này (không phải chủ nhân) có được nhắn riêng không; None = tệp không nói, theo ZALO_DM_POLICY."""
+    settings = dm_settings(uid)
+    if settings["who"] is None:
+        return None
+    return settings["who"] == "everyone" or (settings["who"] == "list" and settings["listed"])
+
+
+def dm_disabled_features(uid: str) -> List[str]:
+    """Các nút đang tắt khi người này nhắn riêng, theo thứ tự DM_FEATURES."""
+    features = dm_settings(uid)["features"]
+    return [feature for feature in DM_FEATURES if not features[feature]]
