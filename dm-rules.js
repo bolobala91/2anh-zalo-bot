@@ -51,7 +51,9 @@ export function normalizeDm(raw) {
  * `features`: đủ 8 nút — mặc định bật ← `dm.features` ← `people[uid].features`.
  */
 export function dmVerdict(dm, uid) {
-  const person = dm?.people?.[String(uid ?? '')];
+  const key = String(uid ?? '');
+  // Object.hasOwn: "constructor", "__proto__"… không được tính là người trong danh sách qua prototype.
+  const person = dm?.people && Object.hasOwn(dm.people, key) ? dm.people[key] : undefined;
   const features = Object.fromEntries(DM_FEATURE_KEYS.map((k) => [k, true]));
   Object.assign(features, dm?.features || {}, person?.features || {});
   const who = dm?.who;
@@ -82,7 +84,7 @@ export function createDmRules({ file, statImpl = statSync, readImpl = (p) => rea
     if (next === key) return value;
     key = next;
     try {
-      const data = JSON.parse(String(readImpl(file)).replace(/^﻿/, ''));
+      const data = JSON.parse(String(readImpl(file)).replace(/^\uFEFF/, ''));
       value = isObj(data) && data.version === 1 ? normalizeDm(data.dm) : null;
     } catch (err) {
       warn(`[dm] ${file} hỏng — bỏ qua quyền nhắn riêng trong tệp: ${err.message}`);

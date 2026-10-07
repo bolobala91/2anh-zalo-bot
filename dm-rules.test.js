@@ -34,6 +34,15 @@ test('dmVerdict: who quyết ai vào; tính năng gộp mặc định ← dm ←
   assert.ok(Object.values(dmVerdict(null, B).features).every(Boolean));
 });
 
+test('dmVerdict: tên thuộc tính có sẵn của object (constructor, __proto__, toString) không phải người trong danh sách', () => {
+  const dm = normalizeDm({ who: 'list', features: { web: false }, people: {} });
+  for (const uid of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const v = dmVerdict(dm, uid);
+    assert.equal(v.allowed, false, uid);
+    assert.equal(v.features.web, false, uid);
+  }
+});
+
 test('permissionsFileFromEnv: ZALO_PERMISSIONS_FILE thắng HERMES_HOME; thiếu cả hai → null', () => {
   assert.equal(permissionsFileFromEnv({ ZALO_PERMISSIONS_FILE: '/x/p.json', HERMES_HOME: '/h' }), '/x/p.json');
   assert.equal(permissionsFileFromEnv({ HERMES_HOME: '/h' }), join('/h', 'zalo', 'permissions.json'));
@@ -51,7 +60,7 @@ test('createDmRules: đọc lại khi tệp đổi; không có tệp, tệp hỏ
   const write = (text) => { writeFileSync(file, text); stamp += 10; utimesSync(file, stamp, stamp); };
   write(JSON.stringify({ version: 1, defaults: {}, groups: {} }));
   assert.equal(rules(), null, 'tệp chưa có mục dm');
-  write(`﻿${JSON.stringify({ version: 1, dm: { who: 'everyone' } })}`);
+  write(`\uFEFF${JSON.stringify({ version: 1, dm: { who: 'everyone' } })}`);
   assert.equal(rules().who, 'everyone', 'bỏ BOM như plugin');
   write('{hỏng');
   assert.equal(rules(), null);

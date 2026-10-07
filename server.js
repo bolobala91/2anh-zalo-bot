@@ -33,7 +33,11 @@ const zaloStore = openZaloStore({
 });
 const runtimeHealth = createRuntimeHealth({ store: zaloStore });
 // Quyền nhắn riêng do dashboard ghi (permissions.json), đọc lại khi tệp đổi — lớp chặn thứ hai sau plugin.
-const dmRules = createDmRules({ file: permissionsFileFromEnv() });
+const dmPermissionsFile = permissionsFileFromEnv();
+if (!dmPermissionsFile) {
+  console.warn('[dm] Không có HERMES_HOME hay ZALO_PERMISSIONS_FILE — lớp chặn thứ hai cho tin nhắn riêng đang tắt; chỉ còn cài đặt của Hermes. Đặt HERMES_HOME rồi khởi động lại kết nối Zalo để bật.');
+}
+const dmRules = createDmRules({ file: dmPermissionsFile });
 zaloStore.pruneMessages();
 const retentionTimer = setInterval(() => {
   try { zaloStore.pruneMessages(); } catch (error) {
