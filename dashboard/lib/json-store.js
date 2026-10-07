@@ -20,10 +20,15 @@ const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),
  * Windows: đổi tên đè lên tệp mà tiến trình khác (plugin Python, trình quét virus) đang mở
  * có thể lỗi tạm thời EPERM/EBUSY/EACCES — thử lại tối đa 3 lần, cách nhau 50 ms.
  */
-export function writeJsonAtomic(path, value, { rename = renameSync, platform = process.platform } = {}) {
+export function writeJsonAtomic(path, value, opts) {
+  writeFileAtomic(path, JSON.stringify(value, null, 2), opts);
+}
+
+/** Ghi tệp tạm quyền 600 cạnh tệp đích rồi đổi tên đè lên — `data` là chuỗi (UTF-8) hoặc Buffer. */
+export function writeFileAtomic(path, data, { rename = renameSync, platform = process.platform } = {}) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2), { encoding: 'utf8', mode: 0o600 });
+  writeFileSync(tmp, data, { mode: 0o600 });
   for (let retry = 0; ; retry += 1) {
     try {
       rename(tmp, path);

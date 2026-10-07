@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, renameSync, rmSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readJson, writeJsonAtomic } from './json-store.js';
+import { readJson, writeFileAtomic, writeJsonAtomic } from './json-store.js';
 
 function tmp(t) { const d = mkdtempSync(join(tmpdir(), 'zd-json-')); t.after(() => rmSync(d, { recursive: true, force: true })); return d; }
 
@@ -31,6 +31,18 @@ test('quyền tệp 600 trên hệ điều hành có quyền POSIX', { skip: pro
   const p = join(tmp(t), 'k.json');
   writeJsonAtomic(p, {});
   assert.equal(statSync(p).mode & 0o777, 0o600);
+  const b = join(tmp(t), 'x', 'logo.png');
+  writeFileAtomic(b, Buffer.from([1, 2, 3]));
+  assert.equal(statSync(b).mode & 0o777, 0o600);
+});
+
+test('writeFileAtomic ghi đúng từng byte của Buffer và chuỗi, không để lại tệp tạm', (t) => {
+  const d = tmp(t);
+  writeFileAtomic(join(d, 'a.bin'), Buffer.from([0, 255, 13, 10]));
+  assert.deepEqual([...readFileSync(join(d, 'a.bin'))], [0, 255, 13, 10]);
+  writeFileAtomic(join(d, 'b.txt'), 'Chủ nhân\n');
+  assert.equal(readFileSync(join(d, 'b.txt'), 'utf8'), 'Chủ nhân\n');
+  assert.deepEqual(readdirSync(d).sort(), ['a.bin', 'b.txt']);
 });
 
 test('Windows: đổi tên lỗi EPERM/EBUSY tạm thời thì thử lại, quá 3 lần thì ném', (t) => {
