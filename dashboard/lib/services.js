@@ -21,6 +21,13 @@ export const UNIT_LABELS = {
   'hermes-rag': 'Tra cứu tài liệu',
   'hermes-mgmt': 'Dịch vụ quản lý máy chủ',
 };
+// Chủ bot (không phải Quản trị) chỉ thấy tên thân thiện của các dịch vụ chính; còn lại là "Dịch vụ khác".
+const OWNER_LABELS = {
+  'zalo-bridge': 'Kết nối Zalo', 'zalo-dashboard': 'Dashboard quản trị', 'hermes-gateway': 'Trợ lý (Hermes)',
+  '9router': 'Cổng AI', 'port-20128': 'Cổng AI', caddy: 'Máy chủ web',
+};
+/** Bản cho Chủ bot: id `svc-<số thứ tự>`, nhãn thân thiện hoặc "Dịch vụ khác" — không lộ tên unit systemd, cổng, mô tả. */
+export const ownerView = (list) => list.map((s, i) => ({ id: `svc-${i}`, label: OWNER_LABELS[s.id] || 'Dịch vụ khác', state: s.state }));
 const CORE = ['zalo-bridge', 'zalo-dashboard', 'hermes-gateway'];
 const PORT_LABELS = { 20128: 'Cổng AI (9router)', 1933: 'Bộ nhớ dài hạn' };
 const ORDER = (id) => { const i = Object.keys(UNIT_LABELS).indexOf(id); return i < 0 ? 99 : i; };

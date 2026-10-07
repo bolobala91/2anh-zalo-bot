@@ -27,6 +27,7 @@ import { createBrandStore } from './lib/brand.js';
 import { createOwnersStore } from './lib/owners.js';
 import { createServiceChecker } from './lib/services.js';
 import { createHealthMonitor } from './lib/health-monitor.js';
+import { singleFlight } from './lib/single-flight.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -98,11 +99,13 @@ async function main() {
   delete process.env.ZALO_ALLOWED_USERS;
   const app = createDashboardApp(deps);
   app.listen(deps.config.port, '127.0.0.1', () => console.log(`[dashboard] đang chạy tại ${deps.config.publicUrl} (127.0.0.1:${deps.config.port})`));
-  const tick = async () => { try { await deps.watchdog.tick(); } catch (e) { console.warn('[watchdog]', e.message); } };
+  const tick = singleFlight(async () => { try { await deps.watchdog.tick(); } catch (e) { console.warn('[watchdog]', e.message); } });
   setInterval(tick, 30_000); tick();
   // Đo máy chủ mỗi phút; lần đầu sau 5 giây để CPU có một khoảng đo thật.
-  const healthTick = async () => { try { await deps.health.tick(); } catch (e) { console.warn('[health]', e.message); } };
+  const healthTick = async () => { try { await deps.health.tick(); } catch (e) { console.warn('[health]', e.message); } }; // tick tự bỏ qua khi nhịp trước còn chạy
   setTimeout(healthTick, 5_000); setInterval(healthTick, 60_000);
+  // Tắt dịch vụ (systemd gửi SIGTERM) thì ghi nốt biểu đồ chưa lưu.
+  for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => { try { deps.health.flush(); } catch { /* bỏ qua */ } process.exit(0); });
   (async function poll() {
     for (;;) {
       if (!deps.linker.configured()) { await new Promise((r) => setTimeout(r, 15_000)); continue; }

@@ -5,6 +5,7 @@
 import { createCpuMeter, readHost } from './host-metrics.js';
 import { createHealthHistory } from './health-history.js';
 import { createAiUsage } from './ai-usage.js';
+import { singleFlight } from './single-flight.js';
 
 export function createHealthMonitor({
   diskPath, historyFile, usageFile, stateDb, services, watchdog = null, now = Date.now, usageEvery = 5,
@@ -15,12 +16,14 @@ export function createHealthMonitor({
   let latest = null;
   let ticks = 0;
   return {
-    async tick() {
+    // Bỏ qua nhịp khi nhịp trước (vd. canh gác đang gửi Telegram) còn chạy — các mẫu không chồng nhau.
+    tick: singleFlight(async () => {
       latest = read({ cpu, diskPath, now });
       history.add(latest);
       if (ticks++ % usageEvery === 0) usage.sample();
       if (watchdog) await watchdog.checkHost(latest);
-    },
+    }),
+    flush: () => history.flush(),
     latest: () => latest,
     points: () => history.points(),
     usage: () => usage.report(),

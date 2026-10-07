@@ -1,6 +1,7 @@
 // Sức khoẻ máy chủ (spec §16.B): Quản trị và Chủ bot đều xem; tên dịch vụ hệ thống, cổng, PID chỉ Quản trị thấy.
 import express from 'express';
 import { requireAuth } from '../lib/http-guards.js';
+import { ownerView } from '../lib/services.js';
 import { HOST_OFF_PCT, HOST_ON_PCT } from '../lib/watchdog.js';
 
 const HOST_KINDS = ['disk', 'ram', 'cpu'];
@@ -20,7 +21,7 @@ export function healthRoutes({ health, watchdog }) {
       ok: true,
       host: health.latest(),
       history: { stepMs: 60_000, points: health.points() },
-      services: services.map((s) => (admin ? s : { id: s.id, label: s.label, state: s.state })),
+      services: admin ? services : ownerView(services),
       servicesError,
       usage: health.usage(),
       alerts: HOST_KINDS.filter((k) => incidents[k]).map((k) => ({ kind: k, since: incidents[k].since, alerted: Boolean(incidents[k].alertedAt) })),
