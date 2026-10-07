@@ -1,6 +1,6 @@
-// Chủ nhân bot (spec §4 #8, §7.1, §9): ZALO_ALLOWED_USERS trong .env của Hermes. Đổi xong phải khởi động lại —
-// trợ lý (gateway) và kết nối Zalo (sidecar) đều chỉ đọc biến này lúc khởi động. Cờ "chờ khởi động lại" lưu ra
-// tệp để tải lại trang vẫn thấy banner vàng.
+// Chủ nhân bot (spec §4 #8, §7.1, §9): ZALO_ALLOWED_USERS trong .env của Hermes. Gateway Hermes nạp lại .env mỗi
+// lượt nên đổi là có hiệu lực ngay với trợ lý; chỉ kết nối Zalo (sidecar) đọc biến này lúc khởi động nên cần khởi
+// động lại. Cờ "chờ khởi động lại" lưu ra tệp để tải lại trang vẫn thấy banner vàng.
 import { rmSync } from 'node:fs';
 import { readEnvKey, writeEnvKey } from './env-file.js';
 import { readJson, writeJsonAtomic } from './json-store.js';
@@ -27,20 +27,38 @@ export function parseOwners(list) {
   return uids;
 }
 
-export function createOwnersStore({ envFile, sidecarEnvFile, pendingFile, now = Date.now }) {
+const sameSet = (a, b) => {
+  const x = [...new Set(a)].sort(); const y = [...new Set(b)].sort();
+  return x.length === y.length && x.every((v, i) => v === y[i]);
+};
+
+/** `inheritedValue`: ZALO_ALLOWED_USERS trong môi trường dịch vụ, chụp trước khi nạp bất kỳ .env nào. */
+export function createOwnersStore({ envFile, sidecarEnvFile, pendingFile, inheritedValue, now = Date.now }) {
   const list = () => splitOwners(readEnvKey(envFile, OWNER_KEY));
   return {
     list,
-    /** .env của thư mục bot cũng đặt khoá này (nạp trước .env Hermes) và khác → kết nối Zalo sẽ không theo danh sách mới. */
-    shadowed() {
+    /**
+     * Nguồn ghi đè danh sách chủ nhân của kết nối Zalo: `sidecar` = .env của thư mục bot đặt khoá khác (nạp trước
+     * .env Hermes); `os` = biến môi trường của dịch vụ/hệ điều hành đặt khoá khác. So như tập hợp, không theo thứ tự.
+     */
+    overrides() {
+      const mine = list();
       const local = sidecarEnvFile ? readEnvKey(sidecarEnvFile, OWNER_KEY) : null;
-      return Boolean(local) && splitOwners(local).join(',') !== list().join(',');
+      return {
+        sidecar: Boolean(local) && !sameSet(splitOwners(local), mine),
+        os: Boolean(inheritedValue) && !sameSet(splitOwners(inheritedValue), mine),
+      };
     },
-    /** Ghi danh sách mới; trả true nếu có thay đổi (khi đó đánh dấu chờ khởi động lại). */
+    /** Ghi danh sách mới; trả true nếu có thay đổi. Đặt cờ chờ TRƯỚC khi ghi .env để không bao giờ mất banner. */
     set(uids, by) {
-      if (uids.join(',') === list().join(',')) return false;
-      writeEnvKey(envFile, OWNER_KEY, uids.join(','));
+      if (sameSet(uids, list())) return false;
+      const prev = this.pending();
       writeJsonAtomic(pendingFile, { since: now(), by: String(by) });
+      try { writeEnvKey(envFile, OWNER_KEY, uids.join(',')); } catch (err) {
+        // .env không ghi được → không có gì cần áp dụng: trả cờ về như cũ.
+        try { if (prev) writeJsonAtomic(pendingFile, prev); else rmSync(pendingFile, { force: true }); } catch { /* giữ cờ còn hơn mất */ }
+        throw err;
+      }
       return true;
     },
     pending() {

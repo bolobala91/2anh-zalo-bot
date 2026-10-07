@@ -66,8 +66,9 @@ export function Overview({ me, status: s }) {
     if (!confirm('Khởi động lại trợ lý? Bot sẽ tạm ngừng trả lời trong khoảng một phút.')) return;
     setBusy(true); setMsg({});
     try {
-      await api('/api/admin/restart-assistant', { method: 'POST' });
-      setMsg({ ok: 'Đã gửi lệnh khởi động lại — đợi khoảng một phút rồi xem lại thẻ Trợ lý.' });
+      const r = await api('/api/admin/restart-assistant', { method: 'POST' });
+      if (r.sidecarFailed) setMsg({ error: r.warning });
+      else setMsg({ ok: 'Đã gửi lệnh khởi động lại — đợi khoảng một phút rồi xem lại thẻ Trợ lý.' });
     } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
   }
 

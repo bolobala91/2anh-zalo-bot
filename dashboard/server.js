@@ -32,8 +32,9 @@ const here = dirname(fileURLToPath(import.meta.url));
  * @param {object} [opts]
  * @param {string} [opts.inheritedReplyOnlyTagged] ZALO_GROUP_REPLY_ONLY_TAGGED trong môi trường dịch vụ, chụp trước khi
  *   nạp .env của sidecar — .env của sidecar không phải nơi bot đọc cờ này.
+ * @param {string} [opts.inheritedOwners] ZALO_ALLOWED_USERS trong môi trường dịch vụ, chụp trước khi nạp bất kỳ .env nào.
  */
-export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), inheritedReplyOnlyTagged } = {}) {
+export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), inheritedReplyOnlyTagged, inheritedOwners } = {}) {
   if (!env.ZALO_BRIDGE_TOKEN) throw new Error('Thiếu ZALO_BRIDGE_TOKEN trong .env của sidecar — chạy lại "npm run install:hermes".');
   const paths = resolveDashboardPaths({ env, sidecarRoot });
   const config = loadDashboardConfig(env);
@@ -70,7 +71,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     }),
     restartAssistant: makeRestartAssistant({ cmd: config.assistantRestartCmd, hermesHome: paths.hermesHome }),
     restartSidecar,
-    owners: createOwnersStore({ envFile: paths.hermesEnvFile, sidecarEnvFile: paths.sidecarEnvFile, pendingFile: paths.pendingRestartFile }),
+    owners: createOwnersStore({ envFile: paths.hermesEnvFile, sidecarEnvFile: paths.sidecarEnvFile, pendingFile: paths.pendingRestartFile, inheritedValue: inheritedOwners }),
     brand: createBrandStore({ file: paths.brandFile, logoFile: paths.brandLogoFile }),
     publicDir: join(here, 'public'),
   };
@@ -79,9 +80,10 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
 async function main() {
   const sidecarRoot = join(here, '..');
   const inheritedReplyOnlyTagged = process.env.ZALO_GROUP_REPLY_ONLY_TAGGED;
+  const inheritedOwners = process.env.ZALO_ALLOWED_USERS; // trước khi nạp .env nào
   if (existsSync(join(sidecarRoot, '.env'))) loadRepoEnv(join(sidecarRoot, '.env'));
   loadHermesEnv();
-  const deps = buildDeps({ sidecarRoot, inheritedReplyOnlyTagged });
+  const deps = buildDeps({ sidecarRoot, inheritedReplyOnlyTagged, inheritedOwners });
   // Chủ nhân đọc từ tệp .env, không từ môi trường: tiến trình con khởi động lại sẽ thừa hưởng bản cũ và không bao giờ áp dụng danh sách mới.
   delete process.env.ZALO_ALLOWED_USERS;
   const app = createDashboardApp(deps);

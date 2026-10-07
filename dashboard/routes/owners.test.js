@@ -121,17 +121,35 @@ test('thay đổi chen vào lúc đang khởi động lại thì cờ chờ khô
   assert.equal(deps.owners.pending()?.by, 'ai-do');
 });
 
-test('bị .env bot ghi đè: khởi động lại vẫn khởi động lại cả kết nối Zalo dù chưa có cờ chờ', async (t) => {
+test('bị .env bot ghi đè mà chưa ai mở trang: khởi động lại chỉ khởi động trợ lý (dòng .env còn thì khởi động lại kết nối Zalo vô ích)', async (t) => {
   const order = [];
   const { deps, call, admin } = await ready(t, {
     restartSidecar: async () => { order.push('zalo'); }, restartAssistant: async () => { order.push('assistant'); },
   });
-  writeFileSync(join(deps.dir, 'sidecar.env'), `ZALO_ALLOWED_USERS=${C}\n`);
-  assert.equal(deps.owners.pending(), null);
+  writeFileSync(join(deps.dir, 'sidecar.env'), `ZALO_ALLOWED_USERS=${C}
+`);
   const r = await call('/api/admin/restart-assistant', { method: 'POST', cookie: admin, body: {} });
   assert.equal(r.status, 200);
-  assert.equal(r.json.appliedOwners, true);
-  assert.deepEqual(order, ['zalo', 'assistant']);
+  assert.equal(r.json.appliedOwners, false);
+  assert.deepEqual(order, ['assistant']);
+});
+
+test('kết nối Zalo khởi động lại lỗi: trợ lý vẫn được khởi động lại, giữ cờ chờ, báo thành công một phần', async (t) => {
+  const order = [];
+  const { deps, call, admin } = await ready(t, {
+    restartSidecar: async () => { throw new Error('systemctl bi/mat'); }, restartAssistant: async () => { order.push('assistant'); },
+  });
+  await call('/api/admin/owners', { method: 'PUT', cookie: admin, body: { owners: [A, B] } });
+  const orig = console.error; console.error = () => {};
+  let r;
+  try { r = await call('/api/admin/restart-assistant', { method: 'POST', cookie: admin, body: {} }); } finally { console.error = orig; }
+  assert.equal(r.status, 200);
+  assert.deepEqual(order, ['assistant']);
+  assert.equal(r.json.sidecarFailed, true);
+  assert.equal(r.json.appliedOwners, false);
+  assert.match(r.json.warning, /chưa khởi động lại được kết nối Zalo.*ZALO_SIDECAR_RESTART_CMD/);
+  assert.doesNotMatch(r.json.warning, /bi\/mat/);
+  assert.notEqual(deps.owners.pending(), null);
 });
 
 test('bị ghi đè → dải vàng hiện (cờ chờ); xoá dòng trong .env bot rồi khởi động lại → kết nối Zalo khởi động lại, hết cờ', async (t) => {
