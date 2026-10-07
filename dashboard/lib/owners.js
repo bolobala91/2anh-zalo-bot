@@ -47,6 +47,10 @@ export function createOwnersStore({ envFile, sidecarEnvFile, pendingFile, now = 
       const p = readJson(pendingFile, null);
       return p && Number.isFinite(p.since) ? p : null;
     },
+    /** Đặt cờ chờ khởi động lại nếu chưa có (vd. thấy .env bot ghi đè: kết nối Zalo đang chạy theo danh sách khác). */
+    markPending(by) {
+      if (!this.pending()) writeJsonAtomic(pendingFile, { since: now(), by: String(by) });
+    },
     clearPending() { rmSync(pendingFile, { force: true }); },
   };
 }

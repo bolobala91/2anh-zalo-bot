@@ -47,6 +47,16 @@ test('.env của thư mục bot đặt khoá khác → shadowed; trùng hoặc k
   assert.equal(s.shadowed(), true);
 });
 
+test('markPending: đặt cờ chờ khi chưa có, không đè cờ đang có', (t) => {
+  const { s } = setup(t);
+  s.markPending('ghi-de');
+  assert.deepEqual(s.pending(), { since: 42, by: 'ghi-de' });
+  s.clearPending();
+  s.set([A, B], 'anh');
+  s.markPending('ghi-de');
+  assert.equal(s.pending().by, 'anh');
+});
+
 test('.env Hermes chưa có khoá → danh sách rỗng; tệp chờ hỏng → coi như không chờ', (t) => {
   const { files, s } = setup(t, 'X=1\n');
   assert.deepEqual(s.list(), []);

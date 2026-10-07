@@ -385,7 +385,8 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
 
 /* ---------- Điện thoại ---------- */
 @media (max-width: 760px) {
-  .layout { grid-template-columns: minmax(0, 1fr); background: none; }
+  /* Thanh trên cùng chỉ cao đúng nội dung; phần còn lại của màn hình thuộc về nội dung (trang ngắn không bị giãn thanh). */
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; background: none; }
   .sidebar {
     position: static; height: auto; flex-direction: row; align-items: center; gap: 8px;
     padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden;

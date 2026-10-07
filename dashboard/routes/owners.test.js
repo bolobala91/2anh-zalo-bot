@@ -120,3 +120,35 @@ test('thay đổi chen vào lúc đang khởi động lại thì cờ chờ khô
   assert.equal(r.status, 200);
   assert.equal(deps.owners.pending()?.by, 'ai-do');
 });
+
+test('bị .env bot ghi đè: khởi động lại vẫn khởi động lại cả kết nối Zalo dù chưa có cờ chờ', async (t) => {
+  const order = [];
+  const { deps, call, admin } = await ready(t, {
+    restartSidecar: async () => { order.push('zalo'); }, restartAssistant: async () => { order.push('assistant'); },
+  });
+  writeFileSync(join(deps.dir, 'sidecar.env'), `ZALO_ALLOWED_USERS=${C}\n`);
+  assert.equal(deps.owners.pending(), null);
+  const r = await call('/api/admin/restart-assistant', { method: 'POST', cookie: admin, body: {} });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.appliedOwners, true);
+  assert.deepEqual(order, ['zalo', 'assistant']);
+});
+
+test('bị ghi đè → dải vàng hiện (cờ chờ); xoá dòng trong .env bot rồi khởi động lại → kết nối Zalo khởi động lại, hết cờ', async (t) => {
+  const order = [];
+  const { deps, call, admin } = await ready(t, {
+    restartSidecar: async () => { order.push('zalo'); }, restartAssistant: async () => { order.push('assistant'); },
+  });
+  writeFileSync(join(deps.dir, 'sidecar.env'), `ZALO_ALLOWED_USERS=${C}\n`);
+  const seen = await call('/api/admin/owners', { cookie: admin });
+  assert.equal(seen.json.shadowed, true);
+  assert.equal(seen.json.pendingRestart, true, 'kết nối Zalo đang chạy theo danh sách cũ → cần khởi động lại');
+  writeFileSync(join(deps.dir, 'sidecar.env'), 'ZCA_PORT=3872\n');
+  const fixed = await call('/api/admin/owners', { cookie: admin });
+  assert.equal(fixed.json.shadowed, false);
+  assert.equal(fixed.json.pendingRestart, true, 'đã xoá dòng nhưng chưa khởi động lại');
+  const r = await call('/api/admin/restart-assistant', { method: 'POST', cookie: admin, body: {} });
+  assert.equal(r.json.appliedOwners, true);
+  assert.deepEqual(order, ['zalo', 'assistant']);
+  assert.equal((await call('/api/admin/owners', { cookie: admin })).json.pendingRestart, false);
+});

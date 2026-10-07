@@ -51,6 +51,12 @@ export function adminRoutes({ users, sessions, activity, restartAssistant, resta
       console.error('[dashboard] đọc tên chủ nhân lỗi:', err?.message || err);
     }
     const accounts = users.list();
+    // .env của thư mục bot ghi đè → kết nối Zalo đang chạy theo danh sách khác. Đặt cờ chờ để dải vàng hiện và vẫn còn
+    // sau khi người dùng xoá dòng đó: lúc ấy shadowed() đã là false nhưng kết nối Zalo vẫn cần khởi động lại.
+    const shadowed = owners.shadowed();
+    if (shadowed) {
+      try { owners.markPending('shadowed'); } catch (err) { console.error('[dashboard] không đặt được cờ chờ khởi động lại:', err?.message || err); }
+    }
     return {
       ok: true,
       owners: uids.map((uid) => ({
@@ -58,7 +64,7 @@ export function adminRoutes({ users, sessions, activity, restartAssistant, resta
         dashboardUsers: accounts.filter((u) => u.zaloUid === uid).map((u) => u.username),
       })),
       pendingRestart: Boolean(owners.pending()),
-      shadowed: owners.shadowed(),
+      shadowed,
     };
   }
 
@@ -83,11 +89,12 @@ export function adminRoutes({ users, sessions, activity, restartAssistant, resta
   r.post('/admin/restart-assistant', ...guard, async (req, res) => {
     try {
       const pendingAtStart = owners?.pending();
-      const applyOwners = Boolean(pendingAtStart);
+      // Bị .env bot ghi đè thì cũng khởi động lại kết nối Zalo, kể cả khi chưa có cờ chờ.
+      const applyOwners = Boolean(pendingAtStart) || Boolean(owners?.shadowed());
       if (applyOwners) await restartSidecar();
       await restartAssistant();
       // Chỉ xoá cờ nếu không có thay đổi mới chen vào trong lúc khởi động lại (thay đổi đó chưa được áp dụng).
-      if (applyOwners && owners.pending()?.since === pendingAtStart.since) owners.clearPending();
+      if (pendingAtStart && owners.pending()?.since === pendingAtStart.since) owners.clearPending();
       activity.append({ actor: req.user.username, action: 'restart_assistant', detail: applyOwners ? 'áp dụng danh sách chủ nhân mới' : '' });
       res.json({ ok: true, appliedOwners: applyOwners });
     } catch (err) { fail(res, err, 'Chưa khởi động lại được trợ lý — thử lại sau ít phút, nếu vẫn lỗi hãy báo người cài đặt.'); }

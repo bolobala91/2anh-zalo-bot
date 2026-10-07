@@ -114,7 +114,7 @@ export function Owners() {
       <ol class="fix-steps">
         <li>Mở tệp <code>.env</code> trong thư mục cài bot Zalo.</li>
         <li>Xoá cả dòng bắt đầu bằng <code>ZALO_ALLOWED_USERS=</code>, rồi lưu tệp.</li>
-        <li>Tải lại trang này. Nếu có dải vàng, bấm "Khởi động lại trợ lý"; nếu không có, nhờ người cài đặt khởi động lại bot Zalo.</li>
+        <li>Bấm "Khởi động lại trợ lý" ở dải vàng phía trên.</li>
       </ol><//>` : null}
     <section class="card">
       <h2>Danh sách chủ nhân</h2>
