@@ -478,7 +478,7 @@ Trang đăng nhập hiện tên, màu và logo này cả khi chưa đăng nhập
 
 Mục **Chủ nhân bot** (chỉ Quản trị) sửa danh sách UID Zalo có toàn quyền với bot — chính là `ZALO_ALLOWED_USERS` trong `.env` của Hermes (bản trước giữ ở `.env.bak`; dashboard không đọc hay đổi dòng nào khác). Mỗi UID hiện kèm tên Zalo nếu người đó từng nhắn cho bot. Muốn biết UID của ai, nhờ người đó nhắn `/sethome` cho bot. Bot luôn phải còn ít nhất một chủ nhân.
 
-Lưu xong, dashboard hiện dải vàng **Cần khởi động lại trợ lý**: bấm nút trên dải để khởi động lại kết nối Zalo và trợ lý (bot ngừng trả lời khoảng một phút). Nếu thư mục cài bot có `.env` riêng cũng ghi `ZALO_ALLOWED_USERS`, dòng đó được ưu tiên — trang sẽ báo đỏ; xoá dòng đó rồi khởi động lại.
+Lưu xong, dashboard hiện dải vàng **Cần khởi động lại trợ lý**: bấm nút trên dải để khởi động lại kết nối Zalo và trợ lý (bot ngừng trả lời tới vài phút). Gateway Hermes nạp lại `.env` mỗi lượt nên trợ lý thấy danh sách mới ngay; chỉ kết nối Zalo cần khởi động lại — trước đó người mới thêm chưa dùng được đủ lệnh chủ nhân. Nếu thư mục cài bot có `.env` riêng cũng ghi `ZALO_ALLOWED_USERS`, dòng đó được ưu tiên — trang sẽ báo đỏ; xoá dòng đó rồi khởi động lại. Biến `ZALO_ALLOWED_USERS` đặt sẵn trong môi trường hệ thống/dịch vụ cũng ghi đè và cũng bị báo đỏ — nhờ người cài đặt xoá khỏi môi trường đó.
 
 ### Kiểm tay sau khi cài (Giai đoạn 1)
 
