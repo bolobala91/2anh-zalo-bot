@@ -54,3 +54,9 @@ test('.env Hermes chưa có khoá → danh sách rỗng; tệp chờ hỏng → 
   const warn = console.warn; console.warn = () => {};
   try { assert.equal(s.pending(), null); } finally { console.warn = warn; }
 });
+
+test('.env bot đặt khoá rỗng → không coi là shadowed', (t) => {
+  const { files, s } = setup(t);
+  writeFileSync(files.sidecarEnvFile, 'ZALO_ALLOWED_USERS=\n');
+  assert.equal(s.shadowed(), false);
+});

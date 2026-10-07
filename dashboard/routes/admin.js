@@ -69,8 +69,10 @@ export function adminRoutes({ users, sessions, activity, restartAssistant, resta
   r.put('/admin/owners', ...guard, (req, res) => {
     try {
       const uids = parseOwners(req.body?.owners);
+      const before = owners.list();
       if (owners.set(uids, req.user.username)) {
-        activity.append({ actor: req.user.username, action: 'owners_update', detail: uids.join(', ') });
+        const diff = [...uids.filter((u) => !before.includes(u)).map((u) => `+${u}`), ...before.filter((u) => !uids.includes(u)).map((u) => `-${u}`)];
+        activity.append({ actor: req.user.username, action: 'owners_update', detail: diff.join(' ') });
       }
       res.json(ownersView());
     } catch (err) { fail(res, err, 'Chưa lưu được danh sách chủ nhân — thử lại, nếu vẫn lỗi hãy báo người cài đặt.'); }
@@ -80,10 +82,12 @@ export function adminRoutes({ users, sessions, activity, restartAssistant, resta
   // nó cũng chỉ đọc ZALO_ALLOWED_USERS lúc khởi động (quyền lệnh chủ nhân, ai được nhận tin báo lỗi).
   r.post('/admin/restart-assistant', ...guard, async (req, res) => {
     try {
-      const applyOwners = Boolean(owners?.pending());
+      const pendingAtStart = owners?.pending();
+      const applyOwners = Boolean(pendingAtStart);
       if (applyOwners) await restartSidecar();
       await restartAssistant();
-      if (applyOwners) owners.clearPending();
+      // Chỉ xoá cờ nếu không có thay đổi mới chen vào trong lúc khởi động lại (thay đổi đó chưa được áp dụng).
+      if (applyOwners && owners.pending()?.since === pendingAtStart.since) owners.clearPending();
       activity.append({ actor: req.user.username, action: 'restart_assistant', detail: applyOwners ? 'áp dụng danh sách chủ nhân mới' : '' });
       res.json({ ok: true, appliedOwners: applyOwners });
     } catch (err) { fail(res, err, 'Chưa khởi động lại được trợ lý — thử lại sau ít phút, nếu vẫn lỗi hãy báo người cài đặt.'); }

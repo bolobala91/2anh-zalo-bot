@@ -1,6 +1,6 @@
 // Đọc/sửa .env của Hermes (spec §11.5): chỉ khoá trong danh sách cho phép, chỉ sửa dòng của khoá đó,
 // giữ bản trước ở .env.bak, ghi tệp tạm rồi đổi tên. Không bao giờ trả về giá trị của khoá khác.
-import { chmodSync, copyFileSync, existsSync, readFileSync } from 'node:fs';
+import { chmodSync, chownSync, copyFileSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { parseEnv } from 'node:util';
 import { writeFileAtomic } from './json-store.js';
 
@@ -50,5 +50,10 @@ export function writeEnvKey(file, key, value) {
     copyFileSync(file, `${file}.bak`);
     try { chmodSync(`${file}.bak`, 0o600); } catch { /* Windows */ }
   }
-  writeFileAtomic(file, bom + out.join(eol));
+  // Giữ quyền và chủ sở hữu của tệp cũ (tệp mới tạo thì 600).
+  const st = exists ? statSync(file) : null;
+  writeFileAtomic(file, bom + out.join(eol), st ? {
+    mode: st.mode & 0o777,
+    afterWrite: (tmp) => { try { chownSync(tmp, st.uid, st.gid); } catch { /* không đủ quyền / Windows */ } },
+  } : {});
 }

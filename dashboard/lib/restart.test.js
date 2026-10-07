@@ -136,3 +136,13 @@ test('spawn thành công: chờ sự kiện spawn rồi mới unref', async () =
   await makeRestartSidecar({ cmd: 'start-it', platform: 'linux', sidecarRoot: '/x', spawnImpl })();
   assert.equal(unrefd, true);
 });
+
+test('tiến trình con khởi động lại không thừa hưởng ZALO_ALLOWED_USERS cũ', async () => {
+  const f = fakes();
+  process.env.ZALO_ALLOWED_USERS = 'cu';
+  try {
+    await makeRestartSidecar({ platform: 'win32', sidecarRoot: 'C:/x', spawnImpl: f.spawnImpl, execImpl: f.execImpl, sleepImpl: f.sleepImpl, ownPid: 1 })();
+  } finally { delete process.env.ZALO_ALLOWED_USERS; }
+  const env = f.calls.at(-1)[2].env;
+  assert.ok(env && !('ZALO_ALLOWED_USERS' in env));
+});

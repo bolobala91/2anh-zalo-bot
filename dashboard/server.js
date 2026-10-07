@@ -82,6 +82,8 @@ async function main() {
   if (existsSync(join(sidecarRoot, '.env'))) loadRepoEnv(join(sidecarRoot, '.env'));
   loadHermesEnv();
   const deps = buildDeps({ sidecarRoot, inheritedReplyOnlyTagged });
+  // Chủ nhân đọc từ tệp .env, không từ môi trường: tiến trình con khởi động lại sẽ thừa hưởng bản cũ và không bao giờ áp dụng danh sách mới.
+  delete process.env.ZALO_ALLOWED_USERS;
   const app = createDashboardApp(deps);
   app.listen(deps.config.port, '127.0.0.1', () => console.log(`[dashboard] đang chạy tại ${deps.config.publicUrl} (127.0.0.1:${deps.config.port})`));
   const tick = async () => { try { await deps.watchdog.tick(); } catch (e) { console.warn('[watchdog]', e.message); } };

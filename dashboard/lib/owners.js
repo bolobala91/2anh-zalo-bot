@@ -34,7 +34,7 @@ export function createOwnersStore({ envFile, sidecarEnvFile, pendingFile, now = 
     /** .env của thư mục bot cũng đặt khoá này (nạp trước .env Hermes) và khác → kết nối Zalo sẽ không theo danh sách mới. */
     shadowed() {
       const local = sidecarEnvFile ? readEnvKey(sidecarEnvFile, OWNER_KEY) : null;
-      return local !== null && splitOwners(local).join(',') !== list().join(',');
+      return Boolean(local) && splitOwners(local).join(',') !== list().join(',');
     },
     /** Ghi danh sách mới; trả true nếu có thay đổi (khi đó đánh dấu chờ khởi động lại). */
     set(uids, by) {

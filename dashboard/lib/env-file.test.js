@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readEnvKey, writeEnvKey } from './env-file.js';
@@ -59,4 +59,30 @@ test('ghi: chưa có khoá thì thêm cuối tệp; chưa có tệp thì tạo; 
   assert.equal(existsSync(`${g}.bak`), false);
   for (const v of ['1\nOPENAI_API_KEY=x', '1 2', 'abc', '"1"']) assert.throws(() => writeEnvKey(f, K, v), /chữ số và dấu phẩy/, v);
   assert.equal(readEnvKey(f, K), '1234567890123456');
+});
+
+test('ghi: giữ BOM, thiếu xuống dòng cuối, khoá trùng (đổi hết), khoá chỉ nằm trong chú thích, giá trị rỗng', (t) => {
+  const d = tmp(t); const f = join(d, '.env');
+  writeFileSync(f, '\uFEFFA=1\r\nZALO_ALLOWED_USERS=1\r\nB=2');
+  writeEnvKey(f, K, '5');
+  assert.equal(readFileSync(f, 'utf8'), '\uFEFFA=1\r\nZALO_ALLOWED_USERS=5\r\nB=2');
+  writeFileSync(f, 'ZALO_ALLOWED_USERS=1\nX=1\nZALO_ALLOWED_USERS=2');
+  writeEnvKey(f, K, '7,8');
+  assert.equal(readFileSync(f, 'utf8'), 'ZALO_ALLOWED_USERS=7,8\nX=1\nZALO_ALLOWED_USERS=7,8');
+  writeFileSync(f, '# ZALO_ALLOWED_USERS=999\nZALO_ALLOWED_USERS_OLD=5\nA=1');
+  writeEnvKey(f, K, '9');
+  assert.equal(readFileSync(f, 'utf8'), '# ZALO_ALLOWED_USERS=999\nZALO_ALLOWED_USERS_OLD=5\nA=1\nZALO_ALLOWED_USERS=9\n');
+  writeFileSync(f, 'A=1\nZALO_ALLOWED_USERS=\n');
+  assert.equal(readEnvKey(f, K), '');
+  writeEnvKey(f, K, '4');
+  assert.equal(readFileSync(f, 'utf8'), 'A=1\nZALO_ALLOWED_USERS=4\n');
+});
+
+test('ghi giữ quyền tệp cũ (POSIX); .bak vẫn 600', { skip: process.platform === 'win32' }, (t) => {
+  const f = join(tmp(t), '.env');
+  writeFileSync(f, 'ZALO_ALLOWED_USERS=1\n', { mode: 0o640 });
+  chmodSync(f, 0o640);
+  writeEnvKey(f, K, '2');
+  assert.equal(statSync(f).mode & 0o777, 0o640);
+  assert.equal(statSync(`${f}.bak`).mode & 0o777, 0o600);
 });

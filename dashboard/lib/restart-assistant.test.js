@@ -53,7 +53,9 @@ test('Windows có hermes.exe: stop rồi mới chạy lại, không dùng Hermes
   assert.deepEqual(f.order, ['exec', 'spawn']);
   assert.equal(f.spawned[0][0], exe);
   assert.deepEqual(f.spawned[0][1], ['gateway', 'run', '--accept-hooks']);
-  assert.deepEqual({ ...f.spawned[0][2] }, { detached: true, windowsHide: true, stdio: 'ignore', cwd: 'C:/h' });
+  const { env, ...spawnOpts } = f.spawned[0][2];
+  assert.deepEqual(spawnOpts, { detached: true, windowsHide: true, stdio: 'ignore', cwd: 'C:/h' });
+  assert.ok(env && !('ZALO_ALLOWED_USERS' in env), 'không mang danh sách chủ nhân cũ sang tiến trình mới');
   assert.equal(f.spawned[0].unrefd, true);
   assert.ok(!JSON.stringify(f.execs).includes('vbs') && !JSON.stringify(f.spawned).includes('vbs'));
 });

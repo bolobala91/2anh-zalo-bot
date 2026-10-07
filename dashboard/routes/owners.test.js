@@ -101,3 +101,22 @@ test('khởi động lại lỗi giữa chừng thì vẫn giữ cờ chờ (ban
   assert.doesNotMatch(r.json.error, /ENOENT|bi\/mat/);
   assert.notEqual(deps.owners.pending(), null);
 });
+
+test('Nhật ký chỉ ghi phần thêm/bớt, không ghi cả danh sách', async (t) => {
+  const { deps, call, admin } = await ready(t, { env: `ZALO_ALLOWED_USERS=${A},${B}
+` });
+  await call('/api/admin/owners', { method: 'PUT', cookie: admin, body: { owners: [A, C] } });
+  assert.equal(deps.activity.list().find((e) => e.action === 'owners_update').detail, `+${C} -${B}`);
+});
+
+test('thay đổi chen vào lúc đang khởi động lại thì cờ chờ không bị xoá', async (t) => {
+  let deps2;
+  const { deps, call, admin } = await ready(t, {
+    restartAssistant: async () => { await new Promise((r) => setTimeout(r, 15)); deps2.owners.set([C], 'ai-do'); },
+  });
+  deps2 = deps;
+  await call('/api/admin/owners', { method: 'PUT', cookie: admin, body: { owners: [A, B] } });
+  const r = await call('/api/admin/restart-assistant', { method: 'POST', cookie: admin, body: {} });
+  assert.equal(r.status, 200);
+  assert.equal(deps.owners.pending()?.by, 'ai-do');
+});
