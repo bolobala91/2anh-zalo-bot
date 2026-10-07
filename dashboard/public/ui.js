@@ -30,6 +30,8 @@ const PATHS = {
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm10 2-4.35-4.35',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  image: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21',
+  crown: 'M2 18h20M3 7l4.5 5L12 5l4.5 7L21 7l-2 11H5z',
 };
 
 export function Icon({ name, size = 18 }) {
@@ -61,6 +63,17 @@ export const roleLabel = (role) => (role === 'admin' ? 'Quản trị' : 'Chủ b
 
 export function Spinner({ label = 'Đang tải…' }) {
   return html`<div class="loading" role="status"><span class="spinner" aria-hidden="true"></span>${label}</div>`;
+}
+
+/** Logo thương hiệu: ảnh đã tải lên (cùng nguồn, hợp CSP), chưa có thì biểu tượng bot trên nền màu thương hiệu. */
+export function BrandMark({ brand, size = 20 }) {
+  return brand?.logoUrl
+    ? html`<img class="logo logo-img" src=${brand.logoUrl} alt="" />`
+    : html`<span class="logo" aria-hidden="true"><${Icon} name="bot" size=${size} /></span>`;
+}
+
+export function PoweredBy({ brand }) {
+  return brand?.poweredBy ? html`<p class="powered">Vận hành bởi 2Anh AI</p>` : null;
 }
 
 export function PageHead({ title, sub }) {

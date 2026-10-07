@@ -315,6 +315,48 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
 .perm-row:last-child { border-bottom: 0; }
 .perm-row small { padding-left: 26px; }
 
+/* ---------- Thương hiệu ---------- */
+.logo-img { object-fit: contain; background: transparent; }
+.powered { margin-top: 16px; font-size: 12px; color: var(--muted); text-align: center; }
+.nav-foot .powered { margin-top: 8px; }
+.logo-pick { display: flex; gap: 14px; align-items: flex-start; margin: 12px 0 4px; }
+.logo-pick .field { margin-bottom: 8px; min-width: 0; }
+.brand-colors { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+.brand-colors legend { padding: 0; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.swatch {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border: 1px solid var(--border);
+  border-radius: 999px; background: var(--card); color: var(--text); font: inherit; font-size: 14px; cursor: pointer;
+}
+.swatch:hover { background: #f1f5f9; }
+.swatch.selected { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); font-weight: 600; }
+.swatch-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--swatch); }
+.color-row { display: flex; gap: 10px; align-items: center; }
+.color-row input[type="color"] { width: 48px; height: 40px; padding: 2px; flex: none; cursor: pointer; }
+.color-row input:not([type]) { max-width: 140px; }
+.contrast { display: flex; gap: 6px; align-items: flex-start; margin-top: 8px; font-size: 14px; }
+.contrast .icon { margin-top: 3px; flex: none; }
+.contrast-ok { color: var(--ok); }
+.contrast-bad { color: var(--danger); }
+.form-end { margin-top: 18px; }
+.brand-preview {
+  display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 14px; margin-top: 14px; padding: 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg); pointer-events: none;
+}
+.pv-side { display: flex; flex-direction: column; gap: 2px; padding: 12px 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.pv-side .side-brand { padding: 0 6px 10px; font-size: 14px; }
+.pv-side .side-brand > span:last-child { display: inline; overflow-wrap: anywhere; }
+.pv-login {
+  display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 10px;
+  background: radial-gradient(400px 200px at 50% -10%, var(--brand-soft), var(--card) 70%);
+}
+.pv-login .auth-brand { margin-bottom: 0; overflow-wrap: anywhere; }
+.brand-col { min-width: 0; }
+@media (max-width: 760px) {
+  .brand-preview { grid-template-columns: minmax(0, 1fr); }
+  .nav-foot .powered { display: none; }
+}
+
 /* ---------- Điện thoại ---------- */
 @media (max-width: 760px) {
   .layout { grid-template-columns: minmax(0, 1fr); }

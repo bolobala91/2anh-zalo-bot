@@ -151,3 +151,21 @@ test('phân quyền: hỏi trước khi bỏ thay đổi chưa lưu; nhóm chỉ
   assert.equal(staysListed('200', perms, [{ id: '200' }]), true, 'bot còn thấy nhóm');
   assert.equal(staysListed('400', perms, []), false, 'chỉ có trong tệp, vừa về mặc định');
 });
+
+test('thương hiệu: thu nhỏ logo giữ tỉ lệ, kiểm loại tệp, câu tương phản', async () => {
+  const { fitSize, checkLogoFile, contrastInfo } = await import('./views/brand.js');
+  assert.deepEqual(fitSize(1024, 512), { width: 256, height: 128 });
+  assert.deepEqual(fitSize(100, 3000), { width: 9, height: 256 });
+  assert.deepEqual(fitSize(64, 64), { width: 64, height: 64 }, 'ảnh nhỏ giữ nguyên');
+  assert.deepEqual(fitSize(5000, 1), { width: 256, height: 1 });
+  assert.equal(checkLogoFile({ type: 'image/png', size: 1000 }), '');
+  assert.equal(checkLogoFile({ type: 'image/webp', size: 5 * 1024 * 1024 }), '');
+  assert.match(checkLogoFile({ type: 'image/svg+xml', size: 100 }), /không nhận SVG/);
+  assert.match(checkLogoFile({ type: 'image/gif', size: 100 }), /PNG, JPG hoặc WebP/);
+  assert.match(checkLogoFile({ type: 'image/png', size: 5 * 1024 * 1024 + 1 }), /5 MB/);
+  assert.match(checkLogoFile(undefined), /—/);
+  assert.deepEqual(contrastInfo('#0F766E'), { hex: '#0f766e', ok: true, text: 'Chữ trắng trên màu này: 5,47 : 1 — dễ đọc.' });
+  assert.equal(contrastInfo('#777777').ok, false);
+  assert.match(contrastInfo('#777777').text, /4,48 : 1 — dưới 4,5 : 1/);
+  assert.deepEqual(contrastInfo('xanh'), { hex: null, ok: false, text: 'Mã màu chưa đúng — nhập dạng #0f766e hoặc chọn một màu gợi ý.' });
+});

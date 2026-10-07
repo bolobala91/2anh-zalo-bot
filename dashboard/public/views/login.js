@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
-import { html, Icon, Live } from '../ui.js';
+import { html, BrandMark, Icon, Live, PoweredBy } from '../ui.js';
 
 const RESEND_SECONDS = 60;
 
 export function AuthCard({ brand, title, sub, children }) {
   return html`<main class="auth">
     <div class="auth-card">
-      <div class="auth-brand"><span class="logo" aria-hidden="true"><${Icon} name="bot" size=${22} /></span><span>${brand}</span></div>
+      <div class="auth-brand"><${BrandMark} brand=${brand} size=${22} /><span>${brand.name}</span></div>
       <h1>${title}</h1>
       ${sub ? html`<p class="muted">${sub}</p>` : null}
       ${children}
+      <${PoweredBy} brand=${brand} />
     </div>
   </main>`;
 }
