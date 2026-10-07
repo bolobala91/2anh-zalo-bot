@@ -117,6 +117,14 @@ def _load() -> Dict[str, Any]:
             return _cache["data"]
     try:
         data = _parse(path.read_text(encoding="utf-8-sig"))
+    except OSError as exc:
+        # Tệp còn nguyên, chỉ là tiến trình gateway không mở được (thường do
+        # dashboard chạy dưới user khác và ghi tệp quyền 600) — không phải tệp hỏng.
+        problem = ("the gateway user cannot read it" if isinstance(exc, PermissionError)
+                   else f"read failed: {exc}")
+        logger.error("[zalo] không đọc được %s — %s; dùng mặc định, mọi tính năng bật. "
+                     "Sửa chủ sở hữu/quyền của tệp cho user chạy gateway.", path, problem)
+        data = {}
     except Exception as exc:
         logger.warning("[zalo] permissions.json hỏng (%s) — dùng mặc định, mọi tính năng bật: %s", path, exc)
         data = {}

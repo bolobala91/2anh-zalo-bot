@@ -110,6 +110,17 @@ class BomTest(PermissionsFile, unittest.TestCase):
         self.assertFalse(gp.group_settings(GROUP_A)["active"])
 
 
+class UnreadableFileTest(PermissionsFile, unittest.TestCase):
+    def test_permission_error_is_logged_as_unreadable_not_corrupt(self):
+        self.write({"version": 1, "defaults": {"features": {"web": False}}, "groups": {}})
+        with patch.object(gp.Path, "read_text", side_effect=PermissionError(13, "Permission denied")), \
+                self.assertLogs(gp.logger, level="ERROR") as logs:
+            self.assertTrue(gp.group_settings(GROUP_A)["features"]["web"])
+        self.assertIn("the gateway user cannot read it", logs.output[0])
+        self.assertIn(self.path, logs.output[0])
+        self.assertNotIn("hỏng", logs.output[0])
+
+
 class GuardFeatureTest(PermissionsFile, unittest.TestCase):
     def setUp(self):
         super().setUp()
