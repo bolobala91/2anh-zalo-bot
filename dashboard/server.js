@@ -19,7 +19,7 @@ import { createSidecarClient } from './lib/sidecar-client.js';
 import { createTelegramLinker } from './lib/telegram.js';
 import { createStoreReader } from './lib/store-reader.js';
 import { createThreadNames } from './lib/thread-names.js';
-import { createPermissionsStore, makeGlobalReplyOnlyTagged } from './lib/permissions.js';
+import { createPermissionsStore, makeDmEnv, makeGlobalReplyOnlyTagged } from './lib/permissions.js';
 import { createWatchdog } from './lib/watchdog.js';
 import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
@@ -34,7 +34,7 @@ const here = dirname(fileURLToPath(import.meta.url));
  *   nạp .env của sidecar — .env của sidecar không phải nơi bot đọc cờ này.
  * @param {string} [opts.inheritedOwners] ZALO_ALLOWED_USERS trong môi trường dịch vụ, chụp trước khi nạp bất kỳ .env nào.
  */
-export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), inheritedReplyOnlyTagged, inheritedOwners } = {}) {
+export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), inheritedReplyOnlyTagged, inheritedOwners, inheritedDm = {} } = {}) {
   if (!env.ZALO_BRIDGE_TOKEN) throw new Error('Thiếu ZALO_BRIDGE_TOKEN trong .env của sidecar — chạy lại "npm run install:hermes".');
   const paths = resolveDashboardPaths({ env, sidecarRoot });
   const config = loadDashboardConfig(env);
@@ -63,6 +63,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
       globalReplyOnlyTagged: makeGlobalReplyOnlyTagged({
         envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, inherited: inheritedReplyOnlyTagged,
       }),
+      dmEnv: makeDmEnv({ envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, inherited: inheritedDm }),
     }),
     watchdog: createWatchdog({
       sidecar: watchedSidecar, notify: (text) => linker.broadcast(text),
@@ -81,9 +82,10 @@ async function main() {
   const sidecarRoot = join(here, '..');
   const inheritedReplyOnlyTagged = process.env.ZALO_GROUP_REPLY_ONLY_TAGGED;
   const inheritedOwners = process.env.ZALO_ALLOWED_USERS; // trước khi nạp .env nào
+  const inheritedDm = Object.fromEntries(['ZALO_DM_POLICY', 'ZALO_ALLOW_ALL_USERS', 'GATEWAY_ALLOW_ALL_USERS'].map((k) => [k, process.env[k]]));
   if (existsSync(join(sidecarRoot, '.env'))) loadRepoEnv(join(sidecarRoot, '.env'));
   loadHermesEnv();
-  const deps = buildDeps({ sidecarRoot, inheritedReplyOnlyTagged, inheritedOwners });
+  const deps = buildDeps({ sidecarRoot, inheritedReplyOnlyTagged, inheritedOwners, inheritedDm });
   // Chủ nhân đọc từ tệp .env, không từ môi trường: tiến trình con khởi động lại sẽ thừa hưởng bản cũ và không bao giờ áp dụng danh sách mới.
   delete process.env.ZALO_ALLOWED_USERS;
   const app = createDashboardApp(deps);

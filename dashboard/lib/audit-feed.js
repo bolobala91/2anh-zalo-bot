@@ -36,6 +36,7 @@ export const ACTION_LABELS = {
   telegram_settings: 'Đổi cài đặt Telegram cảnh báo',
   permissions_defaults: 'Đổi phân quyền mặc định',
   permissions_group: 'Đổi phân quyền nhóm',
+  permissions_dm: 'Đổi quyền nhắn riêng',
   brand_update: 'Đổi thương hiệu',
   brand_logo: 'Đổi logo',
   brand_logo_remove: 'Gỡ logo',
@@ -53,6 +54,8 @@ const REASONS = {
   auth_required: 'Thiếu thông tin người gọi',
   friend_tools_disabled: 'Tính năng kết bạn đang tắt',
   own_message_not_found: 'Không tìm thấy tin để thu hồi',
+  dm_not_allowed: 'Người này chưa được phép nhắn riêng với bot',
+  feature_disabled: 'Tính năng đang tắt khi nhắn riêng',
 };
 
 const ROLE_LABELS = { owner: 'Chủ nhân', public: 'Thành viên' };

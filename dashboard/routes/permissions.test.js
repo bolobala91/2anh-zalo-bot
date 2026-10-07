@@ -116,3 +116,27 @@ test('quá 500 nhóm riêng → 400 có hướng dẫn; nhóm đã có vẫn s�
   const again = await call('/api/permissions/groups/1', { method: 'PUT', cookie: admin, body: body({ active: true }) });
   assert.equal(again.status, 200);
 });
+
+test('nhắn riêng: Chủ bot lưu được, tệp có mục dm, Nhật ký ghi dòng dễ đọc; 401 khi chưa đăng nhập; 400 kèm bước tiếp theo', async (t) => {
+  const { call, owner, disk, deps } = await ready(t);
+  const dm8 = (over = {}) => ({ web: true, files: true, voice: true, reminders: true, kb: true, people: true, academic: true, video: true, ...over });
+  const payload = { who: 'list', features: dm8({ video: false }), people: [{ uid: '1234567890123456', name: 'Cô Lan', features: dm8({ voice: false }) }] };
+  assert.equal((await call('/api/permissions/dm', { method: 'PUT', body: payload })).status, 401);
+  const first = await call('/api/permissions', { cookie: owner });
+  assert.deepEqual(first.json.dmFeatures.map((f) => f.key), ['web', 'files', 'voice', 'reminders', 'kb', 'people', 'academic', 'video']);
+  assert.equal(first.json.dm.explicit, false);
+  const saved = await call('/api/permissions/dm', { method: 'PUT', cookie: owner, body: payload });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.json.dm.who, 'list');
+  assert.deepEqual(saved.json.dmFeatures.map((f) => f.key), first.json.dmFeatures.map((f) => f.key));
+  assert.deepEqual(disk().dm.people, { '1234567890123456': { name: 'Cô Lan', features: { voice: false, video: true } } });
+  const log = readFileSync(join(deps.dir, 'activity.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1);
+  assert.equal(log.action, 'permissions_dm');
+  assert.equal(log.detail, 'Những người trong danh sách · tắt: Video · 1 người trong danh sách (1 chỉnh riêng)');
+  const bad = await call('/api/permissions/dm', { method: 'PUT', cookie: owner, body: { ...payload, people: [{ uid: '0912345678' }] } });
+  assert.equal(bad.status, 400);
+  assert.match(bad.json.error, /—/);
+  const group = await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: owner, body: body({}, { web: false }) });
+  assert.equal(group.json.dm.who, 'list', 'lưu nhóm trả kèm mục dm để giao diện không mất');
+  assert.ok(Array.isArray(group.json.dmFeatures));
+});

@@ -375,12 +375,13 @@ _NODE_FIXTURE = r"""
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 const [modUrl, home, stepsJson] = process.argv.slice(1);
-const { createPermissionsStore, makeGlobalReplyOnlyTagged } = await import(modUrl);
+const { createPermissionsStore, makeGlobalReplyOnlyTagged, parseDm } = await import(modUrl);
 const store = createPermissionsStore({
   file: join(home, 'zalo', 'permissions.json'),
   globalReplyOnlyTagged: makeGlobalReplyOnlyTagged({ envFile: join(home, '.env'), configFile: join(home, 'config.yaml') }),
 });
 for (const step of JSON.parse(stepsJson)) {
+  if (step.dm) { store.setDm(parseDm(step.dm)); continue; }
   const view = store.get();
   const base = step.group ? (view.groups[step.group] || view.defaults) : view.defaults;
   const s = { active: base.active, replyOnlyTagged: base.replyOnlyTagged, features: { ...base.features } };
@@ -444,6 +445,23 @@ class DashboardContractTest(AdapterHarness, unittest.IsolatedAsyncioTestCase):
             self.assertFalse(rules["features"]["kb"], group)
         self.assertFalse(gp.group_settings(GROUP_A)["features"]["web"])
         self.assertTrue(gp.group_settings(GROUP_B)["features"]["web"])
+
+    async def test_s3_dm_section_written_by_dashboard_is_read_by_plugin(self):
+        # Lưu nhóm trước và sau mục Nhắn riêng: không lần lưu nào làm mất phần của lần kia.
+        all8 = {feature: True for feature in gp.DM_FEATURES}
+        lan = "1234567890123456"
+        self.dashboard_saves([
+            {"group": GROUP_A, "features": {"web": False}},
+            {"dm": {"who": "list", "features": {**all8, "video": False},
+                    "people": [{"uid": lan, "name": "Cô Lan", "features": {**all8, "voice": False}}]}},
+            {"group": GROUP_B, "features": {"kb": False}},
+        ])
+        self.assertIs(gp.dm_allows(lan), True)
+        self.assertIs(gp.dm_allows(MEMBER), False)
+        self.assertEqual(gp.dm_disabled_features(lan), ["voice"], "người có nút riêng: video bật lại, thoại tắt")
+        self.assertEqual(gp.dm_disabled_features(MEMBER), ["video"])
+        self.assertEqual(gp.disabled_features(GROUP_A), ["web"])
+        self.assertEqual(gp.disabled_features(GROUP_B), ["kb"])
 
 
 STRANGER = "5555555555555555555"
