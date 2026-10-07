@@ -74,7 +74,7 @@ export function serviceBadge(state) {
 /** 14 ngày gần nhất, mới trước. */
 export const usageRows = (usage) => [...(usage?.days || [])].reverse().slice(0, 14);
 
-const ALERT_TEXT = { disk: 'Ổ đĩa đang trên 90 %', ram: 'RAM đang trên 90 %', cpu: 'CPU đang bận trên 90 %' };
+const ALERT_NAME = { disk: 'Ổ đĩa', ram: 'RAM', cpu: 'CPU' };
 const ADMIN_HINT = {
   disk: 'Dọn bớt tệp (bản sao lưu, nhật ký cũ) hoặc tăng dung lượng ổ.',
   ram: 'Khởi động lại dịch vụ ngốn bộ nhớ hoặc nâng RAM.',
@@ -83,6 +83,17 @@ const ADMIN_HINT = {
 
 /** Bước tiếp theo trên dải cảnh báo: Quản trị theo từng loại; Chủ bot báo người cài đặt. */
 export const alertHint = (kind, role) => (role === 'admin' ? ADMIN_HINT[kind] || 'Kiểm tra máy chủ.' : 'Báo người cài đặt nếu kéo dài.');
+
+/**
+ * Dải cảnh báo của một sự cố đang mở. Chưa báo Telegram (đang đếm thời gian) → vàng "Đang theo dõi";
+ * đã báo → đỏ. Cả hai nói rõ lúc nào hết cảnh báo (xuống dưới ngưỡng tắt).
+ */
+export function alertBanner(a, role, { on = 90, off = 85, at = fmtTime } = {}) {
+  const name = ALERT_NAME[a.kind] || a.kind;
+  const tail = `hết cảnh báo khi xuống dưới ${off} %.`;
+  if (!a.alerted) return { kind: 'warn', text: `Đang theo dõi: ${name} cao (≥ ${on} %) từ ${at(a.since)}. Chưa báo Telegram; ${tail}` };
+  return { kind: 'danger', text: `${name} cao (≥ ${on} %) từ ${at(a.since)} — đã báo Telegram; ${tail} ${alertHint(a.kind, role)}` };
+}
 
 const hhmm = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
@@ -165,7 +176,7 @@ function Usage({ usage }) {
       <div class="table-wrap"><table class="table table-cards">
         <thead><tr><th>Ngày</th><th>Lượt gọi AI</th><th>Token gửi đi</th><th>Token nhận về</th><th class="th-wrap">Token dùng lại từ bộ nhớ đệm</th></tr></thead>
         <tbody>${rows.map((d) => html`<tr key=${d.date}>
-          <td data-label="Ngày">${d.date.split('-').reverse().join('/')}</td>
+          <td data-label="Ngày">${d.date.split('-').reverse().join('/')}${d.includesGap ? html`<small class="muted"> (gồm cả khoảng dashboard tắt)</small>` : null}</td>
           <td data-label="Lượt gọi AI">${fmtNum(d.calls)}</td>
           <td data-label="Token gửi đi">${fmtNum(d.input)}</td>
           <td data-label="Token nhận về">${fmtNum(d.output)}</td>
@@ -199,7 +210,7 @@ export function Health({ me }) {
   const points = data.history?.points || [];
   return html`${head}
     ${error ? html`<${Notice} kind="warn">Không cập nhật được: ${error} Đang hiện số đo lần trước.<//>` : null}
-    ${(data.alerts || []).map((a) => html`<${Notice} key=${a.kind} kind="danger">${ALERT_TEXT[a.kind]} từ ${fmtTime(a.since)}${a.alerted ? ' — đã báo Telegram.' : '.'} ${alertHint(a.kind, me.role)}<//>`)}
+    ${(data.alerts || []).map((a) => { const b = alertBanner(a, me.role, { on: data.threshold?.on, off: data.threshold?.off }); return html`<${Notice} key=${a.kind} kind=${b.kind}>${b.text}<//>`; })}
     ${h ? html`<div class="grid grid-4">
       <${Tile} icon="activity" title="CPU" value=${fmtPct(h.cpuPct)} kind=${level(h.cpuPct)} sub=${`${h.cores} nhân`} />
       <${Tile} icon="server" title="RAM" value=${fmtPct(h.ramPct)} kind=${level(h.ramPct)}

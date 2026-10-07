@@ -277,8 +277,22 @@ test('sức khoẻ máy chủ: đoạn biểu đồ ngắt ở chỗ thiếu s�
   assert.deepEqual(usageRows(undefined), []);
 });
 
+test('Nhắn riêng: nút Lưu bật khi chưa từng lưu dù chưa sửa gì', async () => {
+  const { canSaveDm } = await import('./views/dm-permissions.js');
+  assert.equal(canSaveDm({ explicit: false }, false), true);
+  assert.equal(canSaveDm({ explicit: true }, false), false);
+  assert.equal(canSaveDm({ explicit: true }, true), true);
+});
+
 test('sức khoẻ máy chủ: gợi ý theo loại cảnh báo; ghi chú dùng AI chỉ báo thiếu khi chưa có số nào', async () => {
-  const { alertHint, usageNote, Health } = await import('./views/health.js');
+  const { alertHint, alertBanner, usageNote, Health } = await import('./views/health.js');
+  const warn = alertBanner({ kind: 'cpu', since: Date.now(), alerted: false }, 'admin');
+  assert.equal(warn.kind, 'warn');
+  assert.match(warn.text, /^Đang theo dõi: CPU cao \(≥ 90 %\) từ .*hết cảnh báo khi xuống dưới 85 %/);
+  const red = alertBanner({ kind: 'ram', since: Date.now(), alerted: true }, 'owner');
+  assert.equal(red.kind, 'danger');
+  assert.match(red.text, /RAM cao \(≥ 90 %\).*đã báo Telegram.*dưới 85 %.*Báo người cài đặt/);
+  assert.doesNotMatch(red.text + warn.text, /trên 90 %/);
   assert.match(alertHint('disk', 'admin'), /dọn bớt tệp.*tăng dung lượng ổ/i);
   assert.match(alertHint('ram', 'admin'), /khởi động lại dịch vụ ngốn bộ nhớ hoặc nâng RAM/i);
   assert.match(alertHint('cpu', 'admin'), /kiểm tra tiến trình đang chạy nặng/i);
@@ -293,6 +307,7 @@ test('sức khoẻ máy chủ: gợi ý theo loại cảnh báo; ghi chú dùng 
   assert.match(n.text, /^Không đọc được số mới lúc \d{2}:\d{2} — đang hiện số đã lưu/);
   assert.equal(usageNote({ error: 'missing', errorAt: at }, row).kind, 'muted', 'có số đã lưu thì không báo thiếu');
   const src = readFileSync(join(root, 'views', 'health.js'), 'utf8');
+  assert.match(src, /gồm cả khoảng dashboard tắt/);
   assert.match(src, /Chỉ đếm lượt gọi và token, chưa tính tiền — /);
   assert.doesNotMatch(src, /<text/, 'nhãn trục là chữ HTML, không co giãn theo SVG');
   assert.equal(typeof Health, 'function');

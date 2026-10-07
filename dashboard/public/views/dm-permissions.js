@@ -98,6 +98,9 @@ function Person({ p, known, base, features, onChange, onRemove }) {
   </li>`;
 }
 
+/** Lưu được khi có thay đổi, hoặc khi chưa từng lưu (đang theo cài đặt lúc cài bot — thông báo bảo bấm Lưu). */
+export const canSaveDm = (dm, dirty) => dirty || !dm.explicit;
+
 export function DmEditor({ dm, features, admin, onSaved, onBack, onDirty }) {
   const [draft, setDraft] = useState(() => dmDraft(dm));
   const [busy, setBusy] = useState(false);
@@ -109,6 +112,7 @@ export function DmEditor({ dm, features, admin, onSaved, onBack, onDirty }) {
   const [name, setName] = useState('');
   const [addError, setAddError] = useState('');
   const dirty = !sameDm(draft, dm);
+  const canSave = canSaveDm(dm, dirty);
   useEffect(() => { onDirty(dirty); }, [dirty]);
   useEffect(() => () => onDirty(false), []);
   useEffect(() => {
@@ -132,7 +136,7 @@ export function DmEditor({ dm, features, admin, onSaved, onBack, onDirty }) {
 
   async function save(e) {
     e.preventDefault();
-    if (busy || !dirty) return;
+    if (busy || !canSave) return;
     setBusy(true); setMsg({});
     try {
       const r = await api('/api/permissions/dm', { method: 'PUT', body: dmPayload(draft) });
@@ -191,7 +195,7 @@ export function DmEditor({ dm, features, admin, onSaved, onBack, onDirty }) {
       </ul>` : html`<p class="muted small">Chưa có ai. ${draft.who === 'list' ? 'Thêm ít nhất một người — nếu không, chỉ chủ nhân nhắn riêng được.' : ''}</p>`}
     </fieldset>
     <div class="row">
-      <button class="btn btn-primary" disabled=${busy || !dirty}>${busy ? 'Đang lưu…' : 'Lưu'}</button>
+      <button class="btn btn-primary" disabled=${busy || !canSave}>${busy ? 'Đang lưu…' : 'Lưu'}</button>
       ${dirty ? html`<small class="muted">Có thay đổi chưa lưu.</small>` : null}
     </div>
     <${Live} error=${msg.error} ok=${msg.ok} />
