@@ -40,14 +40,16 @@ export function createAiUsage({ dbPath, file, now = Date.now, keepDays = 30, rea
   let state = readJson(file, { v: 1, since: null, last: null, days: {} });
   if (!state || typeof state !== 'object' || typeof state.days !== 'object' || state.days === null) state = { v: 1, since: null, last: null, days: {} };
   let error = null;
+  let errorAt = null; // lúc đọc lỗi gần nhất — trang ghi "Không đọc được số mới lúc HH:MM"
   const save = () => { try { writeJsonAtomic(file, state); } catch (e) { console.warn('[usage] không ghi được:', e.message); } };
 
   return {
     /** Lấy một mẫu. Không bao giờ ném lỗi — lỗi đọc được giữ lại để trang hiện câu dễ hiểu. */
     sample() {
       let cur;
-      try { cur = readTotals(dbPath); error = null; } catch (e) {
+      try { cur = readTotals(dbPath); error = null; errorAt = null; } catch (e) {
         error = e?.name === 'UsageUnavailable' ? 'missing' : 'unreadable';
+        errorAt = now();
         if (error === 'unreadable') console.warn('[usage] không đọc được state.db:', e?.message || e);
         return;
       }
@@ -66,11 +68,12 @@ export function createAiUsage({ dbPath, file, now = Date.now, keepDays = 30, rea
       state.last = cur;
       save();
     },
-    /** `{ since, error: null|'missing'|'unreadable', days: [{ date, calls, input, output, cached }] }` — cũ trước. */
+    /** `{ since, error: null|'missing'|'unreadable', errorAt, days: [{ date, calls, input, output, cached }] }` — cũ trước. */
     report() {
       return {
         since: state.since,
         error,
+        errorAt,
         days: Object.entries(state.days).sort(([a], [b]) => (a < b ? -1 : 1)).map(([date, v]) => ({ date, ...v })),
       };
     },

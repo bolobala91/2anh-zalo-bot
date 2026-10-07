@@ -20,9 +20,9 @@ export function createWatchdog({
     zalo: (n) => `⚠️ ${n} đang mất kết nối Zalo — cần quét mã QR đăng nhập lại.\nMở trên máy tính (không phải điện thoại của bot): ${publicUrl}/#/zalo`,
     listener: (n) => `⚠️ ${n} đang không nhận được tin nhắn Zalo (mất kết nối hơn 10 phút). Đợi thêm vài phút hoặc khởi động lại bot; nếu vẫn vậy, quét lại mã QR trên máy tính (không phải điện thoại của bot): ${publicUrl}/#/zalo`,
     assistant: (n) => `⚠️ ${n}: Trợ lý không phản hồi — tin nhắn Zalo đang không được trả lời.\n${publicUrl}`,
-    disk: (n, v) => `⚠️ ${n}: ổ đĩa máy chủ đã đầy ${v}%. Dọn bớt tệp (bản sao lưu, nhật ký cũ) hoặc báo người cài đặt — đầy hẳn thì bot ngừng lưu tin nhắn.\n${healthUrl}`,
-    ram: (n, v) => `⚠️ ${n}: bộ nhớ (RAM) máy chủ đang dùng ${v}% suốt hơn 5 phút — bot có thể chậm hoặc tự khởi động lại. Báo người cài đặt nếu kéo dài.\n${healthUrl}`,
-    cpu: (n, v) => `⚠️ ${n}: CPU máy chủ bận ${v}% suốt hơn 10 phút — bot có thể trả lời chậm. Báo người cài đặt nếu kéo dài.\n${healthUrl}`,
+    disk: (n, v) => `⚠️ ${n}: ổ đĩa máy chủ đã đầy ${v}%. Dọn bớt tệp (bản sao lưu, nhật ký cũ) hoặc tăng dung lượng ổ, không tự làm được thì báo người cài đặt — đầy hẳn thì bot ngừng lưu tin nhắn.\n${healthUrl}`,
+    ram: (n, v) => `⚠️ ${n}: bộ nhớ (RAM) máy chủ đang dùng ${v}% suốt hơn 5 phút — bot có thể chậm hoặc tự khởi động lại. Khởi động lại dịch vụ ngốn bộ nhớ hoặc nâng RAM; không tự làm được thì báo người cài đặt.\n${healthUrl}`,
+    cpu: (n, v) => `⚠️ ${n}: CPU máy chủ bận ${v}% suốt hơn 10 phút — bot có thể trả lời chậm. Kiểm tra tiến trình đang chạy nặng; không tự làm được thì báo người cài đặt.\n${healthUrl}`,
   };
   const recovered = {
     sidecar: 'kết nối Zalo đã hoạt động lại', zalo: 'Zalo đã hoạt động lại', assistant: 'Trợ lý đã hoạt động lại',

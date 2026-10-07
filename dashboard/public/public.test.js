@@ -277,6 +277,27 @@ test('sức khoẻ máy chủ: đoạn biểu đồ ngắt ở chỗ thiếu s�
   assert.deepEqual(usageRows(undefined), []);
 });
 
+test('sức khoẻ máy chủ: gợi ý theo loại cảnh báo; ghi chú dùng AI chỉ báo thiếu khi chưa có số nào', async () => {
+  const { alertHint, usageNote, Health } = await import('./views/health.js');
+  assert.match(alertHint('disk', 'admin'), /dọn bớt tệp.*tăng dung lượng ổ/i);
+  assert.match(alertHint('ram', 'admin'), /khởi động lại dịch vụ ngốn bộ nhớ hoặc nâng RAM/i);
+  assert.match(alertHint('cpu', 'admin'), /kiểm tra tiến trình đang chạy nặng/i);
+  assert.equal(alertHint('ram', 'owner'), 'Báo người cài đặt nếu kéo dài.');
+  const row = [{ date: '2026-10-07', calls: 1 }];
+  assert.equal(usageNote({ error: null }, row), null);
+  assert.equal(usageNote({ error: 'missing' }, []).kind, 'warn');
+  assert.equal(usageNote({ error: 'unreadable' }, []).kind, 'warn');
+  const at = Date.UTC(2026, 9, 7, 2, 5); // 09:05 giờ Việt Nam
+  const n = usageNote({ error: 'unreadable', errorAt: at }, row);
+  assert.equal(n.kind, 'muted');
+  assert.match(n.text, /^Không đọc được số mới lúc \d{2}:\d{2} — đang hiện số đã lưu/);
+  assert.equal(usageNote({ error: 'missing', errorAt: at }, row).kind, 'muted', 'có số đã lưu thì không báo thiếu');
+  const src = readFileSync(join(root, 'views', 'health.js'), 'utf8');
+  assert.match(src, /Chỉ đếm lượt gọi và token, chưa tính tiền — /);
+  assert.doesNotMatch(src, /<text/, 'nhãn trục là chữ HTML, không co giãn theo SVG');
+  assert.equal(typeof Health, 'function');
+});
+
 test('thanh bên: Sức khoẻ máy chủ nằm trong nhóm Hệ thống, cả hai vai trò đều thấy', () => {
   const src = readFileSync(join(root, 'views', 'shell.js'), 'utf8');
   assert.match(src, /'\/health': \{ view: Health \}/);

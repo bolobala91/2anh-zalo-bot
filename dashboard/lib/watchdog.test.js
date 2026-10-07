@@ -185,6 +185,17 @@ test('ổ đĩa > 90 %: báo ở lần đo thứ hai liên tiếp, kèm số % v
   assert.equal(sent.at(-1), '✅ Uyển Nhi: ổ đĩa máy chủ đã trở lại bình thường.');
 });
 
+test('máy chủ: mỗi loại cảnh báo có bước tiếp theo riêng', async (t) => {
+  const clock = { t: 0 };
+  const { make, sent } = mk(t, { h: ok }, clock, { diskAfterMs: 0, ramAfterMs: 0, cpuAfterMs: 0 }); const wd = make();
+  await wd.checkHost(host({ diskPct: 95, ramPct: 95, cpuPct: 95 }));
+  clock.t = 60_000; await wd.checkHost(host({ diskPct: 95, ramPct: 95, cpuPct: 95 }));
+  assert.equal(sent.length, 3);
+  assert.match(sent[0], /dọn bớt tệp.*tăng dung lượng ổ/i);
+  assert.match(sent[1], /khởi động lại dịch vụ ngốn bộ nhớ hoặc nâng RAM/i);
+  assert.match(sent[2], /kiểm tra tiến trình đang chạy nặng/i);
+});
+
 test('RAM > 90 % phải kéo dài 5 phút, CPU > 90 % kéo dài 10 phút; một lần xuống dưới 85 % thì đếm lại', async (t) => {
   const clock = { t: 0 };
   const { make, sent } = mk(t, { h: ok }, clock); const wd = make();

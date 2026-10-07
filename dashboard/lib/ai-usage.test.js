@@ -80,9 +80,14 @@ test('tổng giảm (Hermes dọn phiên) không ra số âm; giữ 30 ngày; l�
   assert.equal(u.report().days[0].calls, 2, 'mốc mới sau khi tổng giảm');
   clock = at('2026-10-05T03:00:00Z'); u.sample();
   assert.deepEqual(u.report().days.map((d) => d.date), ['2026-10-05'], 'ngày quá 30 ngày bị bỏ');
-  const broken = createAiUsage({ dbPath: h.path, file: join(h.dir, 'x.json'), readTotals: () => { throw new Error('database is locked'); } });
+  let fail = true;
+  const broken = createAiUsage({ dbPath: h.path, file: join(h.dir, 'x.json'), now: () => 7_000, readTotals: () => { if (fail) throw new Error('database is locked'); return { calls: 0, input: 0, output: 0, cached: 0 }; } });
+  assert.equal(broken.report().errorAt, null);
   broken.sample();
   assert.equal(broken.report().error, 'unreadable');
+  assert.equal(broken.report().errorAt, 7_000, 'giữ lúc đọc lỗi để trang ghi "lúc HH:MM"');
+  fail = false; broken.sample();
+  assert.equal(broken.report().errorAt, null, 'đọc lại được thì xoá');
   const missing = createAiUsage({ dbPath: join(h.dir, 'khong-co.db'), file: join(h.dir, 'y.json') });
   missing.sample();
   assert.equal(missing.report().error, 'missing');

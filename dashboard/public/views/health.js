@@ -75,6 +75,37 @@ export function serviceBadge(state) {
 export const usageRows = (usage) => [...(usage?.days || [])].reverse().slice(0, 14);
 
 const ALERT_TEXT = { disk: 'Ổ đĩa đang trên 90 %', ram: 'RAM đang trên 90 %', cpu: 'CPU đang bận trên 90 %' };
+const ADMIN_HINT = {
+  disk: 'Dọn bớt tệp (bản sao lưu, nhật ký cũ) hoặc tăng dung lượng ổ.',
+  ram: 'Khởi động lại dịch vụ ngốn bộ nhớ hoặc nâng RAM.',
+  cpu: 'Kiểm tra tiến trình đang chạy nặng.',
+};
+
+/** Bước tiếp theo trên dải cảnh báo: Quản trị theo từng loại; Chủ bot báo người cài đặt. */
+export const alertHint = (kind, role) => (role === 'admin' ? ADMIN_HINT[kind] || 'Kiểm tra máy chủ.' : 'Báo người cài đặt nếu kéo dài.');
+
+const hhmm = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
+/**
+ * Ghi chú của thẻ Dùng AI. Chưa có số nào → cảnh báo vàng (thiếu/không đọc được dữ liệu trợ lý);
+ * đã có số lưu mà lần đọc mới lỗi → một dòng xám, vẫn hiện số đã lưu.
+ */
+export function usageNote(usage, rows) {
+  if (!usage?.error) return null;
+  if (!rows.length) {
+    return {
+      kind: 'warn',
+      text: usage.error === 'missing'
+        ? 'Chưa tìm thấy dữ liệu của trợ lý trên máy này — số liệu sẽ hiện khi trợ lý đã chạy.'
+        : 'Tạm thời chưa đọc được dữ liệu của trợ lý — dashboard sẽ thử lại sau ít phút.',
+    };
+  }
+  const at = usage.errorAt ? ` lúc ${hhmm.format(new Date(usage.errorAt))}` : '';
+  return { kind: 'muted', text: `Không đọc được số mới${at} — đang hiện số đã lưu. Dashboard sẽ thử lại sau ít phút.` };
+}
+
+/** Nhãn trục bằng chữ HTML (không co giãn theo SVG). */
+const Axis = ({ labels }) => html`<div class="chart-axis" aria-hidden="true">${labels.map((l, i) => html`<span key=${i}>${l}</span>`)}</div>`;
 
 function Chart({ title, points, col, to, limit, now }) {
   const segs = chartSegments(points, col, { to });
@@ -82,17 +113,15 @@ function Chart({ title, points, col, to, limit, now }) {
   const top = peak(points, col);
   return html`<figure class="chart-box">
     <figcaption><strong>${title}</strong> <span class="muted small">${now != null ? `hiện ${fmtPct(now)}` : ''}${top != null ? ` · cao nhất ${fmtPct(top)}` : ''}</span></figcaption>
-    <svg class="chart" viewBox=${`0 0 ${W} ${H + 18}`} role="img"
+    <svg class="chart" viewBox=${`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
       aria-label=${`${title} 24 giờ qua${now != null ? `: hiện ${fmtPct(now)}` : ''}${top != null ? `, cao nhất ${fmtPct(top)}` : ''}`}>
       <line class="chart-grid" x1="0" x2=${W} y1=${y(100)} y2=${y(100)} />
       <line class="chart-grid" x1="0" x2=${W} y1=${y(50)} y2=${y(50)} />
       <line class="chart-grid" x1="0" x2=${W} y1=${H} y2=${H} />
       <line class="chart-limit" x1="0" x2=${W} y1=${y(limit)} y2=${y(limit)} />
       ${segs.map((s, i) => html`<polyline key=${i} class="chart-line" points=${s} />`)}
-      <text class="chart-axis" x="0" y=${H + 14}>24 giờ trước</text>
-      <text class="chart-axis" x=${W / 2} y=${H + 14} text-anchor="middle">12 giờ trước</text>
-      <text class="chart-axis" x=${W} y=${H + 14} text-anchor="end">Bây giờ</text>
     </svg>
+    <${Axis} labels=${['24 giờ trước', '12 giờ trước', 'Bây giờ']} />
     ${segs.length ? null : html`<p class="muted small">Chưa có số đo — biểu đồ hiện sau vài phút.</p>`}
   </figure>`;
 }
@@ -109,27 +138,28 @@ function UsageBars({ rows }) {
   const days = [...rows].reverse();
   const max = Math.max(1, ...days.map((d) => d.calls));
   const bw = W / Math.max(days.length, 1);
-  return html`<svg class="chart" viewBox=${`0 0 ${W} ${H + 18}`} role="img" aria-label="Số lượt gọi AI mỗi ngày">
-    <line class="chart-grid" x1="0" x2=${W} y1=${H} y2=${H} />
-    ${days.map((d, i) => {
-      const h = (d.calls / max) * (H - 4);
-      return html`<rect key=${d.date} class="chart-bar" x=${(i * bw + bw * 0.15).toFixed(1)} y=${(H - h).toFixed(1)}
-        width=${(bw * 0.7).toFixed(1)} height=${h.toFixed(1)}><title>${d.date}: ${fmtNum(d.calls)} lượt</title></rect>`;
-    })}
-    ${days.length ? html`<text class="chart-axis" x="0" y=${H + 14}>${days[0].date.slice(5).split('-').reverse().join('/')}</text>
-      <text class="chart-axis" x=${W} y=${H + 14} text-anchor="end">${days.at(-1).date.slice(5).split('-').reverse().join('/')}</text>` : null}
-  </svg>`;
+  const dm = (d) => d.date.slice(5).split('-').reverse().join('/');
+  return html`<div class="chart-box chart-bars">
+    <svg class="chart" viewBox=${`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Số lượt gọi AI mỗi ngày">
+      <line class="chart-grid" x1="0" x2=${W} y1=${H} y2=${H} />
+      ${days.map((d, i) => {
+        const h = (d.calls / max) * (H - 4);
+        return html`<rect key=${d.date} class="chart-bar" x=${(i * bw + bw * 0.15).toFixed(1)} y=${(H - h).toFixed(1)}
+          width=${(bw * 0.7).toFixed(1)} height=${h.toFixed(1)}><title>${d.date}: ${fmtNum(d.calls)} lượt</title></rect>`;
+      })}
+    </svg>
+    ${days.length ? html`<${Axis} labels=${days.length > 1 ? [dm(days[0]), dm(days.at(-1))] : [dm(days[0])]} />` : null}
+  </div>`;
 }
 
 function Usage({ usage }) {
   const rows = usageRows(usage);
-  const note = usage?.error === 'missing'
-    ? 'Chưa tìm thấy dữ liệu của trợ lý trên máy này — số liệu sẽ hiện khi trợ lý đã chạy.'
-    : usage?.error === 'unreadable' ? 'Tạm thời chưa đọc được dữ liệu của trợ lý — dashboard sẽ thử lại sau ít phút.' : null;
+  const note = usageNote(usage, rows);
   return html`<section class="card">
     <h2>Dùng AI theo ngày</h2>
-    <p class="muted small">Toàn bộ trợ lý (Zalo, việc hẹn giờ và các kênh khác), theo giờ Việt Nam${usage?.since ? `, tính từ ${fmtTime(usage.since)}` : ''}. Chưa có chi phí bằng tiền: cổng AI không báo giá đáng tin cho riêng bot này.</p>
-    ${note ? html`<${Notice} kind="warn">${note}<//>` : null}
+    <p class="muted small">Chỉ đếm lượt gọi và token, chưa tính tiền — cổng AI không báo giá đáng tin cho riêng bot này. Tính cho toàn bộ trợ lý (Zalo, việc hẹn giờ và các kênh khác), theo giờ Việt Nam${usage?.since ? `, từ ${fmtTime(usage.since)}` : ''}.</p>
+    ${note?.kind === 'warn' ? html`<${Notice} kind="warn">${note.text}<//>` : null}
+    ${note?.kind === 'muted' ? html`<p class="muted small">${note.text}</p>` : null}
     ${rows.length ? html`
       <${UsageBars} rows=${rows} />
       <div class="table-wrap"><table class="table table-cards">
@@ -169,7 +199,7 @@ export function Health({ me }) {
   const points = data.history?.points || [];
   return html`${head}
     ${error ? html`<${Notice} kind="warn">Không cập nhật được: ${error} Đang hiện số đo lần trước.<//>` : null}
-    ${(data.alerts || []).map((a) => html`<${Notice} key=${a.kind} kind="danger">${ALERT_TEXT[a.kind]} từ ${fmtTime(a.since)}${a.alerted ? ' — đã báo Telegram.' : '.'} ${me.role === 'admin' ? 'Kiểm tra máy chủ hoặc dọn bớt tệp.' : 'Báo người cài đặt nếu kéo dài.'}<//>`)}
+    ${(data.alerts || []).map((a) => html`<${Notice} key=${a.kind} kind="danger">${ALERT_TEXT[a.kind]} từ ${fmtTime(a.since)}${a.alerted ? ' — đã báo Telegram.' : '.'} ${alertHint(a.kind, me.role)}<//>`)}
     ${h ? html`<div class="grid grid-4">
       <${Tile} icon="activity" title="CPU" value=${fmtPct(h.cpuPct)} kind=${level(h.cpuPct)} sub=${`${h.cores} nhân`} />
       <${Tile} icon="server" title="RAM" value=${fmtPct(h.ramPct)} kind=${level(h.ramPct)}
