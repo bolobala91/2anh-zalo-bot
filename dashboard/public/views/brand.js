@@ -94,6 +94,7 @@ export function Brand() {
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState({});
+  const [fileName, setFileName] = useState('');
 
   useEffect(() => {
     api('/api/brand').then((r) => { setSaved(r); setForm(formOf(r)); }).catch((err) => setLoadError(err.message));
@@ -145,11 +146,16 @@ export function Brand() {
     const file = e.currentTarget.files?.[0];
     e.currentTarget.value = '';
     if (!file) return;
+    setFileName(file.name);
     run('logo', async () => api('/api/brand/logo', { method: 'POST', body: { dataUrl: await logoDataUrl(file) } }), 'Đã đổi logo.', { keepForm: true });
   };
-  const removeLogo = () => run('logo', () => api('/api/brand/logo', { method: 'DELETE' }), 'Đã gỡ logo — dùng lại biểu tượng mặc định.', { keepForm: true });
+  const removeLogo = () => {
+    setFileName('');
+    run('logo', () => api('/api/brand/logo', { method: 'DELETE' }), 'Đã gỡ logo — dùng lại biểu tượng mặc định.', { keepForm: true });
+  };
   const reset = () => {
     if (!confirm('Khôi phục tên, màu và logo mặc định? Logo đã tải lên sẽ bị xoá.')) return;
+    setFileName('');
     run('reset', () => api('/api/brand', { method: 'DELETE' }), 'Đã khôi phục mặc định.');
   };
   const set = (k) => (v) => setForm({ ...form, [k]: v });
@@ -162,9 +168,13 @@ export function Brand() {
           <div class="logo-pick">
             <${BrandMark} brand=${saved} size=${22} />
             <div class="field">
-              <label for="brand-logo">Chọn ảnh logo</label>
-              <input id="brand-logo" type="file" accept=${LOGO_TYPES.join(',')} disabled=${busy !== ''}
-                aria-describedby="brand-logo-help" onChange=${upload} />
+              <div class="file-pick">
+                <label class="btn btn-secondary file-btn">
+                  <input id="brand-logo" class="sr-only" type="file" accept=${LOGO_TYPES.join(',')} disabled=${busy !== ''}
+                    aria-describedby="brand-logo-name brand-logo-help" onChange=${upload} />
+                  <${Icon} name="image" size=${16} /> Chọn ảnh…</label>
+                <span id="brand-logo-name" class="file-name muted">${fileName || 'Chưa chọn ảnh'}</span>
+              </div>
               <small id="brand-logo-help">PNG, JPG hoặc WebP, tối đa 5 MB. Ảnh được thu về ${LOGO_SIDE}×${LOGO_SIDE} điểm ảnh — nên dùng ảnh vuông, nền trong suốt.</small>
             </div>
           </div>

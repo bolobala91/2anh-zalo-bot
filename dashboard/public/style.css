@@ -144,7 +144,11 @@ input:focus-visible, select:focus-visible { outline: none; border-color: var(--b
   padding-top: 14px; border-top: 1px solid var(--border); }
 
 /* ---------- Khung ---------- */
-.layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+/* Thanh bên sticky chỉ cao 100vh; nền + viền tô cho cả cột lưới để trang dài hơn màn hình vẫn liền mạch. */
+.layout {
+  display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh;
+  background: linear-gradient(90deg, var(--card) 239px, var(--border) 239px 240px, transparent 240px);
+}
 .sidebar {
   position: sticky; top: 0; height: 100vh; overflow-y: auto;
   display: flex; flex-direction: column; background: var(--card); border-right: 1px solid var(--border); padding: 18px 12px;
@@ -321,6 +325,11 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
 .nav-foot .powered { margin-top: 8px; }
 .logo-pick { display: flex; gap: 14px; align-items: flex-start; margin: 12px 0 4px; }
 .logo-pick .field { margin-bottom: 8px; min-width: 0; }
+.file-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.file-btn { position: relative; }
+.file-btn:has(input:focus-visible) { box-shadow: var(--focus); }
+.file-btn:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+.file-name { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
 .brand-colors { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
 .brand-colors legend { padding: 0; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -359,7 +368,7 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
 
 /* ---------- Điện thoại ---------- */
 @media (max-width: 760px) {
-  .layout { grid-template-columns: minmax(0, 1fr); }
+  .layout { grid-template-columns: minmax(0, 1fr); background: none; }
   .sidebar {
     position: static; height: auto; flex-direction: row; align-items: center; gap: 8px;
     padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden;
