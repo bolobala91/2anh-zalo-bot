@@ -1,3 +1,5 @@
+import { dmVerdict } from './dm-rules.js';
+
 const PUBLIC_READ_METHODS = new Set([
   'searchSticker', 'getStickersDetail', 'getListReminder',
 ]);
@@ -36,6 +38,12 @@ const DANGEROUS_METHODS = new Set([
 ]);
 
 const PUBLIC_COMMANDS = new Set(['send', 'typing', 'reaction', 'seen', 'ack_message']);
+
+// Lệnh Zalo gắn đúng một nút tính năng nhắn riêng. Gửi tệp/thoại không có ở đây: adapter cũng
+// dùng uploadAttachment/sendVoice để gửi tệp kèm câu trả lời, nên chỉ plugin phân biệt được.
+const DM_METHOD_FEATURE = new Map([
+  ['createReminder', 'reminders'], ['removeReminder', 'reminders'], ['getListReminder', 'reminders'],
+]);
 
 const TARGET_ARG_INDEX = new Map([
   ['sendMessage', 1], ['sendVoice', 1], ['sendSticker', 1], ['sendLink', 1],
@@ -91,7 +99,25 @@ function classify(command) {
   return null;
 }
 
-export function authorizeBridgeCommand(command, { ownerUids = new Set() } = {}) {
+/**
+ * Lượt nhắn riêng của người không phải chủ nhân: kiểm mục `dm` của permissions.json (lớp thứ hai,
+ * sau plugin). `dmRules()` trả dm đã chuẩn hoá hoặc null (không có mục / lỗi → không chặn thêm).
+ * Chủ nhân luôn được miễn — xét theo UID, kể cả khi adapter hạ lượt của chủ xuống quyền công khai.
+ */
+function dmDenial(command, auth, owners, dmRules) {
+  if (!dmRules || Number(auth.sourceThreadType) !== 0 || owners.has(String(auth.actorUid))) return null;
+  let dm = null;
+  try { dm = dmRules(); } catch { dm = null; }
+  if (!dm) return null;
+  const verdict = dmVerdict(dm, auth.actorUid);
+  // Câu trả lời /sethome (chỉ cho người lạ biết UID của chính họ) vẫn phải đi được.
+  if (verdict.allowed === false && !(command.type === 'send' && auth.notice === 'sethome')) return 'dm_not_allowed';
+  const feature = command.type === 'invoke' ? DM_METHOD_FEATURE.get(String(command.method || '')) : null;
+  if (feature && verdict.features[feature] === false) return 'feature_disabled';
+  return null;
+}
+
+export function authorizeBridgeCommand(command, { ownerUids = new Set(), dmRules = null } = {}) {
   const rule = classify(command || {});
   if (!rule) return denied('public', 'command_denied', 'unknown');
   if (rule.minimumRole === 'system') return allowed('system', rule.category);
@@ -119,6 +145,8 @@ export function authorizeBridgeCommand(command, { ownerUids = new Set() } = {}) 
   if (rule.minimumRole === 'owner' && role !== 'owner') {
     return denied(role, 'owner_required', rule.category);
   }
+  const dmCode = role === 'public' ? dmDenial(command, auth, owners, dmRules) : null;
+  if (dmCode) return denied(role, dmCode, rule.category);
   if (role === 'public' && !sameThread(command, auth)) {
     return denied(role, 'cross_thread_denied', rule.category);
   }

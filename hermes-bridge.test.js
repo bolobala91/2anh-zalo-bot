@@ -1383,3 +1383,29 @@ test('kết bạn qua cầu nối chỉ chạy khi bật ZALO_FRIEND_TOOLS; frie
   const stranger = await call({ type: 'friend_group', reqId: 'fg-public', action: 'list', auth: auth('g', 1, { actorUid: 'someone' }) });
   assert.equal(stranger.ok, false);
 });
+
+test('nhắn riêng: cầu nối áp mục dm của permissions.json — người ngoài danh sách bị từ chối, chủ nhân thì không', async (t) => {
+  const dm = { who: 'list', features: {}, people: {} };
+  const sent = [];
+  const api = { sendMessage: async (content, threadId) => { sent.push(threadId); return { msgId: `s${sent.length}` }; } };
+  const server = startHermesBridge({ api, profile: { user_id: 'bot' }, port: 0, store: testStore(t), ownerUids: ['owner'], dmRules: () => dm });
+  await new Promise((resolve) => server.once('listening', resolve));
+  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}`);
+  try {
+    const hello = onceMessage(ws, (msg) => msg.type === 'hello');
+    await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+    await hello;
+    ws.send(JSON.stringify({ type: 'send', reqId: 'dm1', threadId: 'stranger', threadType: 0, text: 'chào', auth: auth('stranger', 0, { actorUid: 'stranger' }) }));
+    const denied = await onceMessage(ws, (msg) => msg.type === 'ack' && msg.reqId === 'dm1');
+    assert.equal(denied.ok, false);
+    assert.equal(denied.errorCode, 'dm_not_allowed');
+    assert.equal(denied.error, 'Người này chưa được phép nhắn riêng với bot');
+    ws.send(JSON.stringify({ type: 'send', reqId: 'dm2', threadId: 'owner', threadType: 0, text: 'chào chủ', auth: auth('owner', 0) }));
+    const ok = await onceMessage(ws, (msg) => msg.type === 'ack' && msg.reqId === 'dm2');
+    assert.equal(ok.ok, true);
+    assert.deepEqual(sent, ['owner']);
+  } finally {
+    ws.close();
+    stopHermesBridge();
+  }
+});

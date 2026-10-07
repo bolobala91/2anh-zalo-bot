@@ -157,3 +157,47 @@ test('cấu hình chào thành viên mới chỉ dành cho chủ nhân', () => {
     { allowed: true, role: 'owner', code: 'allowed', category: 'admin' },
   );
 });
+
+// --- Nhắn riêng (spec §16): lớp chặn thứ hai sau plugin ---
+const dmAuth = (uid, extra = {}) => ({ actorUid: uid, actorRole: 'public', sourceThreadId: uid, sourceThreadType: 0, confirmed: false, ...extra });
+const dmOptions = (dm) => ({ ownerUids: new Set(['owner-1']), dmRules: () => dm });
+const sendTo = (uid) => ({ type: 'send', threadId: uid, threadType: 0 });
+
+test('nhắn riêng: người ngoài danh sách bị chặn mọi lệnh, trừ câu trả lời /sethome', () => {
+  const opts = dmOptions({ who: 'list', features: {}, people: { 'friend-1': { features: {} } } });
+  assert.equal(authorizeBridgeCommand({ ...sendTo('friend-1'), auth: dmAuth('friend-1') }, opts).allowed, true);
+  assert.equal(authorizeBridgeCommand({ ...sendTo('stranger'), auth: dmAuth('stranger') }, opts).code, 'dm_not_allowed');
+  assert.equal(authorizeBridgeCommand({ type: 'typing', threadId: 'stranger', threadType: 0, auth: dmAuth('stranger') }, opts).code, 'dm_not_allowed');
+  assert.equal(authorizeBridgeCommand({ ...sendTo('stranger'), auth: dmAuth('stranger', { notice: 'sethome' }) }, opts).allowed, true);
+  assert.equal(authorizeBridgeCommand({
+    type: 'invoke', method: 'sendSticker', args: [{ id: '1' }, 'stranger', 0], auth: dmAuth('stranger', { notice: 'sethome' }),
+  }, opts).code, 'dm_not_allowed', 'dấu /sethome chỉ mở đúng lệnh gửi chữ');
+});
+
+test('nhắn riêng: chủ nhân luôn được miễn, kể cả lượt bị hạ xuống quyền công khai', () => {
+  const opts = dmOptions({ who: 'owners', features: { reminders: false }, people: {} });
+  assert.equal(authorizeBridgeCommand({ ...sendTo('owner-1'), auth: dmAuth('owner-1') }, opts).allowed, true);
+  assert.equal(authorizeBridgeCommand({
+    type: 'invoke', method: 'createReminder', args: [{ title: 'x' }, 'owner-1', 0], auth: dmAuth('owner-1'),
+  }, opts).allowed, true);
+});
+
+test('nhắn riêng: nút Nhắc hẹn tắt chặn lệnh nhắc hẹn; nhóm và lượt hệ thống không bị ảnh hưởng', () => {
+  const opts = dmOptions({ who: 'everyone', features: { reminders: false }, people: { 'vip': { features: { reminders: true } } } });
+  for (const [method, args] of [['createReminder', [{ title: 'x' }, 'u2', 0]], ['removeReminder', ['r1', 'u2', 0]], ['getListReminder', ['u2', 0]]]) {
+    assert.equal(authorizeBridgeCommand({ type: 'invoke', method, args, auth: dmAuth('u2') }, opts).code, 'feature_disabled', method);
+  }
+  assert.equal(authorizeBridgeCommand({ type: 'invoke', method: 'createReminder', args: [{ title: 'x' }, 'vip', 0], auth: dmAuth('vip') }, opts).allowed, true, 'ghi đè riêng từng người');
+  assert.equal(authorizeBridgeCommand({ type: 'invoke', method: 'sendVoice', args: [{}, 'u2', 0], auth: dmAuth('u2') }, opts).allowed, true);
+  assert.equal(authorizeBridgeCommand({
+    type: 'invoke', method: 'createReminder', args: [{ title: 'x' }, 'group-1', 1], auth: publicAuth,
+  }, opts).allowed, true, 'trong nhóm: bảng nhóm do plugin lo');
+  const system = { actorUid: '', actorRole: 'system', sourceThreadId: '', sourceThreadType: 0, confirmed: false };
+  assert.equal(authorizeBridgeCommand({ ...sendTo('u2'), auth: system }, opts).allowed, true);
+});
+
+test('nhắn riêng: không có mục dm, chưa chọn who, hoặc đọc lỗi → không chặn thêm', () => {
+  for (const dmRules of [() => null, () => ({ features: {}, people: {} }), () => { throw new Error('hỏng'); }, null]) {
+    assert.equal(authorizeBridgeCommand({ ...sendTo('stranger'), auth: dmAuth('stranger') }, { ownerUids: new Set(['owner-1']), dmRules }).allowed, true);
+  }
+});

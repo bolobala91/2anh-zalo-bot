@@ -171,6 +171,8 @@ let activeStore = null;
 let ownsActiveStore = false;
 let activeAccountId = 'unknown';
 let activeOwnerUids = new Set();
+// () => mục `dm` của permissions.json (dm-rules.js) hoặc null — lớp chặn thứ hai cho tin nhắn riêng.
+let activeDmRules = null;
 let activeHealth = null;
 let staleTimer = null;
 let clientSequence = 0;
@@ -423,7 +425,7 @@ let memberDirectory = null;
 export function startHermesBridge({
   api, profile, port = defaultBridgePort(), store = null, maxBackfillPages: pageLimit = null,
   ownerUids = null, health = null, staleCheckIntervalMs = 15_000,
-  bridgeToken = process.env.ZALO_BRIDGE_TOKEN,
+  bridgeToken = process.env.ZALO_BRIDGE_TOKEN, dmRules = null,
 }) {
   if (!bridgeToken) throw new Error('Thiếu ZALO_BRIDGE_TOKEN; hãy chạy npm run install:hermes');
   zaloApi = api;
@@ -437,6 +439,7 @@ export function startHermesBridge({
   ownsActiveStore = !store;
   activeOwnerUids = new Set(ownerUids || String(process.env.ZALO_ALLOWED_USERS || '')
     .split(',').map((value) => value.trim()).filter(Boolean));
+  activeDmRules = typeof dmRules === 'function' ? dmRules : null;
   activeHealth = health;
   maxBackfillPages = Math.max(1, Number(pageLimit) || Number(process.env.ZALO_BACKFILL_MAX_PAGES) || 10);
   limiter = new RateLimiter({
@@ -563,6 +566,7 @@ export function stopHermesBridge() {
   ownsActiveStore = false;
   memberDirectory = null;
   activeOwnerUids = new Set();
+  activeDmRules = null;
   activeHealth = null;
   limiter = null;
 }
@@ -797,6 +801,8 @@ function policyErrorMessage(code) {
     cross_thread_denied: 'Người dùng public chỉ được thao tác trong hội thoại hiện tại',
     confirmation_required: 'Thao tác này cần xác nhận rõ ràng',
     command_denied: 'Lệnh không được phép',
+    dm_not_allowed: 'Người này chưa được phép nhắn riêng với bot',
+    feature_disabled: 'Chủ bot đang tắt tính năng này khi nhắn riêng',
   };
   return messages[code] || 'Lệnh không được phép';
 }
@@ -833,7 +839,7 @@ async function handleCommand(ws, cmd) {
     return send(ws, { type: 'pong', ts: Date.now() });
   }
 
-  const authorization = authorizeBridgeCommand(cmd, { ownerUids: activeOwnerUids });
+  const authorization = authorizeBridgeCommand(cmd, { ownerUids: activeOwnerUids, dmRules: activeDmRules });
   const shouldAudit = ['send', 'admin', 'undo'].includes(authorization.category);
   const auditRequestId = String(cmd.reqId || `bridge-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   let auditFinished = false;
