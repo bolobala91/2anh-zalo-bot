@@ -281,6 +281,26 @@ def _cron_turn(kw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
+def group_cron_creator(job_id: str) -> Optional[str]:
+    """UID người tạo nếu ``job_id`` là việc hẹn giờ nhóm (``zalo_scope = "group"``).
+
+    None: không phải việc hẹn giờ nhóm (job cron gốc của chủ nhân, job không còn,
+    không đọc được job). Chuỗi rỗng: mang dấu cron nhóm nhưng thiếu người tạo.
+    Adapter dùng để không gửi kết quả vào nhóm đang tắt "Hoạt động".
+    """
+    job_id = str(job_id or "").strip()
+    if not job_id:
+        return None
+    try:
+        job = _cron_jobs().get_job(job_id)
+    except Exception as exc:
+        logger.warning("[zalo] không đọc được job cron %s: %s", job_id, exc)
+        return None
+    if not job or not _is_group_cron(job):
+        return None
+    return str(job["origin"].get("zalo_creator_uid") or "")
+
+
 def _with_cron_turn(handler, tool_name: str):
     """Lớp bọc ngoài cùng: gắn danh tính cho lời gọi công cụ từ một lượt cron.
 

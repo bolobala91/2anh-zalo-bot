@@ -257,6 +257,72 @@ class AdapterGroupRulesTest(PermissionsFile, AdapterHarness, unittest.IsolatedAs
         self.assertNotIn("đang tắt", self.handled[0].channel_context or "")
 
 
+class CronDeliveryTest(PermissionsFile, AdapterHarness, unittest.IsolatedAsyncioTestCase):
+    """Nhóm tắt "Hoạt động": việc hẹn giờ của thành viên không gửi gì vào nhóm; của chủ nhân vẫn gửi."""
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(patch.dict(os.environ, {"ZALO_ALLOWED_USERS": OWNER}))
+        jobs = {
+            "member-job": {"id": "member-job", "deliver": f"zalo:{GROUP_A}",
+                           "origin": {"platform": "zalo", "chat_id": GROUP_A, "zalo_scope": "group",
+                                      "zalo_creator_uid": MEMBER}},
+            "owner-group-job": {"id": "owner-group-job", "deliver": f"zalo:{GROUP_A}",
+                                "origin": {"platform": "zalo", "chat_id": GROUP_A, "zalo_scope": "group",
+                                           "zalo_creator_uid": OWNER}},
+            "owner-native-job": {"id": "owner-native-job", "deliver": f"zalo:{GROUP_A}",
+                                 "origin": {"platform": "zalo", "chat_id": GROUP_A}},
+        }
+
+        class FakeJobs:
+            @staticmethod
+            def get_job(job_id):
+                return jobs.get(job_id)
+
+        self.enterContext(patch.object(zalo_tools, "_cron_jobs", return_value=FakeJobs))
+        self.enterContext(patch.object(zalo_adapter, "_zalo_tools", return_value=zalo_tools))
+        self.adapter = self.make_adapter()
+        self.sent = []
+
+        async def command(payload, expect_ack=False):
+            self.sent.append(payload)
+            return {"ok": True, "msgId": "1"}
+
+        self.adapter._command = command
+
+    async def deliver(self, job_id, chat=GROUP_A):
+        return await self.adapter.send(chat, "Bản tin sáng", metadata={"job_id": job_id, "notify": True})
+
+    async def test_member_job_into_inactive_group_is_not_posted_and_logged(self):
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"active": False}}})
+        with self.assertLogs(zalo_adapter.logger, level="INFO") as logs:
+            result = await self.deliver("member-job")
+        self.assertTrue(result.success)
+        self.assertEqual(self.sent, [])
+        self.assertTrue(any("member-job" in line and GROUP_A in line for line in logs.output))
+
+    async def test_owner_jobs_still_post_into_inactive_group(self):
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"active": False}}})
+        await self.deliver("owner-group-job")
+        await self.deliver("owner-native-job")
+        self.assertEqual(len(self.sent), 2)
+
+    async def test_member_job_posts_when_group_is_active_or_only_other_group_is_off(self):
+        await self.deliver("member-job")
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_B: {"active": False}}})
+        await self.deliver("member-job")
+        # Tắt "Hẹn giờ cho nhóm" chỉ chặn tạo mới — việc đã có vẫn gửi.
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"features": {"groupCron": False}}}})
+        await self.deliver("member-job")
+        self.assertEqual(len(self.sent), 3)
+
+    async def test_ordinary_replies_and_unknown_jobs_are_not_affected(self):
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"active": False}}})
+        await self.adapter.send(GROUP_A, "trả lời chủ nhân")
+        await self.deliver("job-da-xoa")
+        self.assertEqual(len(self.sent), 2)
+
+
 # Kịch bản ghi tệp bằng đúng dashboard/lib/permissions.js (như khi bấm Lưu trên giao diện:
 # bản nháp xuất phát từ trạng thái đang hiệu lực mà dashboard hiển thị).
 _NODE_FIXTURE = r"""

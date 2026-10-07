@@ -1134,6 +1134,32 @@ class ZaloAdapter(BasePlatformAdapter):
             logger.warning("[zalo] không đọc được quyền nhóm %s: %s", thread_id, exc)
             return None
 
+    def _skip_inactive_group_cron(self, chat_id: str, metadata: Dict[str, Any]) -> bool:
+        """Kết quả việc hẹn giờ nhóm do thành viên tạo sắp gửi vào nhóm đang tắt "Hoạt động" → không gửi.
+
+        Hook ``pre_tool_call`` không thấy lượt cron (``_with_cron_turn`` gắn
+        danh tính bên trong công cụ), nên chặn ở đây, lúc lịch của Hermes giao
+        kết quả (``metadata["job_id"]``). Việc do chủ nhân tạo vẫn gửi — chủ
+        nhân không bao giờ bị bảng này chặn; job cron gốc của Hermes chỉ chủ
+        nhân tạo được nên cũng gửi. Đọc job hay quyền lỗi → gửi như thường.
+        """
+        job_id = str(metadata.get("job_id") or "")
+        if not job_id or _group_permissions is None:
+            return False
+        try:
+            creator = _zalo_tools().group_cron_creator(job_id)
+        except Exception as exc:
+            logger.warning("[zalo] không kiểm được job cron %s: %s", job_id, exc)
+            return False
+        if creator is None or (creator and self._is_owner(creator)):
+            return False
+        rules = self._group_rules(str(chat_id))
+        if not rules or rules["active"]:
+            return False
+        logger.info("[zalo] nhóm %s đang tắt trên dashboard — không gửi kết quả việc hẹn giờ %s của %s",
+                    chat_id, job_id, creator or "?")
+        return True
+
     def _remember_turn(self, turn: Dict[str, Any]) -> None:
         """Nhớ danh tính theo mã tin để mỗi lượt agent gắn lại đúng người."""
         msg_id = str(turn.get("msg_id") or "")
@@ -1807,6 +1833,8 @@ class ZaloAdapter(BasePlatformAdapter):
         metadata: Optional[Dict[str, Any]] = None,
     ) -> SendResult:
         metadata = metadata or {}
+        if self._skip_inactive_group_cron(chat_id, metadata):
+            return SendResult(success=True)
         thread_type = (
             THREAD_TYPE_GROUP
             if str(metadata.get("chat_type") or "").lower() == "group"
