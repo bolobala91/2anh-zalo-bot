@@ -169,3 +169,23 @@ test('thương hiệu: thu nhỏ logo giữ tỉ lệ, kiểm loại tệp, câu
   assert.match(contrastInfo('#777777').text, /4,48 : 1 — dưới 4,5 : 1/);
   assert.deepEqual(contrastInfo('xanh'), { hex: null, ok: false, text: 'Mã màu chưa đúng — nhập dạng #0f766e hoặc chọn một màu gợi ý.' });
 });
+
+test('chủ nhân: kiểm UID trước khi gửi, nhãn tên dễ hiểu', async () => {
+  const { uidProblem, ownerLabel } = await import('./views/owners.js');
+  const A = '1234567890123456';
+  assert.equal(uidProblem('2234567890123456', [A]), '');
+  assert.match(uidProblem('0912345678', [A]), /không phải số điện thoại/);
+  assert.match(uidProblem(A, [A]), /đã là chủ nhân/);
+  assert.match(uidProblem('2234567890123456', Array.from({ length: 20 }, (_, i) => String(i))), /Tối đa 20/);
+  assert.equal(ownerLabel({ name: 'Cô Hà', dashboardUsers: ['ha'] }), 'Cô Hà · tài khoản dashboard: ha');
+  assert.equal(ownerLabel({ name: '', dashboardUsers: ['anh'] }), 'Tài khoản dashboard: anh');
+  assert.equal(ownerLabel({ name: '', dashboardUsers: [] }), 'Chưa rõ tên — người này chưa nhắn cho bot');
+});
+
+test('thanh bên: đủ mục spec §9 theo đúng nhóm, mục Quản trị chỉ hiện cho Quản trị', async () => {
+  const src = readFileSync(join(root, 'views', 'shell.js'), 'utf8');
+  const order = ['Tài khoản Zalo', 'Nhật ký', 'Thương hiệu', 'Người dùng', 'Chủ nhân bot', 'Cảnh báo Telegram'].map((t) => src.indexOf(`'${t}'`));
+  assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), order.join(','));
+  assert.match(src, /'\/owners': \{ view: Owners, admin: true \}/);
+  assert.match(src, /'\/brand': \{ view: Brand \}/);
+});

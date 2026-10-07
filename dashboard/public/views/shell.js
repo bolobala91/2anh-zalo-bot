@@ -10,6 +10,7 @@ import { Chats } from './chats.js';
 import { Audit } from './audit.js';
 import { Permissions } from './permissions.js';
 import { Brand } from './brand.js';
+import { Owners } from './owners.js';
 
 const STATUS_MS = 3000;
 
@@ -21,6 +22,7 @@ const ROUTES = {
   '/audit': { view: Audit },
   '/brand': { view: Brand },
   '/users': { view: Users, admin: true },
+  '/owners': { view: Owners, admin: true },
   '/alerts': { view: Alerts, admin: true },
   '/profile': { view: Profile },
 };
@@ -38,6 +40,7 @@ const GROUPS = [
   ] },
   { label: 'Quản trị', admin: true, items: [
     { path: '/users', text: 'Người dùng', icon: 'users' },
+    { path: '/owners', text: 'Chủ nhân bot', icon: 'crown' },
     { path: '/alerts', text: 'Cảnh báo Telegram', icon: 'bell' },
   ] },
 ];
