@@ -19,6 +19,7 @@ import { createSidecarClient } from './lib/sidecar-client.js';
 import { createTelegramLinker } from './lib/telegram.js';
 import { createStoreReader } from './lib/store-reader.js';
 import { createThreadNames } from './lib/thread-names.js';
+import { createPermissionsStore } from './lib/permissions.js';
 import { createWatchdog } from './lib/watchdog.js';
 import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
@@ -47,6 +48,11 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..') } 
     guard: createLoginGuard(),
     setupToken: createSetupToken(paths.setupFile),
     activity: createActivityLog(paths.activityFile),
+    // Cờ tag chung của bot (adapter: mặc định bật) — chỉ để hiện đúng khi permissions.json chưa ghi khoá này.
+    permissions: createPermissionsStore({
+      file: paths.permissionsFile,
+      globalReplyOnlyTagged: ['1', 'true', 'yes', 'on'].includes(String(env.ZALO_GROUP_REPLY_ONLY_TAGGED ?? 'true').trim().toLowerCase()),
+    }),
     watchdog: createWatchdog({
       sidecar: watchedSidecar, notify: (text) => linker.broadcast(text),
       restartSidecar: makeRestartSidecar({ cmd: config.restartCmd, sidecarRoot: paths.sidecarRoot, port: sidecarPort }),

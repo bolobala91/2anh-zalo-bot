@@ -34,6 +34,8 @@ export const ACTION_LABELS = {
   zalo_qr_start: 'Mở mã QR đăng nhập Zalo',
   zalo_logout: 'Đăng xuất Zalo',
   telegram_settings: 'Đổi cài đặt Telegram cảnh báo',
+  permissions_defaults: 'Đổi phân quyền mặc định',
+  permissions_group: 'Đổi phân quyền nhóm',
 };
 
 const REASONS = {

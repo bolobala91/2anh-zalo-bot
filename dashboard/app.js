@@ -8,6 +8,7 @@ import { chatRoutes } from './routes/chats.js';
 import { auditRoutes } from './routes/audit.js';
 import { telegramRoutes } from './routes/telegram.js';
 import { adminRoutes } from './routes/admin.js';
+import { permissionRoutes } from './routes/permissions.js';
 
 export function createDashboardApp(deps) {
   const app = express();
@@ -22,6 +23,7 @@ export function createDashboardApp(deps) {
   app.use('/api', zaloRoutes(deps));
   app.use('/api', chatRoutes(deps));
   app.use('/api', auditRoutes(deps));
+  app.use('/api', permissionRoutes(deps));
   if (deps.linker) app.use('/api', telegramRoutes(deps));
   app.use('/api', adminRoutes(deps));
   // Các router khác được gắn thêm ở Task 8 theo cùng mẫu: app.use('/api', xxxRoutes(deps));
