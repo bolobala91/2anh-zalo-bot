@@ -89,6 +89,18 @@ test('notify lỗi lúc tới ngưỡng: tick sau thử gửi lại', async (t) 
   assert.equal(attempts.length, 2); assert.equal(sent.length, 1);
 });
 
+test('notify trả 0 (chưa ai nhận): chưa đặt alertedAt, thử lại tick sau, chỉ cảnh báo log một lần', async (t) => {
+  const healthRef = { h: kicked }; const clock = { t: 0 }; let n = 0; let count = 0;
+  const warns = []; const warn = console.warn; console.warn = (...a) => warns.push(a.join(' ')); t.after(() => { console.warn = warn; });
+  const { make } = mk(t, healthRef, clock, { notify: async () => { n++; return count; } });
+  const wd = make(); await wd.tick();
+  clock.t = 121_000; await wd.tick(); clock.t = 151_000; await wd.tick(); clock.t = 181_000; await wd.tick();
+  assert.equal(n, 3); assert.equal(wd.incidents().zalo.alertedAt, 0);
+  assert.equal(warns.filter((w) => w.includes('[watchdog]')).length, 1);
+  count = 2; clock.t = 211_000; await wd.tick();
+  assert.equal(wd.incidents().zalo.alertedAt, 211_000);
+});
+
 test('notify ném đồng bộ cũng được xử lý như bị từ chối', async (t) => {
   const healthRef = { h: kicked }; const clock = { t: 0 };
   const { make } = mk(t, healthRef, clock, { notify: () => { throw new Error('sync'); } });
@@ -227,4 +239,33 @@ test('máy chủ: khởi động lại dashboard không báo trùng; số đo nu
   assert.deepEqual(Object.keys(wd.incidents()), ['disk']);
   await wd.tick();
   assert.deepEqual(Object.keys(wd.incidents()), ['disk']);
+});
+
+test('máy chủ: null 10 lần liên tiếp thì đóng sự cố, không báo hồi phục; số đo hợp lệ giữa chừng đếm lại', async (t) => {
+  const clock = { t: 0 };
+  const { make, sent } = mk(t, { h: ok }, clock); const wd = make();
+  await wd.checkHost(host({ diskPct: 95 }));
+  for (let m = 1; m <= 9; m++) { clock.t = m * 60_000; await wd.checkHost(host({ diskPct: null })); }
+  assert.ok(wd.incidents().disk, 'mới 9 lần null');
+  clock.t = 10 * 60_000; await wd.checkHost(host({ diskPct: 95 })); // đo lại được: đếm lại
+  for (let m = 11; m <= 19; m++) { clock.t = m * 60_000; await wd.checkHost(host({ diskPct: null })); }
+  assert.ok(wd.incidents().disk);
+  clock.t = 20 * 60_000; await wd.checkHost(host({ diskPct: null }));
+  assert.equal(wd.incidents().disk, undefined);
+  assert.ok(!sent.some((x) => /trở lại bình thường/.test(x)));
+});
+
+test('máy chủ: dashboard tắt quá 5 phút thì since của sự cố CPU được đặt lại — "10 phút" là 10 phút quan sát', async (t) => {
+  const clock = { t: 0 };
+  const { make, sent } = mk(t, { h: ok }, clock);
+  let wd = make();
+  await wd.checkHost(host({ cpuPct: 97 })); clock.t = 60_000; await wd.checkHost(host({ cpuPct: 97 }));
+  wd = make(); // dashboard tắt ~1 giờ rồi bật lại
+  clock.t = 3600_000; await wd.checkHost(host({ cpuPct: 97 }));
+  assert.equal(wd.incidents().cpu.since, 3600_000);
+  assert.equal(sent.length, 0, 'không báo ngay chỉ vì thời gian tắt');
+  for (let m = 1; m <= 9; m++) { clock.t = 3600_000 + m * 60_000; await wd.checkHost(host({ cpuPct: 97 })); }
+  assert.equal(sent.length, 0);
+  clock.t = 3600_000 + 10 * 60_000 + 1000; await wd.checkHost(host({ cpuPct: 97 }));
+  assert.equal(sent.length, 1);
 });

@@ -4,6 +4,8 @@ import { readJson, writeJsonAtomic } from './json-store.js';
 // liên tục khi số đo dao động quanh ngưỡng.
 export const HOST_ON_PCT = 90;
 export const HOST_OFF_PCT = 85;
+const HOST_GAP_MS = 5 * 60_000; // lần đo trước cách quá 5 phút = dashboard từng tắt: không tính thời gian tắt vào "suốt N phút"
+const HOST_NULL_LIMIT = 10; // ngần ấy lần đo null liên tiếp thì đóng sự cố (không đo được nữa)
 const HOST_KINDS = [['disk', 'diskPct'], ['ram', 'ramPct'], ['cpu', 'cpuPct']];
 
 export function createWatchdog({
@@ -54,10 +56,14 @@ export function createWatchdog({
     }
     // Lý do đổi (vd. listener đứt → bị đá phiên) thì báo ngay lời mới, không đợi nhắc lại.
     if (!s.alertedAt || (s.alertedReason ?? kind) !== reason || t - s.alertedAt >= remindAfterMs) {
-      try {
-        await notify(messages[reason](botName(), detail));
-        s.alertedAt = t; s.alertedReason = reason; save();
-      } catch (e) { console.warn('[watchdog] không gửi được cảnh báo:', e.message); }
+      // notify trả về số tin gửi được (broadcast); 0 = chưa ai nhận (chưa cài Telegram, chưa ai nối…) → thử lại sau.
+      let delivered = 0;
+      try { delivered = await notify(messages[reason](botName(), detail)); if (delivered === undefined) delivered = 1; } catch (e) {
+        if (!s.unsentWarned) { s.unsentWarned = true; save(); console.warn('[watchdog] không gửi được cảnh báo:', e.message); }
+        return;
+      }
+      if (delivered > 0) { s.alertedAt = t; s.alertedReason = reason; delete s.unsentWarned; save(); }
+      else if (!s.unsentWarned) { s.unsentWarned = true; save(); console.warn('[watchdog] chưa ai nhận được cảnh báo (chưa cài/nối Telegram) — sẽ thử lại'); }
     }
   }
 
@@ -82,13 +88,25 @@ export function createWatchdog({
     /**
      * Mỗi lần đo máy chủ (1 phút/lần): ổ đĩa > 90 % (báo ở lần đo thứ hai liên tiếp), RAM > 90 % suốt 5 phút,
      * CPU > 90 % suốt 10 phút. Cùng cách báo một lần / nhắc sau 6 giờ / báo hồi phục như các sự cố khác.
-     * Số đo null (vd. không đọc được ổ đĩa) thì giữ nguyên trạng thái.
+     * Số đo null (vd. không đọc được ổ đĩa) thì giữ nguyên trạng thái; null 10 lần liên tiếp thì đóng sự cố
+     * (không báo hồi phục). Lần đo trước cách quá 5 phút (dashboard tắt) thì đếm lại từ đầu.
      */
     async checkHost(sample) {
+      const t = now();
       for (const [kind, key] of HOST_KINDS) {
         const v = sample?.[key];
-        if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+        const s = state[kind];
+        if (s && s.lastSeenAt && t - s.lastSeenAt > HOST_GAP_MS) { if (!s.alertedAt) s.since = t; s.nulls = 0; } // đã báo rồi thì giữ nguyên (còn nhắc lại sau 6 giờ)
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+          if (!s) continue;
+          s.nulls = (s.nulls || 0) + 1; s.lastSeenAt = t;
+          if (s.nulls >= HOST_NULL_LIMIT) delete state[kind];
+          save();
+          continue;
+        }
+        if (s) s.nulls = 0;
         await update(kind, state[kind] ? v >= HOST_OFF_PCT : v > HOST_ON_PCT, kind, v);
+        if (state[kind]) { state[kind].lastSeenAt = t; save(); }
       }
     },
     incidents: () => structuredClone(state),

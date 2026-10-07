@@ -94,12 +94,15 @@ export function createTelegramLinker({ file, apiFactory = (token) => createTeleg
     isLinked: (username) => Boolean(load().links[username]),
     chatIds: () => Object.values(load().links),
     async sendTo(username, text) { const tg = api(); const chat = load().links[username]; if (!tg || !chat) throw new Error('Chưa nối Telegram'); await tg.sendMessage(chat, text); },
+    /** Gửi cho mọi người đã nối và còn hoạt động; trả về SỐ tin gửi được (0 = không ai nhận, kể cả chưa cài bot). */
     async broadcast(text) {
-      const tg = api(); if (!tg) return;
+      const tg = api(); if (!tg) return 0;
+      let delivered = 0;
       for (const [username, chat] of Object.entries(load().links)) {
         if (!isActive(username)) continue;
-        await tg.sendMessage(chat, text).catch((e) => console.warn('[telegram]', e.message));
+        try { await tg.sendMessage(chat, text); delivered++; } catch (e) { console.warn('[telegram]', e.message); }
       }
+      return delivered;
     },
   };
 }
