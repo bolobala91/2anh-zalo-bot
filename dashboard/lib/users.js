@@ -2,7 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { readJson, writeJsonAtomic } from './json-store.js';
 
 const NAME = /^[a-z0-9._-]{3,32}$/;
-const ZALO_UID = /^[1-9]\d{14,21}$/;
+export const ZALO_UID = /^[1-9]\d{14,21}$/;
 const ROLES = new Set(['admin', 'owner']);
 const MAX_PASSWORD = 256;
 const bad = (m) => Object.assign(new Error(m), { statusCode: 400 });

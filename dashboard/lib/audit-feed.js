@@ -40,6 +40,7 @@ export const ACTION_LABELS = {
   brand_logo: 'Đổi logo',
   brand_logo_remove: 'Gỡ logo',
   brand_reset: 'Khôi phục thương hiệu mặc định',
+  owners_update: 'Đổi chủ nhân bot',
 };
 
 const REASONS = {

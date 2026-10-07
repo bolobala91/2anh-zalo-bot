@@ -24,6 +24,7 @@ import { createWatchdog } from './lib/watchdog.js';
 import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
 import { createBrandStore } from './lib/brand.js';
+import { createOwnersStore } from './lib/owners.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -43,6 +44,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     file: paths.telegramFile, hermesTelegramToken: String(env.TELEGRAM_BOT_TOKEN || '').trim(),
     isActive: (username) => { const u = users.get(username); return Boolean(u && !u.disabled); },
   });
+  const restartSidecar = makeRestartSidecar({ cmd: config.restartCmd, sidecarRoot: paths.sidecarRoot, port: sidecarPort });
   let botName = 'Bot Zalo';
   const watchedSidecar = { health: async () => { const h = await sidecar.health(); if (h?.zalo?.displayName) botName = h.zalo.displayName; return h; } };
   return {
@@ -63,10 +65,12 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     }),
     watchdog: createWatchdog({
       sidecar: watchedSidecar, notify: (text) => linker.broadcast(text),
-      restartSidecar: makeRestartSidecar({ cmd: config.restartCmd, sidecarRoot: paths.sidecarRoot, port: sidecarPort }),
+      restartSidecar,
       stateFile: paths.watchdogFile, publicUrl: config.publicUrl, botName: () => botName,
     }),
     restartAssistant: makeRestartAssistant({ cmd: config.assistantRestartCmd, hermesHome: paths.hermesHome }),
+    restartSidecar,
+    owners: createOwnersStore({ envFile: paths.hermesEnvFile, sidecarEnvFile: paths.sidecarEnvFile, pendingFile: paths.pendingRestartFile }),
     brand: createBrandStore({ file: paths.brandFile, logoFile: paths.brandLogoFile }),
     publicDir: join(here, 'public'),
   };

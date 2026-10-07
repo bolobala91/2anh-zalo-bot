@@ -14,6 +14,7 @@ import { createStoreReader } from './lib/store-reader.js';
 import { createThreadNames } from './lib/thread-names.js';
 import { createPermissionsStore } from './lib/permissions.js';
 import { createBrandStore } from './lib/brand.js';
+import { createOwnersStore } from './lib/owners.js';
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -95,6 +96,8 @@ export function makeDeps(t, overrides = {}) {
     store: createStoreReader({ path: join(dir, 'zalo.sqlite') }),
     threadNames: createThreadNames({ loadGroups: () => sidecar.groups() }),
     restartAssistant: async () => {},
+    restartSidecar: async () => {},
+    owners: createOwnersStore({ envFile: join(dir, 'hermes.env'), sidecarEnvFile: join(dir, 'sidecar.env'), pendingFile: join(dir, 'pending-restart.json') }),
     brand: createBrandStore({ file: join(dir, 'brand.json'), logoFile: join(dir, 'brand', 'logo.png') }),
     publicDir: join(dir, 'public'),
     dir,

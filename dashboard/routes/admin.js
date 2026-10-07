@@ -1,8 +1,9 @@
 import express from 'express';
 import { requireAuth, requireRole } from '../lib/http-guards.js';
-import { validatePassword, validateZaloUid } from '../lib/users.js';
+import { ZALO_UID, validatePassword, validateZaloUid } from '../lib/users.js';
+import { parseOwners } from '../lib/owners.js';
 
-export function adminRoutes({ users, sessions, activity, restartAssistant }) {
+export function adminRoutes({ users, sessions, activity, restartAssistant, restartSidecar, owners, store }) {
   const r = express.Router();
   const guard = [requireAuth, requireRole('admin')];
   // Cùng quy ước với routes/zalo.js: chỉ lộ err.message khi lỗi có statusCode 4xx rõ ràng.
@@ -42,11 +43,49 @@ export function adminRoutes({ users, sessions, activity, restartAssistant }) {
     } catch (err) { fail(res, err, 'Chưa cập nhật được tài khoản — thử lại, nếu vẫn lỗi hãy báo người cài đặt.'); }
   });
 
+  // Chủ nhân bot (spec §7.1, §9): tên lấy từ lịch sử tin nhắn (tin riêng trước) và tài khoản dashboard có cùng UID.
+  function ownersView() {
+    const uids = owners.list();
+    let names = new Map();
+    try { if (uids.length && store?.available()) names = store.senderNames(uids); } catch (err) {
+      console.error('[dashboard] đọc tên chủ nhân lỗi:', err?.message || err);
+    }
+    const accounts = users.list();
+    return {
+      ok: true,
+      owners: uids.map((uid) => ({
+        uid, valid: ZALO_UID.test(uid), name: names.get(uid) || '',
+        dashboardUsers: accounts.filter((u) => u.zaloUid === uid).map((u) => u.username),
+      })),
+      pendingRestart: Boolean(owners.pending()),
+      shadowed: owners.shadowed(),
+    };
+  }
+
+  r.get('/admin/owners', ...guard, (req, res) => {
+    try { res.json(ownersView()); } catch (err) { fail(res, err, 'Chưa đọc được danh sách chủ nhân — tải lại trang, nếu vẫn lỗi hãy báo người cài đặt.'); }
+  });
+
+  r.put('/admin/owners', ...guard, (req, res) => {
+    try {
+      const uids = parseOwners(req.body?.owners);
+      if (owners.set(uids, req.user.username)) {
+        activity.append({ actor: req.user.username, action: 'owners_update', detail: uids.join(', ') });
+      }
+      res.json(ownersView());
+    } catch (err) { fail(res, err, 'Chưa lưu được danh sách chủ nhân — thử lại, nếu vẫn lỗi hãy báo người cài đặt.'); }
+  });
+
+  // Khởi động lại trợ lý. Có thay đổi chủ nhân đang chờ thì khởi động lại cả kết nối Zalo trước —
+  // nó cũng chỉ đọc ZALO_ALLOWED_USERS lúc khởi động (quyền lệnh chủ nhân, ai được nhận tin báo lỗi).
   r.post('/admin/restart-assistant', ...guard, async (req, res) => {
     try {
+      const applyOwners = Boolean(owners?.pending());
+      if (applyOwners) await restartSidecar();
       await restartAssistant();
-      activity.append({ actor: req.user.username, action: 'restart_assistant' });
-      res.json({ ok: true });
+      if (applyOwners) owners.clearPending();
+      activity.append({ actor: req.user.username, action: 'restart_assistant', detail: applyOwners ? 'áp dụng danh sách chủ nhân mới' : '' });
+      res.json({ ok: true, appliedOwners: applyOwners });
     } catch (err) { fail(res, err, 'Chưa khởi động lại được trợ lý — thử lại sau ít phút, nếu vẫn lỗi hãy báo người cài đặt.'); }
   });
   return r;
