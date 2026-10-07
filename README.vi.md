@@ -560,7 +560,6 @@ Sidecar không còn tệp cấu hình nào. Ai được dùng bot, trả lời k
 | Việc | Đặt ở đâu |
 |---|---|
 | Ai là chủ nhân | `ZALO_ALLOWED_USERS` trong `.env` của Hermes (sửa được ở mục **Chủ nhân bot** của dashboard) |
-| Ai được nhắn riêng | `ZALO_DM_POLICY` |
 | Ai được nhắn riêng, tính năng khi nhắn riêng | mục `dm` trong `<HERMES_HOME>/zalo/permissions.json` (sửa ở **Phân quyền Bot → Nhắn riêng**); chưa có thì `ZALO_DM_POLICY` |
 | Trong nhóm chỉ trả lời khi được tag | `ZALO_GROUP_REPLY_ONLY_TAGGED` |
 | Bật công cụ kết bạn (mặc định tắt) | `ZALO_FRIEND_TOOLS` |
