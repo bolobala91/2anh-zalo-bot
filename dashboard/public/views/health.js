@@ -74,6 +74,22 @@ export function serviceBadge(state) {
 /** 14 ngày gần nhất, mới trước. */
 export const usageRows = (usage) => [...(usage?.days || [])].reverse().slice(0, 14);
 
+/** Dưới chừng này ngày số liệu AI thì chỉ hiện thẻ số, chưa vẽ biểu đồ + bảng. */
+export const USAGE_CHART_MIN = 4;
+
+/** Số giờ đã có số đo trong 24 giờ đến `to` (null khi chưa có điểm nào). */
+export function historyHours(points, to) {
+  const ts = (points || []).map((p) => p[0]).filter((t) => t >= to - DAY_MS && t <= to);
+  return ts.length ? Math.floor((to - Math.min(...ts)) / 3600_000) : null;
+}
+
+/** Ghi chú "Mới có dữ liệu N giờ" khi lịch sử chưa đủ 24 giờ; đủ rồi → null. */
+export function historyNote(points, to) {
+  const h = historyHours(points, to);
+  if (h == null || h >= 23) return null;
+  return h < 1 ? 'Mới có dữ liệu chưa tới 1 giờ — biểu đồ đầy dần trong 24 giờ.' : `Mới có dữ liệu ${h} giờ — biểu đồ đầy dần trong 24 giờ.`;
+}
+
 const ALERT_NAME = { disk: 'Ổ đĩa', ram: 'RAM', cpu: 'CPU' };
 const ADMIN_HINT = {
   disk: 'Dọn bớt tệp (bản sao lưu, nhật ký cũ) hoặc tăng dung lượng ổ.',
@@ -117,6 +133,7 @@ export function usageNote(usage, rows) {
 
 /** Nhãn trục bằng chữ HTML (không co giãn theo SVG). */
 const Axis = ({ labels }) => html`<div class="chart-axis" aria-hidden="true">${labels.map((l, i) => html`<span key=${i}>${l}</span>`)}</div>`;
+const YAxis = () => html`<div class="chart-y" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div>`;
 
 function Chart({ title, points, col, to, limit, now }) {
   const segs = chartSegments(points, col, { to });
@@ -124,6 +141,7 @@ function Chart({ title, points, col, to, limit, now }) {
   const top = peak(points, col);
   return html`<figure class="chart-box">
     <figcaption><strong>${title}</strong> <span class="muted small">${now != null ? `hiện ${fmtPct(now)}` : ''}${top != null ? ` · cao nhất ${fmtPct(top)}` : ''}</span></figcaption>
+    <div class="chart-plot"><${YAxis} /><div class="chart-main">
     <svg class="chart" viewBox=${`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
       aria-label=${`${title} 24 giờ qua${now != null ? `: hiện ${fmtPct(now)}` : ''}${top != null ? `, cao nhất ${fmtPct(top)}` : ''}`}>
       <line class="chart-grid" x1="0" x2=${W} y1=${y(100)} y2=${y(100)} />
@@ -133,6 +151,7 @@ function Chart({ title, points, col, to, limit, now }) {
       ${segs.map((s, i) => html`<polyline key=${i} class="chart-line" points=${s} />`)}
     </svg>
     <${Axis} labels=${['24 giờ trước', '12 giờ trước', 'Bây giờ']} />
+    </div></div>
     ${segs.length ? null : html`<p class="muted small">Chưa có số đo — biểu đồ hiện sau vài phút.</p>`}
   </figure>`;
 }
@@ -150,8 +169,10 @@ function UsageBars({ rows }) {
   const max = Math.max(1, ...days.map((d) => d.calls));
   const bw = W / Math.max(days.length, 1);
   const dm = (d) => d.date.slice(5).split('-').reverse().join('/');
+  const top = days.reduce((a, d) => (d.calls > a.calls ? d : a), days[0]);
   return html`<div class="chart-box chart-bars">
-    <svg class="chart" viewBox=${`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Số lượt gọi AI mỗi ngày">
+    <svg class="chart" viewBox=${`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
+      aria-label=${`Số lượt gọi AI mỗi ngày, ${days.length} ngày gần nhất${top ? `; nhiều nhất ${fmtNum(top.calls)} lượt ngày ${dm(top)}` : ''}`}>
       <line class="chart-grid" x1="0" x2=${W} y1=${H} y2=${H} />
       ${days.map((d, i) => {
         const h = (d.calls / max) * (H - 4);
@@ -171,7 +192,14 @@ function Usage({ usage }) {
     <p class="muted small">Chỉ đếm lượt gọi và token, chưa tính tiền — cổng AI không báo giá đáng tin cho riêng bot này. Tính cho toàn bộ trợ lý (Zalo, việc hẹn giờ và các kênh khác), theo giờ Việt Nam${usage?.since ? `, từ ${fmtTime(usage.since)}` : ''}.</p>
     ${note?.kind === 'warn' ? html`<${Notice} kind="warn">${note.text}<//>` : null}
     ${note?.kind === 'muted' ? html`<p class="muted small">${note.text}</p>` : null}
-    ${rows.length ? html`
+    ${rows.length && rows.length < USAGE_CHART_MIN ? html`
+      <p class="muted small">Mới có dữ liệu ${rows.length} ngày — biểu đồ và bảng hiện khi đủ ${USAGE_CHART_MIN} ngày.</p>
+      <div class="usage-days">${rows.map((d) => html`<div class="usage-day" key=${d.date}>
+        <p class="muted small">${d.date.split('-').reverse().join('/')}${d.includesGap ? ' (gồm cả khoảng dashboard tắt)' : ''}</p>
+        <p class="stat-value">${fmtNum(d.calls)}</p><p class="muted small">lượt gọi AI</p>
+        <p class="small">Token gửi đi ${fmtNum(d.input)} · nhận về ${fmtNum(d.output)} · dùng lại ${fmtNum(d.cached)}</p>
+      </div>`)}</div>`
+    : rows.length ? html`
       <${UsageBars} rows=${rows} />
       <div class="table-wrap"><table class="table table-cards">
         <thead><tr><th>Ngày</th><th>Lượt gọi AI</th><th>Token gửi đi</th><th>Token nhận về</th><th class="th-wrap">Token dùng lại từ bộ nhớ đệm</th></tr></thead>
@@ -222,6 +250,7 @@ export function Health({ me }) {
     <section class="card">
       <h2>24 giờ qua</h2>
       <p class="muted small">Đường đứt đỏ là ngưỡng cảnh báo ${data.threshold?.on ?? 90} %. Khoảng trống là lúc dashboard không chạy.</p>
+      ${historyNote(points, to) ? html`<p class="muted small">${historyNote(points, to)}</p>` : null}
       <div class="charts">
         <${Chart} title="CPU" points=${points} col=${1} to=${to} limit=${data.threshold?.on ?? 90} now=${h?.cpuPct} />
         <${Chart} title="RAM" points=${points} col=${2} to=${to} limit=${data.threshold?.on ?? 90} now=${h?.ramPct} />

@@ -504,6 +504,14 @@ fieldset:disabled .radio-card { cursor: not-allowed; }
 .chart-bar { fill: var(--brand); }
 .chart-axis { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--muted); }
 .chart-bars { margin-bottom: 12px; }
+.chart-plot { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; }
+.chart-main { min-width: 0; }
+/* Nhãn trục Y: 100 % ở vạch trên, 50 % giữa, 0 % đáy — cùng chiều cao với .chart. */
+.chart-y { display: flex; flex-direction: column; justify-content: space-between; height: 126px; margin-top: -8px;
+  font-size: 12.5px; line-height: 16px; color: var(--muted); text-align: right; }
+.usage-days { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 12px; }
+.usage-day { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.usage-day .stat-value { margin-top: 4px; }
 .svc-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .svc-list li:last-child { border-bottom: 0; }
 .svc-main { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
