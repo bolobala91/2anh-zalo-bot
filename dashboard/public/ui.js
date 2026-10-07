@@ -79,12 +79,35 @@ export function PoweredBy({ brand }) {
   return brand?.poweredBy ? html`<p class="powered">Vận hành bởi 2Anh AI</p>` : null;
 }
 
-/** Ô bật/tắt có nhãn và dòng gợi ý (Phân quyền Bot: nhóm và nhắn riêng). */
-export function Toggle({ id, checked, onChange, label, hint }) {
+/** Ô bật/tắt có nhãn và dòng gợi ý (Phân quyền Bot: nhóm và nhắn riêng); `more` = phần giải thích gập thêm. */
+export function Toggle({ id, checked, onChange, label, hint, more }) {
   return html`<div class="perm-row">
     <label class="check" for=${id}><input id=${id} type="checkbox" checked=${checked}
       aria-describedby=${hint ? `${id}-hint` : undefined} onChange=${(e) => onChange(e.currentTarget.checked)} />${label}</label>
     ${hint ? html`<small id=${`${id}-hint`} class="muted">${hint}</small>` : null}
+    ${more ? html`<details class="more-hint"><summary>Chi tiết</summary><p class="muted small">${more}</p></details>` : null}
+  </div>`;
+}
+
+/** "N thay đổi chưa lưu" hoặc câu khi chưa sửa gì. */
+export const changesText = (count, idle = 'Chưa có thay đổi.') => (count ? `${count} thay đổi chưa lưu` : idle);
+
+/** Đếm "a/b đang bật" của một bộ nút theo danh sách tính năng. */
+export function onText(values, features) {
+  const on = features.filter((f) => values[f.key]).length;
+  return `${on}/${features.length} đang bật`;
+}
+
+/**
+ * Thanh Lưu dính đáy khung sửa (Phân quyền Bot): số thay đổi, Hoàn tác, Lưu; thông báo lưu xong/lỗi nằm ngay trên.
+ * Nút Lưu là nút submit của form chứa nó.
+ */
+export function SaveBar({ count, busy, canSave, onUndo, idle, msg }) {
+  return html`<div class="save-bar">
+    <${Live} error=${msg?.error} ok=${msg?.ok} />
+    <span class=${`save-bar-text${count ? '' : ' muted'}`}>${changesText(count, idle)}</span>
+    <button type="button" class="btn btn-secondary" disabled=${busy || !count} onClick=${onUndo}>Hoàn tác</button>
+    <button class="btn btn-primary" disabled=${busy || !canSave}>${busy ? 'Đang lưu…' : 'Lưu'}</button>
   </div>`;
 }
 

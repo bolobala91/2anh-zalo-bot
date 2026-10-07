@@ -2,7 +2,7 @@
 // Chỉ trả lời khi được tag và 9 nút tính năng. Lưu là có hiệu lực ngay.
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
-import { html, Icon, Live, Notice, PageHead, Spinner, Toggle } from '../ui.js';
+import { html, Icon, Live, Notice, PageHead, SaveBar, Spinner, Toggle, onText } from '../ui.js';
 import { fold } from '../fold.js';
 import { DmEditor, dmBadge } from './dm-permissions.js';
 
@@ -34,6 +34,13 @@ export function mergeGroups(groups, perms) {
 export function sameSettings(a, b) {
   return a.active === b.active && a.replyOnlyTagged === b.replyOnlyTagged
     && Object.keys({ ...a.features, ...b.features }).every((k) => a.features[k] === b.features[k]);
+}
+
+/** Số thay đổi của một nhóm/mặc định: Hoạt động, Chỉ trả lời khi được tag, từng tính năng. */
+export function changeCount(a, b) {
+  let n = (a.active !== b.active) + (a.replyOnlyTagged !== b.replyOnlyTagged);
+  for (const k of Object.keys({ ...a.features, ...b.features })) if (a.features[k] !== b.features[k]) n += 1;
+  return n;
 }
 
 /** Nhãn ngắn cạnh tên nhóm trong danh sách; null khi nhóm đang đúng mặc định. */
@@ -80,34 +87,40 @@ function Editor({ target, value, defaults, features, onSaved, onBack, onDirty })
   }
 
   const p = `perm-${target.id}`;
-  return html`<form onSubmit=${save} novalidate>
+  return html`<form class="perm-form" onSubmit=${save} novalidate>
     <header class="thread-head">
       <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
       <h2>${target.name}</h2>
       ${isGroup && target.members ? html`<span class="tag">${target.members} thành viên</span>` : null}
     </header>
-    <p class="muted small perm-note">${isGroup
-      ? 'Chỉ áp cho thành viên trong nhóm này. Chủ nhân bot luôn dùng được mọi tính năng.'
-      : 'Áp cho mọi nhóm. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng chỉnh ở mục Nhắn riêng.'}</p>
-    <fieldset class="perm-set">
-      <legend>Cách bot trả lời</legend>
-      <${Toggle} id=${`${p}-active`} checked=${draft.active} onChange=${(v) => set({ active: v })} label="Hoạt động"
-        hint="Tắt thì bot không trả lời thành viên trong nhóm (vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi). Việc hẹn giờ do thành viên tạo không còn gửi tin chữ vào nhóm đang tắt; muốn dừng hẳn, nhờ chủ nhân xoá việc đó. Việc chủ nhân hẹn vẫn gửi." />
-      <${Toggle} id=${`${p}-tag`} checked=${draft.replyOnlyTagged} onChange=${(v) => set({ replyOnlyTagged: v })} label="Chỉ trả lời khi được tag"
-        hint="Tắt thì bot trả lời mọi tin trong nhóm." />
-    </fieldset>
-    <fieldset class="perm-set" disabled=${!draft.active}>
-      <legend>Tính năng cho thành viên</legend>
-      ${features.map((f) => html`<${Toggle} key=${f.key} id=${`${p}-${f.key}`} checked=${draft.features[f.key]}
-        onChange=${(v) => setFeature(f.key, v)} label=${f.label} hint=${f.hint} />`)}
-    </fieldset>
-    <div class="row">
-      <button class="btn btn-primary" disabled=${busy || !dirty}>${busy ? 'Đang lưu…' : 'Lưu'}</button>
-      ${isGroup ? html`<button type="button" class="btn btn-secondary" disabled=${busy || sameSettings(draft, defaults)}
+    <div class="perm-note-row">
+      <p class="muted small perm-note">${isGroup
+        ? 'Chỉ áp cho thành viên trong nhóm này. Chủ nhân bot luôn dùng được mọi tính năng.'
+        : 'Áp cho mọi nhóm. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng chỉnh ở mục Nhắn riêng.'}</p>
+      ${isGroup ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy || sameSettings(draft, defaults)}
         onClick=${() => set(pick(defaults))}>Dùng mặc định</button>` : null}
-      ${dirty ? html`<small class="muted">Có thay đổi chưa lưu.</small>` : null}
     </div>
-    <${Live} error=${msg.error} ok=${msg.ok} />
+    <fieldset class="perm-box">
+      <legend>Cách bot trả lời</legend>
+      <div class="perm-grid">
+        <${Toggle} id=${`${p}-active`} checked=${draft.active} onChange=${(v) => set({ active: v })} label="Hoạt động"
+          hint="Tắt thì bot không trả lời thành viên trong nhóm."
+          more="Bot vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi. Việc hẹn giờ do thành viên tạo không còn gửi tin chữ vào nhóm đang tắt; muốn dừng hẳn, nhờ chủ nhân xoá việc đó. Việc chủ nhân hẹn vẫn gửi." />
+        <${Toggle} id=${`${p}-tag`} checked=${draft.replyOnlyTagged} onChange=${(v) => set({ replyOnlyTagged: v })} label="Chỉ trả lời khi được tag"
+          hint="Tắt thì bot trả lời mọi tin trong nhóm." />
+      </div>
+    </fieldset>
+    ${draft.active ? null : html`<${Notice} kind="info">Nhóm đang tắt nên các tính năng dưới đây chưa dùng tới. Bật "Hoạt động" ở trên để chỉnh.<//>`}
+    <details class="perm-box" open>
+      <summary><span>Tính năng cho thành viên</span><span class="muted perm-box-sum">· ${onText(draft.features, features)}</span></summary>
+      <fieldset class="perm-grid" disabled=${!draft.active}>
+        <legend class="sr-only">Tính năng cho thành viên</legend>
+        ${features.map((f) => html`<${Toggle} key=${f.key} id=${`${p}-${f.key}`} checked=${draft.features[f.key]}
+          onChange=${(v) => setFeature(f.key, v)} label=${f.label} hint=${f.hint} />`)}
+      </fieldset>
+    </details>
+    <${SaveBar} count=${changeCount(draft, value)} busy=${busy} canSave=${dirty} msg=${msg}
+      onUndo=${() => { setDraft(pick(value)); setMsg({}); }} />
   </form>`;
 }
 
