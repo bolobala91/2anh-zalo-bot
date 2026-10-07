@@ -24,8 +24,8 @@ export function zaloCard(s) {
 // Mã lỗi runtime-health của bot → câu dễ hiểu + bước tiếp theo. Mã lạ dùng câu chung.
 const ERRORS = {
   zalo_listener_closed: ['Kết nối nhận tin Zalo bị ngắt.', 'Bot thường tự nối lại sau ít phút. Nếu thanh trên cùng báo mất kết nối, hãy quét mã đăng nhập lại.'],
-  bridge_command_failed: ['Bot chưa làm được một việc trên Zalo (gửi tin hoặc thao tác nhóm).', 'Thường do Zalo từ chối hoặc mạng chập chờn — xem Nhật ký, bật "Chỉ hiện lỗi" để biết việc nào.'],
-  system_notice_failed: ['Bot chưa gửi được một tin thông báo.', 'Xem Nhật ký, bật "Chỉ hiện lỗi" để biết tin nào; nếu lặp lại hãy báo người cài đặt.'],
+  bridge_command_failed: ['Bot chưa làm được một việc trên Zalo (gửi tin hoặc thao tác nhóm).', 'Thường do Zalo từ chối hoặc mạng chập chờn — xem Nhật ký, chọn "Chỉ lỗi" để biết việc nào.'],
+  system_notice_failed: ['Bot chưa gửi được một tin thông báo.', 'Xem Nhật ký, chọn "Chỉ lỗi" để biết tin nào; nếu lặp lại hãy báo người cài đặt.'],
   bridge_server_error: ['Trợ lý gặp lỗi khi trao đổi với Zalo.', 'Nếu bot ngừng trả lời, nhờ Quản trị khởi động lại trợ lý.'],
   history_retention_failed: ['Bot chưa dọn được lịch sử tin nhắn cũ.', 'Bot vẫn trả lời bình thường; báo người cài đặt nếu lỗi lặp lại.'],
   legacy_history_import_failed: ['Bot chưa nhập được lịch sử tin nhắn cũ.', 'Bot vẫn trả lời bình thường; báo người cài đặt nếu Phiên chat thiếu tin cũ.'],
@@ -96,7 +96,7 @@ export function Overview({ me, status: s }) {
         ${s.telegramLinked ? null : html`<a class="btn btn-secondary btn-sm" href="#/profile">Nối Telegram của tôi</a>`}
       <//>
     </div>
-    <div class="grid grid-2">
+    <div class="grid grid-2 grid-top">
       <section class="card">
         <h2>Hoạt động gần đây</h2>
         <dl class="facts">

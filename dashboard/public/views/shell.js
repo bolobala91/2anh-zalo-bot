@@ -97,11 +97,58 @@ function StatusStrip({ status, error, path }) {
   </div>`;
 }
 
+// Thanh điều hướng điện thoại: 4 mục chính luôn hiện, còn lại trong "Thêm ▾".
+export const MOBILE_PRIMARY = ['/', '/chats', '/zalo', '/permissions'];
+const SHORT = { '/zalo': 'Zalo', '/permissions': 'Phân quyền', '/health': 'Sức khoẻ', '/alerts': 'Cảnh báo', '/owners': 'Chủ nhân', '/profile': 'Tài khoản' };
+
+/**
+ * Tách mục thanh bên cho điện thoại theo vai trò: `primary` (đúng thứ tự MOBILE_PRIMARY, nhãn ngắn),
+ * `more` (mọi mục còn lại theo thứ tự thanh bên, kèm Tài khoản của tôi), `activeMore` = mục đang mở nằm trong "Thêm".
+ */
+export function navSplit(role, path) {
+  const items = GROUPS.filter((g) => !g.admin || role === 'admin').flatMap((g) => g.items);
+  const primary = MOBILE_PRIMARY.map((p) => items.find((it) => it.path === p)).filter(Boolean)
+    .map((it) => ({ ...it, short: SHORT[it.path] || it.text }));
+  const more = [...items.filter((it) => !MOBILE_PRIMARY.includes(it.path)), { path: '/profile', text: 'Tài khoản của tôi', icon: 'user' }]
+    .map((it) => ({ ...it, short: SHORT[it.path] || it.text }));
+  return { primary, more, activeMore: more.find((it) => it.path === path) || null };
+}
+
+function MobileNav({ me, path }) {
+  const { primary, more, activeMore } = navSplit(me.role, path);
+  const box = useRef(null);
+  // Đổi trang, bấm ra ngoài hoặc Esc → gập menu "Thêm".
+  useEffect(() => { if (box.current) box.current.open = false; }, [path]);
+  useEffect(() => {
+    const close = (e) => {
+      const d = box.current;
+      if (!d?.open) return;
+      if (e.type === 'keydown' ? e.key === 'Escape' : !d.contains(e.target)) { d.open = false; if (e.type === 'keydown') d.querySelector('summary')?.focus(); }
+    };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', close); };
+  }, []);
+  return html`<nav class="mnav" aria-label="Điều hướng chính">
+    ${primary.map((it) => html`<a key=${it.path} class=${`mnav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`}
+      aria-current=${path === it.path ? 'page' : undefined}><${Icon} name=${it.icon} /><span>${it.short}</span></a>`)}
+    <details class="nav-more" ref=${box}>
+      <summary class=${`mnav-item${activeMore ? ' active' : ''}`} aria-label=${activeMore ? `Thêm mục — đang ở ${activeMore.text}` : 'Thêm mục'}>
+        <${Icon} name=${activeMore ? activeMore.icon : 'list'} /><span>${activeMore ? activeMore.short : 'Thêm'} ▾</span></summary>
+      <div class="nav-more-menu">
+        ${more.map((it) => html`<a key=${it.path} class=${`nav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`}
+          aria-current=${path === it.path ? 'page' : undefined}><${Icon} name=${it.icon} /><span>${it.text}</span></a>`)}
+      </div>
+    </details>
+  </nav>`;
+}
+
 function Sidebar({ me, brand, path }) {
   const link = (it) => html`<a class=${`nav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`}
     aria-current=${path === it.path ? 'page' : undefined}><${Icon} name=${it.icon} /><span>${it.text}</span></a>`;
   return html`<aside class="sidebar">
     <div class="side-brand"><${BrandMark} brand=${brand} /><span>${brand.name}</span></div>
+    <${MobileNav} me=${me} path=${path} />
     <nav class="nav" aria-label="Điều hướng chính">
       ${GROUPS.filter((g) => !g.admin || me.role === 'admin').map((g) => html`
         <div class="nav-group" role="group" aria-label=${g.label}>
