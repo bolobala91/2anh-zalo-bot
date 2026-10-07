@@ -172,10 +172,8 @@ class GuardFeatureTest(PermissionsFile, unittest.TestCase):
         self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
 
 
-class AdapterGroupRulesTest(PermissionsFile, unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        super().setUp()
-        self.enterContext(patch.dict(os.environ, {"ZALO_ALLOWED_USERS": OWNER}))
+class AdapterHarness:
+    """Adapter thật, cầu nối giả: ghi lại tin nào được chuyển cho agent."""
 
     def make_adapter(self, reply_only_tagged=True):
         adapter = zalo_adapter.ZaloAdapter(PlatformConfig(enabled=True, extra={
@@ -199,6 +197,12 @@ class AdapterGroupRulesTest(PermissionsFile, unittest.IsolatedAsyncioTestCase):
             frame["mentions"] = [{"uid": "bot-uid"}]
         with patch.object(zalo_adapter, "_zalo_tools", return_value=zalo_tools):
             await adapter._on_message(frame)
+
+
+class AdapterGroupRulesTest(PermissionsFile, AdapterHarness, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(patch.dict(os.environ, {"ZALO_ALLOWED_USERS": OWNER}))
 
     async def test_inactive_group_ignores_members_but_keeps_context_and_owner(self):
         self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"active": False}}})
@@ -251,6 +255,83 @@ class AdapterGroupRulesTest(PermissionsFile, unittest.IsolatedAsyncioTestCase):
             await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu chào")
         self.assertEqual(len(self.handled), 1)
         self.assertNotIn("đang tắt", self.handled[0].channel_context or "")
+
+
+# Kịch bản ghi tệp bằng đúng dashboard/lib/permissions.js (như khi bấm Lưu trên giao diện:
+# bản nháp xuất phát từ trạng thái đang hiệu lực mà dashboard hiển thị).
+_NODE_FIXTURE = r"""
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const [modUrl, home, stepsJson] = process.argv.slice(1);
+const { createPermissionsStore, makeGlobalReplyOnlyTagged } = await import(modUrl);
+const store = createPermissionsStore({
+  file: join(home, 'zalo', 'permissions.json'),
+  globalReplyOnlyTagged: makeGlobalReplyOnlyTagged({ envFile: join(home, '.env'), configFile: join(home, 'config.yaml') }),
+});
+for (const step of JSON.parse(stepsJson)) {
+  const view = store.get();
+  const base = step.group ? (view.groups[step.group] || view.defaults) : view.defaults;
+  const s = { active: base.active, replyOnlyTagged: base.replyOnlyTagged, features: { ...base.features } };
+  Object.assign(s, step.set || {});
+  Object.assign(s.features, step.features || {});
+  if (step.group) store.setGroup(step.group, s); else store.setDefaults(s);
+}
+"""
+
+
+class DashboardContractTest(AdapterHarness, unittest.IsolatedAsyncioTestCase):
+    """Tệp do dashboard (JS) ghi phải được plugin (Python) hiểu đúng như giao diện đã hiện."""
+
+    def setUp(self):
+        self.node = shutil.which("node")
+        if not self.node:
+            self.skipTest("không có node trong PATH")
+        self.home = tempfile.mkdtemp(prefix="zalo-contract-")
+        self.addCleanup(shutil.rmtree, self.home, True)
+        self.enterContext(patch.dict(os.environ, {
+            "ZALO_PERMISSIONS_FILE": os.path.join(self.home, "zalo", "permissions.json"),
+            "ZALO_ALLOWED_USERS": OWNER,
+        }))
+
+    def hermes_env(self, text):
+        with open(os.path.join(self.home, ".env"), "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def dashboard_saves(self, steps):
+        import subprocess
+        from pathlib import Path
+        mod = Path(ROOT, "dashboard", "lib", "permissions.js").resolve().as_uri()
+        result = subprocess.run(
+            [self.node, "--input-type=module", "-e", _NODE_FIXTURE, mod, self.home, json.dumps(steps)],
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    async def test_s1_turning_off_one_feature_keeps_the_hermes_tag_flag(self):
+        # Hermes: trả lời mọi tin. Trên dashboard chỉ tắt "web" ở nhóm A.
+        self.hermes_env("ZALO_GROUP_REPLY_ONLY_TAGGED=false\n")
+        self.dashboard_saves([{"group": GROUP_A, "features": {"web": False}}])
+        rules = gp.group_settings(GROUP_A)
+        self.assertIn(rules["reply_only_tagged"], (False, None))
+        self.assertFalse(rules["features"]["web"])
+        self.assertTrue(all(on for key, on in rules["features"].items() if key != "web"))
+        # Và adapter thật (cờ Hermes false) vẫn trả lời tin không tag trong nhóm A.
+        adapter = self.make_adapter(reply_only_tagged=False)
+        await self.say(adapter, "c1", MEMBER, "ai biết lịch họp không", tagged=False)
+        self.assertEqual(len(self.handled), 1)
+
+    async def test_s2_defaults_change_reaches_groups_that_do_not_override_the_key(self):
+        self.hermes_env("ZALO_GROUP_REPLY_ONLY_TAGGED=false\n")
+        self.dashboard_saves([
+            {"group": GROUP_A, "features": {"web": False}},
+            {"set": {"replyOnlyTagged": True}, "features": {"kb": False}},
+        ])
+        for group in (GROUP_A, GROUP_B):
+            rules = gp.group_settings(group)
+            self.assertIs(rules["reply_only_tagged"], True, group)
+            self.assertFalse(rules["features"]["kb"], group)
+        self.assertFalse(gp.group_settings(GROUP_A)["features"]["web"])
+        self.assertTrue(gp.group_settings(GROUP_B)["features"]["web"])
 
 
 if __name__ == "__main__":

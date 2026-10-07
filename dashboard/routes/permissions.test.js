@@ -37,7 +37,9 @@ test('Chủ bot xem và sửa được phân quyền (spec §6), có hiệu lự
   const saved = await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: owner, body: body({ active: false }, { web: false }) });
   assert.equal(saved.status, 200);
   assert.deepEqual(saved.json.groups[G], { name: 'Tổ Hoá', custom: true, active: false, replyOnlyTagged: true, features: { ...allOn(), web: false } });
-  assert.deepEqual(disk().groups[G], { name: 'Tổ Hoá', active: false, replyOnlyTagged: true, features: { web: false } }); // mặc định trong tệp chưa ghi cờ tag → ghi hẳn vào nhóm
+  assert.deepEqual(disk().groups[G], { name: 'Tổ Hoá', active: false, features: { web: false } });
+  // Lần lưu đầu ghi cờ tag thật của bot vào mặc định một lần, không ghi vào nhóm.
+  assert.equal(disk().defaults.replyOnlyTagged, true);
 
   const log = deps.activity.list();
   assert.equal(log[0].actor, 'khach');
@@ -51,7 +53,7 @@ test('lưu mặc định ghi đủ khoá; nhóm đưa về đúng mặc định 
   assert.equal(d.status, 200);
   assert.deepEqual(disk().defaults, { active: true, replyOnlyTagged: false, features: { ...allOn(), video: false } });
   await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: admin, body: body({}, { video: false }) });
-  assert.deepEqual(disk().groups[G], { replyOnlyTagged: true }); // bot chưa biết tên nhóm này → không ghi name
+  assert.deepEqual(disk().groups[G], { replyOnlyTagged: true }); // khác mặc định; bot chưa biết tên nhóm này → không ghi name
   await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: admin, body: body({ replyOnlyTagged: false }, { video: false }) });
   assert.deepEqual(disk().groups, {});
   assert.match(deps.activity.list()[0].detail, /: dùng mặc định$/);

@@ -19,14 +19,19 @@ import { createSidecarClient } from './lib/sidecar-client.js';
 import { createTelegramLinker } from './lib/telegram.js';
 import { createStoreReader } from './lib/store-reader.js';
 import { createThreadNames } from './lib/thread-names.js';
-import { createPermissionsStore } from './lib/permissions.js';
+import { createPermissionsStore, makeGlobalReplyOnlyTagged } from './lib/permissions.js';
 import { createWatchdog } from './lib/watchdog.js';
 import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-export function buildDeps({ env = process.env, sidecarRoot = join(here, '..') } = {}) {
+/**
+ * @param {object} [opts]
+ * @param {string} [opts.inheritedReplyOnlyTagged] ZALO_GROUP_REPLY_ONLY_TAGGED trong môi trường dịch vụ, chụp trước khi
+ *   nạp .env của sidecar — .env của sidecar không phải nơi bot đọc cờ này.
+ */
+export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), inheritedReplyOnlyTagged } = {}) {
   if (!env.ZALO_BRIDGE_TOKEN) throw new Error('Thiếu ZALO_BRIDGE_TOKEN trong .env của sidecar — chạy lại "npm run install:hermes".');
   const paths = resolveDashboardPaths({ env, sidecarRoot });
   const config = loadDashboardConfig(env);
@@ -48,10 +53,12 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..') } 
     guard: createLoginGuard(),
     setupToken: createSetupToken(paths.setupFile),
     activity: createActivityLog(paths.activityFile),
-    // Cờ tag chung của bot (adapter: mặc định bật) — chỉ để hiện đúng khi permissions.json chưa ghi khoá này.
+    // Cờ tag chung đọc đúng nguồn adapter đọc (.env và config.yaml của Hermes), đọc lại khi tệp đổi.
     permissions: createPermissionsStore({
       file: paths.permissionsFile,
-      globalReplyOnlyTagged: ['1', 'true', 'yes', 'on'].includes(String(env.ZALO_GROUP_REPLY_ONLY_TAGGED ?? 'true').trim().toLowerCase()),
+      globalReplyOnlyTagged: makeGlobalReplyOnlyTagged({
+        envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, inherited: inheritedReplyOnlyTagged,
+      }),
     }),
     watchdog: createWatchdog({
       sidecar: watchedSidecar, notify: (text) => linker.broadcast(text),
@@ -65,9 +72,10 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..') } 
 
 async function main() {
   const sidecarRoot = join(here, '..');
+  const inheritedReplyOnlyTagged = process.env.ZALO_GROUP_REPLY_ONLY_TAGGED;
   if (existsSync(join(sidecarRoot, '.env'))) loadRepoEnv(join(sidecarRoot, '.env'));
   loadHermesEnv();
-  const deps = buildDeps({ sidecarRoot });
+  const deps = buildDeps({ sidecarRoot, inheritedReplyOnlyTagged });
   const app = createDashboardApp(deps);
   app.listen(deps.config.port, '127.0.0.1', () => console.log(`[dashboard] đang chạy tại ${deps.config.publicUrl} (127.0.0.1:${deps.config.port})`));
   const tick = async () => { try { await deps.watchdog.tick(); } catch (e) { console.warn('[watchdog]', e.message); } };

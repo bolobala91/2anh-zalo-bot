@@ -18,6 +18,7 @@ export function resolveDashboardPaths({ env = process.env, sidecarRoot }) {
     brandFile: join(dataDir, 'brand.json'),
     permissionsFile: join(hermesHome, 'zalo', 'permissions.json'),
     hermesEnvFile: join(hermesHome, '.env'),
+    hermesConfigFile: join(hermesHome, 'config.yaml'),
     sqliteFile: join(resolve(sidecarRoot), 'data', 'zalo.sqlite'),
   };
 }
