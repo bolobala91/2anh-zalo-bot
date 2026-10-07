@@ -2,7 +2,7 @@
 // Lưu là có hiệu lực ngay — plugin đọc lại permissions.json khi tệp đổi.
 import express from 'express';
 import { requireAuth } from '../lib/http-guards.js';
-import { FEATURES, GROUP_ID, parseSettings } from '../lib/permissions.js';
+import { DM_FEATURES, FEATURES, GROUP_ID, parseDm, parseSettings } from '../lib/permissions.js';
 import { fallbackName } from '../lib/thread-names.js';
 import { failSidecar } from '../lib/route-errors.js';
 
@@ -17,6 +17,16 @@ export function describeSettings(s) {
     off.length ? `tắt: ${off.join(', ')}` : 'bật mọi tính năng'].join(' · ');
 }
 
+export const WHO_LABELS = { owners: 'Chỉ chủ nhân', list: 'Những người trong danh sách', everyone: 'Mọi người' };
+
+/** Dòng Nhật ký cho mục Nhắn riêng: "Chỉ chủ nhân · tắt: Video · 2 người trong danh sách (1 chỉnh riêng)". */
+export function describeDm(s) {
+  const off = DM_FEATURES.filter((f) => !s.features[f.key]).map((f) => f.label);
+  const custom = s.people.filter((p) => p.features).length;
+  return [WHO_LABELS[s.who], off.length ? `tắt: ${off.join(', ')}` : 'bật mọi tính năng',
+    `${s.people.length} người trong danh sách${custom ? ` (${custom} chỉnh riêng)` : ''}`].join(' · ');
+}
+
 export function permissionRoutes({ permissions, sidecar, threadNames, activity }) {
   const r = express.Router();
   const fail = (res, err, fallback) => {
@@ -26,7 +36,7 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity }
   };
 
   r.get('/permissions', requireAuth, (req, res) => {
-    try { res.json({ ok: true, features: FEATURES, ...permissions.get() }); } catch (err) { fail(res, err, READ_FAIL); }
+    try { res.json({ ok: true, features: FEATURES, dmFeatures: DM_FEATURES, ...permissions.get() }); } catch (err) { fail(res, err, READ_FAIL); }
   });
 
   r.get('/groups', requireAuth, async (req, res) => {
@@ -50,7 +60,18 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity }
       try {
         activity.append({ actor: req.user.username, action: 'permissions_defaults', detail: describeSettings(s) });
       } catch (err) { console.error('[dashboard] không ghi được Nhật ký phân quyền:', err); }
-      res.json({ ok: true, features: FEATURES, ...state });
+      res.json({ ok: true, features: FEATURES, dmFeatures: DM_FEATURES, ...state });
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
+
+  r.put('/permissions/dm', requireAuth, (req, res) => {
+    try {
+      const s = parseDm(req.body);
+      const state = permissions.setDm(s);
+      try {
+        activity.append({ actor: req.user.username, action: 'permissions_dm', detail: describeDm(s) });
+      } catch (err) { console.error('[dashboard] không ghi được Nhật ký phân quyền:', err); }
+      res.json({ ok: true, features: FEATURES, dmFeatures: DM_FEATURES, ...state });
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
 
@@ -68,7 +89,7 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity }
           detail: `${name || fallbackName(groupId, 1)}: ${changed.length ? describeSettings(s) : 'dùng mặc định'}`,
         });
       } catch (err) { console.error('[dashboard] không ghi được Nhật ký phân quyền:', err); }
-      res.json({ ok: true, features: FEATURES, ...state });
+      res.json({ ok: true, features: FEATURES, dmFeatures: DM_FEATURES, ...state });
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
 

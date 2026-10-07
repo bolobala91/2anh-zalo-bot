@@ -72,8 +72,13 @@ test('broadcast bỏ qua người dùng đã bị khoá hoặc xoá', async (t) 
   }
   await linker.pollOnce();
   bot.sent.length = 0;
-  await linker.broadcast('⚠️ thử');
+  assert.equal(await linker.broadcast('⚠️ thử'), 1, 'trả về số tin gửi được');
   assert.deepEqual(bot.sent.map((m) => String(m.chat_id)), ['1']);
+});
+
+test('broadcast trả 0 khi chưa cài bot Telegram', async (t) => {
+  const { linker } = mk(t, fakeBot(), { t: 0 });
+  assert.equal(await linker.broadcast('⚠️ thử'), 0);
 });
 
 test('mã nối hết hạn sau 10 phút', async (t) => {

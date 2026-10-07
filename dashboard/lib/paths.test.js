@@ -15,6 +15,9 @@ test('đường dẫn dựng từ HERMES_HOME và thư mục sidecar', () => {
   assert.equal(p.brandLogoFile, join(resolve('/h'), 'zalo', 'dashboard', 'brand', 'logo.png'));
   assert.equal(p.pendingRestartFile, join(resolve('/h'), 'zalo', 'dashboard', 'pending-restart.json'));
   assert.equal(p.sidecarEnvFile, join(resolve('/s'), '.env'));
+  assert.equal(p.healthHistoryFile, join(resolve('/h'), 'zalo', 'dashboard', 'health-history.json'));
+  assert.equal(p.aiUsageFile, join(resolve('/h'), 'zalo', 'dashboard', 'ai-usage.json'));
+  assert.equal(p.hermesStateDb, join(resolve('/h'), 'state.db'));
 });
 
 test('thiếu HERMES_HOME thì báo lỗi dễ hiểu', () => {

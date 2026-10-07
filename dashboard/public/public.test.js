@@ -147,6 +147,7 @@ test('phân quyền: hỏi trước khi bỏ thay đổi chưa lưu; nhóm chỉ
   assert.equal(LEAVE_MSG, 'Bạn có thay đổi chưa lưu ở nhóm này. Bỏ thay đổi và chuyển nhóm?');
   const perms = { groups: { '300': {} } };
   assert.equal(staysListed(DEFAULTS_KEY, perms, []), true);
+  assert.equal(staysListed('dm', perms, []), true, 'mục Nhắn riêng luôn còn');
   assert.equal(staysListed('300', perms, []), true, 'còn mục trong tệp');
   assert.equal(staysListed('200', perms, [{ id: '200' }]), true, 'bot còn thấy nhóm');
   assert.equal(staysListed('400', perms, []), false, 'chỉ có trong tệp, vừa về mặc định');
@@ -208,4 +209,112 @@ test('Tổng quan: lỗi gần nhất thành câu dễ hiểu có bước tiếp
     assert.notEqual(r.text, unknown.text, code);
     assert.doesNotMatch(`${r.text} ${r.next}`, /log|sidecar|bridge|toolset/i, code);
   }
+});
+
+test('nhắn riêng: bản nháp, thân gửi đi, thêm người (kiểm UID, trùng), gợi ý từ Phiên chat, nhãn danh sách', async () => {
+  const { dmDraft, dmPayload, sameDm, addPerson, suggestions, dmBadge, WHO_OPTIONS } = await import('./views/dm-permissions.js');
+  const on = { web: true, files: true, voice: true, reminders: true, kb: true, people: true, academic: true, video: true };
+  const dm = { who: 'list', explicit: true, gatewayOpen: true, features: { ...on, video: false },
+    people: [{ uid: '1234567890123456', name: 'Cô Lan', custom: true, features: { ...on, voice: false } }] };
+  const d = dmDraft(dm);
+  d.features.web = false;
+  assert.equal(dm.features.web, true, 'không sửa nhầm vào dữ liệu máy chủ');
+  assert.equal(sameDm(dmDraft(dm), dm), true);
+  assert.equal(sameDm(d, dm), false);
+  const added = addPerson(dmDraft(dm), ' 2234567890123456 ', 'Thầy Nam');
+  assert.equal(added.error, undefined);
+  assert.deepEqual(dmPayload(added.draft).people, [
+    { uid: '1234567890123456', name: 'Cô Lan', features: { ...on, voice: false } },
+    { uid: '2234567890123456', name: 'Thầy Nam', features: null },
+  ]);
+  assert.match(addPerson(d, '0912345678').error, /không phải số điện thoại — .*\/sethome/);
+  assert.match(addPerson(d, '1234567890123456').error, /đã có trong danh sách/);
+  const full = { ...d, people: Array.from({ length: 200 }, (_, i) => ({ uid: String(3234567890123456n + BigInt(i)) })) };
+  assert.match(addPerson(full, '2234567890123456').error, /tối đa 200/);
+  assert.deepEqual(suggestions([
+    { threadId: '1234567890123456', threadType: 0, name: 'Cô Lan' },
+    { threadId: '5234567890123456', threadType: 0, name: 'Khách' },
+    { threadId: '2054797107487294899', threadType: 1, name: 'Nhóm' },
+  ], d), [{ uid: '5234567890123456', name: 'Khách' }]);
+  assert.deepEqual(dmBadge(dm), { kind: 'ok', text: '1 người' });
+  assert.deepEqual(dmBadge({ ...dm, who: 'owners' }), { kind: 'idle', text: 'Chỉ chủ nhân' });
+  assert.deepEqual(WHO_OPTIONS.map((o) => o.value), ['owners', 'list', 'everyone']);
+});
+
+test('nhắn riêng: tên người lấy từ Phiên chat và người dùng dashboard có UID Zalo', async () => {
+  const { knownNames, suggestions, dmDraft } = await import('./views/dm-permissions.js');
+  const on = { web: true, files: true, voice: true, reminders: true, kb: true, people: true, academic: true, video: true };
+  const d = dmDraft({ who: 'list', features: on, people: [{ uid: '1234567890123456', name: '', custom: false, features: on }] });
+  const chats = [{ threadId: '5234567890123456', threadType: 0, name: 'Khách' }];
+  const users = [{ username: 'lan', zaloUid: '1234567890123456' }, { username: 'nam', zaloUid: '6234567890123456' },
+    { username: 'khach', zaloUid: '5234567890123456' }, { username: 'admin', zaloUid: '' }];
+  const names = knownNames(chats, users);
+  assert.equal(names.get('1234567890123456'), 'lan');
+  assert.equal(names.get('5234567890123456'), 'Khách', 'Phiên chat đứng trước tên đăng nhập');
+  assert.deepEqual(suggestions(chats, d, users), [{ uid: '5234567890123456', name: 'Khách' }, { uid: '6234567890123456', name: 'nam' }]);
+});
+
+test('sức khoẻ máy chủ: đoạn biểu đồ ngắt ở chỗ thiếu số đo, thời gian chạy dễ đọc, mức màu, nhãn dịch vụ', async () => {
+  const { chartSegments, peak, fmtUptime, fmtPct, level, serviceBadge, usageRows } = await import('./views/health.js');
+  const to = 24 * 3600_000;
+  const pts = [[0, 0, 50, 100], [60_000, 100, 50, null], [120_000, 50, 50, 100], [10 * 60_000, 20, 50, 100], [to + 1, 5, 5, 5]];
+  assert.deepEqual(chartSegments(pts, 1, { to }), ['0.0,120.0 0.4,0.0 0.8,60.0', '4.2,96.0 4.2,96.0']);
+  assert.deepEqual(chartSegments(pts, 3, { to }), ['0.0,0.0 0.0,0.0', '0.8,0.0 0.8,0.0', '4.2,0.0 4.2,0.0'], 'null ngắt đoạn; điểm lẻ thành chấm');
+  assert.deepEqual(chartSegments([], 1, { to }), []);
+  assert.equal(peak(pts, 3), 100);
+  assert.equal(peak([[0, null, null, null]], 1), null);
+  assert.equal(fmtUptime(45 * 60), '45 phút');
+  assert.equal(fmtUptime(5 * 3600 + 12 * 60), '5 giờ 12 phút');
+  assert.equal(fmtUptime(2 * 86400 + 3 * 3600), '2 ngày 3 giờ');
+  assert.equal(fmtUptime(24 * 86400), '3 tuần 3 ngày');
+  assert.equal(fmtPct(null), 'Chưa đo được');
+  assert.deepEqual([level(10), level(80), level(90), level(90.1), level(null)], ['ok', 'warn', 'warn', 'danger', 'idle']);
+  assert.deepEqual(serviceBadge('missing'), { kind: 'idle', text: 'Không có trên máy này' });
+  assert.equal(serviceBadge('lạ').text, 'Không rõ');
+  const days = Array.from({ length: 20 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, '0')}`, calls: i }));
+  assert.deepEqual(usageRows({ days }).map((d) => d.calls).slice(0, 2), [19, 18]);
+  assert.equal(usageRows({ days }).length, 14);
+  assert.deepEqual(usageRows(undefined), []);
+});
+
+test('Nhắn riêng: nút Lưu bật khi chưa từng lưu dù chưa sửa gì', async () => {
+  const { canSaveDm } = await import('./views/dm-permissions.js');
+  assert.equal(canSaveDm({ explicit: false }, false), true);
+  assert.equal(canSaveDm({ explicit: true }, false), false);
+  assert.equal(canSaveDm({ explicit: true }, true), true);
+});
+
+test('sức khoẻ máy chủ: gợi ý theo loại cảnh báo; ghi chú dùng AI chỉ báo thiếu khi chưa có số nào', async () => {
+  const { alertHint, alertBanner, usageNote, Health } = await import('./views/health.js');
+  const warn = alertBanner({ kind: 'cpu', since: Date.now(), alerted: false }, 'admin');
+  assert.equal(warn.kind, 'warn');
+  assert.match(warn.text, /^Đang theo dõi: CPU cao \(≥ 90 %\) từ .*hết cảnh báo khi xuống dưới 85 %/);
+  const red = alertBanner({ kind: 'ram', since: Date.now(), alerted: true }, 'owner');
+  assert.equal(red.kind, 'danger');
+  assert.match(red.text, /RAM cao \(≥ 90 %\).*đã báo Telegram.*dưới 85 %.*Báo người cài đặt/);
+  assert.doesNotMatch(red.text + warn.text, /trên 90 %/);
+  assert.match(alertHint('disk', 'admin'), /dọn bớt tệp.*tăng dung lượng ổ/i);
+  assert.match(alertHint('ram', 'admin'), /khởi động lại dịch vụ ngốn bộ nhớ hoặc nâng RAM/i);
+  assert.match(alertHint('cpu', 'admin'), /kiểm tra tiến trình đang chạy nặng/i);
+  assert.equal(alertHint('ram', 'owner'), 'Báo người cài đặt nếu kéo dài.');
+  const row = [{ date: '2026-10-07', calls: 1 }];
+  assert.equal(usageNote({ error: null }, row), null);
+  assert.equal(usageNote({ error: 'missing' }, []).kind, 'warn');
+  assert.equal(usageNote({ error: 'unreadable' }, []).kind, 'warn');
+  const at = Date.UTC(2026, 9, 7, 2, 5); // 09:05 giờ Việt Nam
+  const n = usageNote({ error: 'unreadable', errorAt: at }, row);
+  assert.equal(n.kind, 'muted');
+  assert.match(n.text, /^Không đọc được số mới lúc \d{2}:\d{2} — đang hiện số đã lưu/);
+  assert.equal(usageNote({ error: 'missing', errorAt: at }, row).kind, 'muted', 'có số đã lưu thì không báo thiếu');
+  const src = readFileSync(join(root, 'views', 'health.js'), 'utf8');
+  assert.match(src, /gồm cả khoảng dashboard tắt/);
+  assert.match(src, /Chỉ đếm lượt gọi và token, chưa tính tiền — /);
+  assert.doesNotMatch(src, /<text/, 'nhãn trục là chữ HTML, không co giãn theo SVG');
+  assert.equal(typeof Health, 'function');
+});
+
+test('thanh bên: Sức khoẻ máy chủ nằm trong nhóm Hệ thống, cả hai vai trò đều thấy', () => {
+  const src = readFileSync(join(root, 'views', 'shell.js'), 'utf8');
+  assert.match(src, /'\/health': \{ view: Health \}/);
+  assert.ok(src.indexOf("'Sức khoẻ máy chủ'") > src.indexOf("'Thương hiệu'") && src.indexOf("'Sức khoẻ máy chủ'") < src.indexOf("label: 'Quản trị'"));
 });

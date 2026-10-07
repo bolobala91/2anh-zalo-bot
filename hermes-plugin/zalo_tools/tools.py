@@ -132,6 +132,10 @@ def current_authorization(*, confirmed: bool = False) -> Dict[str, Any]:
     }
     if turn.get("cron_job_id"):
         auth["cronJobId"] = str(turn["cron_job_id"])
+    if turn.get("sethome"):
+        # Câu trả lời /sethome cho người lạ: kết nối Zalo vẫn cho gửi dù người này
+        # chưa được nhắn riêng (dm-rules.js / zalo-policy.js).
+        auth["notice"] = "sethome"
     return auth
 
 
@@ -3529,15 +3533,14 @@ def _mcp_open_to_members(name: str, toolset: str) -> bool:
     )
 
 
-def _group_feature_block(turn: Dict[str, Any], name: str, args: Any) -> Optional[Dict[str, str]]:
-    """Lượt của thành viên trong nhóm gọi công cụ thuộc nút đang tắt ở nhóm đó → chặn.
+def _feature_block(turn: Dict[str, Any], name: str, args: Any) -> Optional[Dict[str, str]]:
+    """Lượt không phải của chủ nhân gọi công cụ thuộc nút đang tắt → chặn.
 
-    Đọc ``permissions.json`` qua group_permissions (đọc lại khi tệp đổi). Chỉ áp
-    trong nhóm: tin nhắn riêng không có bảng quyền nhóm nào. ``zalo_group_cron``
-    chỉ bị chặn khi tạo mới — xem và xoá việc đã có vẫn được (spec §8.3).
+    Đọc ``permissions.json`` qua group_permissions (đọc lại khi tệp đổi). Trong
+    nhóm: bảng của nhóm đó; ``zalo_group_cron`` chỉ bị chặn khi tạo mới — xem và
+    xoá việc đã có vẫn được (spec §8.3). Nhắn riêng: mục ``dm`` (spec §16) — nút
+    chung cho tin nhắn riêng, ghi đè theo từng người. Đọc lỗi → không chặn.
     """
-    if not turn.get("is_group"):
-        return None
     real, real_args = name, args if isinstance(args, dict) else {}
     if name == "tool_call":
         try:
@@ -3553,6 +3556,23 @@ def _group_feature_block(turn: Dict[str, Any], name: str, args: Any) -> Optional
     feature = group_permissions.feature_of(real)
     if feature is None:
         return None
+    if not turn.get("is_group"):
+        if feature not in group_permissions.DM_FEATURES:
+            return None
+        try:
+            if group_permissions.dm_settings(str(turn.get("sender_uid") or ""))["features"][feature]:
+                return None
+        except Exception as exc:  # đọc quyền hỏng không được làm hỏng lượt
+            logger.warning("[zalo] không đọc được quyền nhắn riêng: %s", exc)
+            return None
+        label = group_permissions.FEATURE_LABELS[feature]
+        logger.info("[zalo] chặn %s — nhắn riêng với %s đang tắt %s", real, turn.get("sender_uid"), feature)
+        return {
+            "action": "block",
+            "message": (f"Chủ bot chưa bật tính năng {label} khi nhắn riêng với người này. Hãy nói ngắn gọn "
+                        f"với người hỏi rằng {label} đang tắt trong tin nhắn riêng; đừng gọi lại công cụ này "
+                        "và đừng dùng công cụ khác để làm thay."),
+        }
     if feature == "groupCron" and str((real_args or {}).get("action") or "").strip().lower() != "create":
         return None
     try:
@@ -3589,7 +3609,7 @@ def guard_member_tool_call(tool_name: str = "", args: Any = None, **_kw) -> Opti
     if (turn.get("is_owner") or turn.get("core_tools")) and not _outsider_spoke_after(turn):
         return None
     name = str(tool_name or "")
-    blocked = _group_feature_block(turn, name, args)
+    blocked = _feature_block(turn, name, args)
     if blocked:
         return blocked
     if _member_may_call(name, args):
@@ -3603,11 +3623,13 @@ def guard_member_tool_call(tool_name: str = "", args: Any = None, **_kw) -> Opti
     # không được chỉ chỗ thì nó bỏ cuộc và trả lời "không tra được".
     # Không gợi ý công cụ thuộc nút đang tắt ở nhóm này — gợi ý xong lại bị chặn.
     off: set = set()
-    if turn.get("is_group"):
-        try:
+    try:
+        if turn.get("is_group"):
             off = set(group_permissions.disabled_features(str(turn.get("thread_id") or "")))
-        except Exception as exc:
-            logger.warning("[zalo] không đọc được quyền nhóm: %s", exc)
+        else:
+            off = set(group_permissions.dm_disabled_features(str(turn.get("sender_uid") or "")))
+    except Exception as exc:
+        logger.warning("[zalo] không đọc được quyền nhóm/nhắn riêng: %s", exc)
     hints = ", ".join(text for feature, text in (
         ("kb", "cần tra tài liệu thì dùng zalo_kb_list rồi zalo_kb_read"),
         ("files", "cần gửi tệp thì zalo_send_file"),

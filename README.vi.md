@@ -480,6 +480,20 @@ Mục **Chủ nhân bot** (chỉ Quản trị) sửa danh sách UID Zalo có to�
 
 Lưu xong, dashboard hiện dải vàng **Cần khởi động lại trợ lý**: bấm nút trên dải để khởi động lại kết nối Zalo và trợ lý (bot ngừng trả lời tới vài phút). Gateway Hermes nạp lại `.env` mỗi lượt nên trợ lý thấy danh sách mới ngay; chỉ kết nối Zalo cần khởi động lại — trước đó người mới thêm chưa dùng được đủ lệnh chủ nhân. Nếu thư mục cài bot có `.env` riêng cũng ghi `ZALO_ALLOWED_USERS`, dòng đó được ưu tiên — trang sẽ báo đỏ; xoá dòng đó rồi khởi động lại. Biến `ZALO_ALLOWED_USERS` đặt sẵn trong môi trường hệ thống/dịch vụ cũng ghi đè và cũng bị báo đỏ — nhờ người cài đặt xoá khỏi môi trường đó.
 
+### Nhắn riêng
+
+Trong **Phân quyền Bot**, mục **Nhắn riêng** (Quản trị và Chủ bot) chọn ai được nhắn riêng với bot: **Chỉ chủ nhân**, **Chủ nhân và những người trong danh sách**, hoặc **Mọi người**; 8 nút tính năng cho tin nhắn riêng (như nhóm, không có "Hẹn giờ cho nhóm"); và tính năng riêng cho từng người trong danh sách. Thêm người bằng cách chọn từ những ai đã nhắn riêng cho bot, hoặc nhập UID (nhờ người đó nhắn `/sethome` cho bot để biết). Lưu là có hiệu lực ngay. Chủ nhân bot luôn nhắn riêng được và dùng được mọi tính năng.
+
+Chưa lưu lần nào thì bot vẫn theo `ZALO_DM_POLICY` như trước. Muốn người ngoài chủ nhân nhắn được, `.env` của Hermes phải có `ZALO_ALLOW_ALL_USERS=true` — trang sẽ báo vàng nếu chưa có.
+
+### Sức khoẻ máy chủ
+
+Mục **Sức khoẻ máy chủ** (Quản trị và Chủ bot) cho thấy CPU, RAM, ổ đĩa (ổ chứa dữ liệu bot), thời gian máy đã chạy, biểu đồ 24 giờ, trạng thái các dịch vụ của bot và số lượt gọi AI + token theo ngày. Số đo cập nhật mỗi phút. Telegram cảnh báo khi ổ đĩa trên 90 %, RAM trên 90 % suốt 5 phút, hoặc CPU bận trên 90 % suốt 10 phút; báo lại khi đã bình thường. Lượt gọi AI lấy từ dữ liệu của chính trợ lý (`state.db`), tính từ lúc cài bản 1.23.0, không có chi phí bằng tiền. Quản trị thấy thêm tên dịch vụ hệ thống.
+
+### Cập nhật lên 1.23.0
+
+Bản này đổi ở ba chỗ: plugin Hermes, kết nối Zalo và dashboard. **Cả ba phải cập nhật cùng lúc**, trước khi ai bấm Lưu ở mục Nhắn riêng — nếu dashboard cũ còn chạy mà ai đó lưu phân quyền nhóm, phần Nhắn riêng có thể bị ghi đè mất. Cập nhật xong khởi động lại cả ba (bot tạm ngừng khoảng một phút, nên làm giờ vắng).
+
 ### Kiểm tay sau khi cài (Giai đoạn 1)
 
 - [ ] `npm run doctor` không có dòng `[FAIL]`; `dashboard-running` báo "đang chạy".
@@ -524,6 +538,15 @@ Lưu xong, dashboard hiện dải vàng **Cần khởi động lại trợ lý**
 - [ ] Nhật ký có các dòng "Đổi thương hiệu", "Đổi logo", "Đổi chủ nhân bot" kèm tên mình.
 - [ ] Tài khoản Chủ bot vào được Thương hiệu, không thấy Chủ nhân bot.
 
+### Kiểm tay sau khi cài (Giai đoạn 5)
+
+- [ ] Nhắn riêng: chọn "Chủ nhân và những người trong danh sách", thêm UID một người thử, Lưu → người đó nhắn riêng được bot trả lời; một người khác nhắn thì bot im (gõ `/sethome` vẫn nhận được UID).
+- [ ] Tắt "Tra cứu web" ở Nhắn riêng → người thử nhờ tra web thì bot nói tính năng đang tắt; bật "Tính năng riêng cho người này" + bật lại web cho riêng người đó → tra được.
+- [ ] Chủ nhân nhắn riêng vẫn dùng mọi tính năng; lưu một nhóm ở Phân quyền Bot không làm mất mục Nhắn riêng.
+- [ ] Sức khoẻ máy chủ: số đo khớp `free -m`/`df -h` (VPS) hoặc Task Manager (Windows) trong khoảng vài %; dịch vụ hiện đúng; Chủ bot không thấy tên `….service`.
+- [ ] Sau ~10 phút có số lượt gọi AI hôm nay; nhắn bot một câu → số tăng sau tối đa 5 phút.
+- [ ] Nhật ký có dòng "Đổi quyền nhắn riêng" kèm tên mình.
+
 Gỡ cài đặt (`npm run uninstall:hermes`) cũng gỡ dịch vụ dashboard, nhưng giữ nguyên tài khoản và dữ liệu.
 
 ---
@@ -537,7 +560,7 @@ Sidecar không còn tệp cấu hình nào. Ai được dùng bot, trả lời k
 | Việc | Đặt ở đâu |
 |---|---|
 | Ai là chủ nhân | `ZALO_ALLOWED_USERS` trong `.env` của Hermes (sửa được ở mục **Chủ nhân bot** của dashboard) |
-| Ai được nhắn riêng | `ZALO_DM_POLICY` |
+| Ai được nhắn riêng, tính năng khi nhắn riêng | mục `dm` trong `<HERMES_HOME>/zalo/permissions.json` (sửa ở **Phân quyền Bot → Nhắn riêng**); chưa có thì `ZALO_DM_POLICY` |
 | Trong nhóm chỉ trả lời khi được tag | `ZALO_GROUP_REPLY_ONLY_TAGGED` |
 | Bật công cụ kết bạn (mặc định tắt) | `ZALO_FRIEND_TOOLS` |
 | Tính cách | `platform_hints.zalo.append` trong `config.yaml` |

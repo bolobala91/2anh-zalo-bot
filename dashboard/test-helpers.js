@@ -78,6 +78,21 @@ export function fakeBot({ failGetMe = false } = {}) {
   return { sent, fetchImpl, push: (u) => { updates.push(u); } };
 }
 
+/** Sức khoẻ máy chủ giả: một lần đo, hai điểm lịch sử, ba dịch vụ, một ngày dùng AI. */
+export function fakeHealth(overrides = {}) {
+  return {
+    latest: () => ({ at: 1, cpuPct: 12.5, ramPct: 61, ramUsedMb: 2390, ramTotalMb: 3915, diskPct: 50, diskUsedGb: 14, diskTotalGb: 28, uptimeSec: 3600, cores: 4 }),
+    points: () => [[0, 10, 60, 50], [60_000, 12.5, 61, 50]],
+    usage: () => ({ since: 0, error: null, days: [{ date: '2026-10-07', calls: 6, input: 85206, output: 4968, cached: 73327 }] }),
+    services: async () => [
+      { id: 'zalo-bridge', label: 'Kết nối Zalo', state: 'up', detail: 'zalo-bridge.service · active/running' },
+      { id: 'hermes-gateway', label: 'Trợ lý (Hermes)', state: 'down', detail: 'hermes-gateway.service · failed/failed' },
+      { id: '9router', label: 'Cổng AI (9router)', state: 'up', detail: '9router.service · active/running' },
+    ],
+    ...overrides,
+  };
+}
+
 export function makeDeps(t, overrides = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'zd-app-'));
   const bot = overrides.bot || fakeBot();
@@ -99,6 +114,7 @@ export function makeDeps(t, overrides = {}) {
     restartSidecar: async () => {},
     owners: createOwnersStore({ envFile: join(dir, 'hermes.env'), sidecarEnvFile: join(dir, 'sidecar.env'), pendingFile: join(dir, 'pending-restart.json') }),
     brand: createBrandStore({ file: join(dir, 'brand.json'), logoFile: join(dir, 'brand', 'logo.png') }),
+    health: fakeHealth(),
     publicDir: join(dir, 'public'),
     dir,
     ...overrides,

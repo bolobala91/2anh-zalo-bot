@@ -11,6 +11,7 @@ import { Audit } from './audit.js';
 import { Permissions } from './permissions.js';
 import { Brand } from './brand.js';
 import { Owners } from './owners.js';
+import { Health } from './health.js';
 
 const STATUS_MS = 3000;
 
@@ -21,6 +22,7 @@ const ROUTES = {
   '/zalo': { view: Zalo },
   '/audit': { view: Audit },
   '/brand': { view: Brand },
+  '/health': { view: Health },
   '/users': { view: Users, admin: true },
   '/owners': { view: Owners, admin: true },
   '/alerts': { view: Alerts, admin: true },
@@ -37,6 +39,7 @@ const GROUPS = [
     { path: '/zalo', text: 'Tài khoản Zalo', icon: 'phone' },
     { path: '/audit', text: 'Nhật ký', icon: 'list' },
     { path: '/brand', text: 'Thương hiệu', icon: 'image' },
+    { path: '/health', text: 'Sức khoẻ máy chủ', icon: 'activity' },
   ] },
   { label: 'Quản trị', admin: true, items: [
     { path: '/users', text: 'Người dùng', icon: 'users' },

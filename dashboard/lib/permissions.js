@@ -8,6 +8,8 @@ import { chmodSync, copyFileSync, existsSync, readFileSync, statSync } from 'nod
 import { parseEnv } from 'node:util';
 import YAML from 'yaml';
 import { writeJsonAtomic } from './json-store.js';
+import { ZALO_UID } from './users.js';
+import { DM_FEATURE_KEYS, DM_WHO, normalizeDm } from '../../dm-rules.js';
 
 export const FEATURES = [
   { key: 'web', label: 'Tra cứu web', hint: 'Tìm và đọc trang web' },
@@ -21,10 +23,15 @@ export const FEATURES = [
   { key: 'video', label: 'Video', hint: 'Xem thông tin và tải video từ link' },
 ];
 export const FEATURE_KEYS = FEATURES.map((f) => f.key);
+// Nút cho tin nhắn riêng (spec §16): 8 nút, không có "Hẹn giờ cho nhóm"; lời gợi ý viết cho một người.
+const DM_HINTS = { kb: 'Đọc tài liệu chủ bot đã mở cho mọi người', people: 'Bot nhớ hồ sơ người nhắn để xưng hô đúng' };
+export const DM_FEATURES = FEATURES.filter((f) => DM_FEATURE_KEYS.includes(f.key)).map((f) => ({ ...f, hint: DM_HINTS[f.key] || f.hint }));
 const SWITCHES = ['active', 'replyOnlyTagged'];
 export const GROUP_ID = /^\d{1,32}$/;
 const MAX_NAME = 120;
 const MAX_GROUPS = 500;
+const MAX_DM_PEOPLE = 200;
+const MAX_PERSON_NAME = 80;
 
 export class InvalidPermissions extends Error {
   constructor(message) { super(message); this.name = 'InvalidPermissions'; this.status = 400; }
@@ -75,6 +82,40 @@ export function makeGlobalReplyOnlyTagged({ envFile, configFile, inherited }) {
   };
 }
 
+/**
+ * Hai giá trị Hermes đang dùng cho tin nhắn riêng, đọc lại khi .env/config.yaml đổi:
+ * - `legacyWho`: ZALO_DM_POLICY ("open" → 'everyone', còn lại → 'owners') — áp khi tệp chưa có mục dm.
+ *   Adapter: `extra.get("dm_policy", get_secret("ZALO_DM_POLICY", "owner-only"))` — config.yaml thắng .env.
+ * - `gatewayOpen`: ZALO_ALLOW_ALL_USERS hoặc GATEWAY_ALLOW_ALL_USERS bật. Tắt thì Hermes tự chặn mọi người
+ *   ngoài chủ nhân trước khi tới bot, nên chọn "danh sách"/"mọi người" chưa có tác dụng.
+ * `inherited`: các biến đó trong môi trường dịch vụ, chụp trước khi nạp .env của thư mục bot.
+ */
+export function makeDmEnv({ envFile, configFile, inherited = {} }) {
+  let key = null;
+  let value = { legacyWho: 'owners', gatewayOpen: false };
+  return () => {
+    const next = `${fileStamp(envFile)}|${configFile ? fileStamp(configFile) : '-'}`;
+    if (next === key) return value;
+    let env = {};
+    const text = readText(envFile);
+    if (text !== null) {
+      try { env = parseEnv(text); } catch { /* .env hỏng: Hermes cũng bỏ qua */ }
+    }
+    const pick = (name) => (Object.hasOwn(env, name) ? env[name] : inherited[name]);
+    let extra;
+    if (configFile) {
+      try { extra = YAML.parse(readText(configFile) ?? '')?.platforms?.zalo?.extra; } catch { extra = undefined; }
+    }
+    const policy = isObj(extra) && Object.hasOwn(extra, 'dm_policy') ? extra.dm_policy : (pick('ZALO_DM_POLICY') ?? 'owner-only');
+    value = {
+      legacyWho: String(policy).trim().toLowerCase() === 'open' ? 'everyone' : 'owners',
+      gatewayOpen: truthy(pick('ZALO_ALLOW_ALL_USERS')) || truthy(pick('GATEWAY_ALLOW_ALL_USERS')),
+    };
+    key = next;
+    return value;
+  };
+}
+
 /** Một lớp: chỉ giữ khoá biết và đúng kiểu boolean — giống `_layer` bên Python. */
 function layer(raw) {
   if (!isObj(raw)) return {};
@@ -96,7 +137,36 @@ export function normalize(raw) {
     const name = isObj(entry) && typeof entry.name === 'string' ? entry.name.trim().slice(0, MAX_NAME) : '';
     groups[id] = name ? { name, ...l } : l;
   }
-  return { version: 1, defaults: layer(raw.defaults), groups };
+  // Mục `dm` (giai đoạn 5) phải sống qua mọi lần lưu nhóm/mặc định.
+  const dm = normalizeDm(raw.dm);
+  return { version: 1, defaults: layer(raw.defaults), groups, ...(dm ? { dm } : {}) };
+}
+
+/**
+ * Kiểm thân PUT /api/permissions/dm: `{ who, features: 8 nút, people: [{ uid, name?, features: 8 nút | null }] }`.
+ * `features: null` ở một người = theo nút chung. UID trùng giữ mục đầu.
+ */
+export function parseDm(body) {
+  if (!isObj(body) || !DM_WHO.includes(body.who)) throw new InvalidPermissions('Chưa chọn ai được nhắn riêng với bot — tải lại trang rồi thử lại.');
+  const full = (f) => isObj(f) && !Object.keys(f).some((k) => !DM_FEATURE_KEYS.includes(k)) && DM_FEATURE_KEYS.every((k) => typeof f[k] === 'boolean');
+  const pick8 = (f) => Object.fromEntries(DM_FEATURE_KEYS.map((k) => [k, f[k]]));
+  if (!full(body.features)) throw new InvalidPermissions('Danh sách tính năng không hợp lệ — tải lại trang rồi thử lại.');
+  if (!Array.isArray(body.people)) throw new InvalidPermissions('Danh sách người không hợp lệ — tải lại trang rồi thử lại.');
+  if (body.people.length > MAX_DM_PEOPLE) throw new InvalidPermissions(`Danh sách tối đa ${MAX_DM_PEOPLE} người — bỏ bớt rồi lưu lại.`);
+  const seen = new Set();
+  const people = [];
+  for (const p of body.people) {
+    const uid = String(isObj(p) ? p.uid ?? '' : '').trim();
+    if (!ZALO_UID.test(uid)) {
+      throw new InvalidPermissions(`"${uid.slice(0, 30)}" không phải UID Zalo — UID là dãy 15–22 chữ số; nhờ người đó nhắn /sethome cho bot để biết.`);
+    }
+    if (p.features != null && !full(p.features)) throw new InvalidPermissions('Tính năng riêng của một người không hợp lệ — tải lại trang rồi thử lại.');
+    if (seen.has(uid)) continue;
+    seen.add(uid);
+    const name = typeof p.name === 'string' ? p.name.replace(/\s+/g, ' ').trim().slice(0, MAX_PERSON_NAME) : '';
+    people.push({ uid, name, features: p.features == null ? null : pick8(p.features) });
+  }
+  return { who: body.who, features: pick8(body.features), people };
 }
 
 /** Kiểm thân request: đủ hai công tắc và đủ 9 nút, tất cả boolean. */
@@ -117,7 +187,7 @@ export function parseSettings(body) {
  *   globalReplyOnlyTagged — cờ ZALO_GROUP_REPLY_ONLY_TAGGED bot đang dùng (xem makeGlobalReplyOnlyTagged).
  *   Dùng để hiển thị khi tệp chưa ghi khoá này, và để ghi hạt giống `defaults.replyOnlyTagged` ở lần lưu đầu.
  */
-export function createPermissionsStore({ file, globalReplyOnlyTagged = true }) {
+export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmEnv = () => ({ legacyWho: 'owners', gatewayOpen: true }) }) {
   const globalFlag = () => (typeof globalReplyOnlyTagged === 'function' ? globalReplyOnlyTagged() : globalReplyOnlyTagged);
   const builtin = () => ({ active: true, replyOnlyTagged: globalFlag(), features: Object.fromEntries(FEATURE_KEYS.map((k) => [k, true])) });
   const merge = (base, l) => ({
@@ -163,10 +233,20 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true }) {
     }
   }
 
+  /** Mục nhắn riêng đã gộp: chưa có trong tệp → `who` theo ZALO_DM_POLICY (`explicit: false`), mọi nút bật. */
+  const dmView = (dm) => {
+    const env = dmEnv();
+    const features = { ...Object.fromEntries(DM_FEATURE_KEYS.map((k) => [k, true])), ...(dm?.features || {}) };
+    const people = Object.entries(dm?.people || {}).map(([uid, p]) => ({
+      uid, name: p.name || '', custom: Object.keys(p.features || {}).length > 0, features: { ...features, ...(p.features || {}) },
+    }));
+    return { who: dm?.who || env.legacyWho, explicit: Boolean(dm?.who), gatewayOpen: env.gatewayOpen, features, people };
+  };
+
   const view = ({ data, exists, corrupt }) => {
     const defaults = merge(builtin(), data.defaults);
     const groups = Object.fromEntries(Object.entries(data.groups).map(([id, g]) => [id, { name: g.name || '', custom: true, ...merge(defaults, g) }]));
-    return { exists, corrupt, defaults, groups };
+    return { exists, corrupt, defaults, groups, dm: dmView(data.dm) };
   };
 
   return {
@@ -203,6 +283,21 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true }) {
       else delete data.groups[groupId];
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), changed };
+    },
+    /**
+     * Lưu mục nhắn riêng (đã qua parseDm): `who` + đủ 8 nút chung; mỗi người chỉ ghi nút khác nút chung.
+     * Tệp vẫn là phiên bản 1 — plugin/dashboard v1.21–1.22 bỏ qua khoá `dm` khi đọc.
+     */
+    setDm(settings) {
+      const { data } = read();
+      const people = {};
+      for (const p of settings.people) {
+        const diff = p.features ? Object.fromEntries(DM_FEATURE_KEYS.filter((k) => p.features[k] !== settings.features[k]).map((k) => [k, p.features[k]])) : {};
+        people[p.uid] = { ...(p.name ? { name: p.name } : {}), ...(Object.keys(diff).length ? { features: diff } : {}) };
+      }
+      data.dm = { who: settings.who, features: { ...settings.features }, people };
+      write(data);
+      return view({ data, exists: true, corrupt: false });
     },
   };
 }

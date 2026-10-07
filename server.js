@@ -17,6 +17,7 @@ import { installFileLog } from './file-log.js';
 import { createQrLogin } from './qr-login.js';
 import { createControlRouter } from './control-api.js';
 import { createGroupDirectory } from './group-directory.js';
+import { createDmRules, permissionsFileFromEnv } from './dm-rules.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 installFileLog({ path: join(__dirname, 'logs', 'sidecar.log') });
@@ -31,6 +32,12 @@ const zaloStore = openZaloStore({
   retentionDays: Number(process.env.ZALO_HISTORY_RETENTION_DAYS) || 365,
 });
 const runtimeHealth = createRuntimeHealth({ store: zaloStore });
+// Quyền nhắn riêng do dashboard ghi (permissions.json), đọc lại khi tệp đổi — lớp chặn thứ hai sau plugin.
+const dmPermissionsFile = permissionsFileFromEnv();
+if (!dmPermissionsFile) {
+  console.warn('[dm] Không có HERMES_HOME hay ZALO_PERMISSIONS_FILE — lớp chặn thứ hai cho tin nhắn riêng đang tắt; chỉ còn cài đặt của Hermes. Đặt HERMES_HOME rồi khởi động lại kết nối Zalo để bật.');
+}
+const dmRules = createDmRules({ file: dmPermissionsFile });
 zaloStore.pruneMessages();
 const retentionTimer = setInterval(() => {
   try { zaloStore.pruneMessages(); } catch (error) {
@@ -114,7 +121,7 @@ function activateZaloRuntime() {
       console.error('[history] legacy import failed:', error?.message || error);
     }
   }
-  startHermesBridge({ api, profile: loginInfo, store: zaloStore, health: runtimeHealth });
+  startHermesBridge({ api, profile: loginInfo, store: zaloStore, health: runtimeHealth, dmRules });
   stopBotListener();
   stopBotListener = setupBotListener(api, loginInfo, { health: runtimeHealth });
   startAutomaticBackfill().catch((error) => {

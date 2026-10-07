@@ -2,6 +2,20 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [1.23.0] — 2026-10-07
+
+### Thêm
+
+- **Dashboard: Nhắn riêng** trong Phân quyền Bot. Chọn ai được nhắn riêng với bot (chỉ chủ nhân, chủ nhân và một danh sách người, hoặc mọi người), bật/tắt 8 tính năng khi nhắn riêng, và tính năng riêng cho từng người trong danh sách. Lưu là có hiệu lực ngay; chủ nhân luôn được miễn. Chưa lưu thì bot vẫn theo `ZALO_DM_POLICY`. Trang báo vàng khi chọn cho người ngoài nhắn mà `.env` thiếu `ZALO_ALLOW_ALL_USERS=true`.
+- **Dashboard: Sức khoẻ máy chủ.** CPU, RAM, ổ đĩa, thời gian chạy và biểu đồ 24 giờ; trạng thái các dịch vụ của bot; lượt gọi AI và token theo ngày lấy từ `state.db` của Hermes (không có chi phí bằng tiền). Chạy trên cả VPS Linux và máy Windows.
+- **Cảnh báo Telegram khi máy chủ quá tải**: ổ đĩa trên 90 %, RAM trên 90 % suốt 5 phút, CPU bận trên 90 % suốt 10 phút — báo một lần, nhắc lại sau 6 giờ, báo khi bình thường lại; mỗi loại cảnh báo có gợi ý xử lý riêng.
+
+### An toàn
+
+- Quyền nhắn riêng được kiểm ở hai lớp: plugin Hermes (cửa vào tin nhắn và công cụ) và kết nối Zalo (lớp thứ hai, từ chối lệnh gửi ra cho lượt của người không được phép). Đọc quyền lỗi thì quay về `ZALO_DM_POLICY`, không bao giờ mở rộng hơn.
+- Trang Sức khoẻ máy chủ chỉ chạy lệnh đọc (`systemctl list-units`) trên Linux, không chạy lệnh nào trên Windows; tên dịch vụ hệ thống chỉ Quản trị thấy.
+- Phải cập nhật cùng lúc plugin Hermes, kết nối Zalo và dashboard; dashboard cũ lưu phân quyền sẽ làm rơi mục `dm`.
+
 ## [1.22.0] — 2026-10-07
 
 ### Thêm

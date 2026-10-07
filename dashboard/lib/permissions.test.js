@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, uti
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPermissionsStore, FEATURE_KEYS, makeGlobalReplyOnlyTagged, normalize, parseSettings } from './permissions.js';
+import { createPermissionsStore, FEATURE_KEYS, InvalidPermissions, makeDmEnv, makeGlobalReplyOnlyTagged, normalize, parseDm, parseSettings } from './permissions.js';
 
 const G = '2054797107487294899';
 const allOn = () => Object.fromEntries(FEATURE_KEYS.map((k) => [k, true]));
@@ -182,4 +182,68 @@ test('quá 500 nhóm riêng thì từ chối nhóm mới bằng InvalidPermissio
   for (let i = 1; i <= 500; i++) s.store.setGroup(String(i), settings({ active: false }));
   assert.throws(() => s.store.setGroup(G, settings({ active: false })), (e) => e.name === 'InvalidPermissions' && /—/.test(e.message));
   assert.equal(s.store.setGroup('7', settings({ active: true }, { web: false })).state.groups['7'].custom, true);
+});
+
+// --- Nhắn riêng (spec §16) ---
+const P1 = '1234567890123456';
+const P2 = '2234567890123456789';
+const dm8 = (over = {}) => ({ web: true, files: true, voice: true, reminders: true, kb: true, people: true, academic: true, video: true, ...over });
+
+test('nhắn riêng: chưa có mục dm → theo ZALO_DM_POLICY, mọi nút bật; báo Hermes có đang chặn người ngoài không', (t) => {
+  const s = setup(t, { dmEnv: () => ({ legacyWho: 'everyone', gatewayOpen: false }) });
+  assert.deepEqual(s.store.get().dm, { who: 'everyone', explicit: false, gatewayOpen: false, features: dm8(), people: [] });
+});
+
+test('nhắn riêng: lưu ghi who + 8 nút chung, người chỉ ghi nút khác; lưu nhóm sau đó không làm mất mục dm', (t) => {
+  const s = setup(t);
+  const state = s.store.setDm(parseDm({
+    who: 'list', features: dm8({ web: false }),
+    people: [{ uid: P1, name: '  Cô   Lan ', features: dm8({ web: true, voice: false }) }, { uid: P2, features: null }, { uid: P1, name: 'trùng', features: null }],
+  }));
+  assert.deepEqual(s.disk().dm, {
+    who: 'list', features: dm8({ web: false }),
+    people: { [P1]: { name: 'Cô Lan', features: { web: true, voice: false } }, [P2]: {} },
+  });
+  assert.deepEqual(state.dm.people, [
+    { uid: P1, name: 'Cô Lan', custom: true, features: dm8({ voice: false }) },
+    { uid: P2, name: '', custom: false, features: dm8({ web: false }) },
+  ]);
+  assert.equal(state.dm.explicit, true);
+  s.store.setGroup(G, settings({}, { web: false }), 'Tổ Hoá');
+  s.store.setDefaults(settings({}, { kb: false }));
+  assert.equal(s.disk().dm.who, 'list', 'lưu nhóm/mặc định giữ nguyên mục dm');
+  assert.equal(s.disk().version, 1, 'không đổi phiên bản tệp — bản v1.21+ vẫn đọc được');
+});
+
+test('parseDm: từ chối who lạ, thiếu nút, nút groupCron, UID là số điện thoại, quá 200 người', () => {
+  const ok = { who: 'everyone', features: dm8(), people: [] };
+  assert.deepEqual(parseDm(ok), ok);
+  const bad = [
+    [{ ...ok, who: 'all' }, /Chưa chọn ai/],
+    [{ ...ok, features: { ...dm8(), groupCron: true } }, /tính năng/],
+    [{ ...ok, features: { web: true } }, /tính năng/],
+    [{ ...ok, people: 'x' }, /Danh sách người/],
+    [{ ...ok, people: [{ uid: '0912345678' }] }, /không phải UID Zalo — .*\/sethome/],
+    [{ ...ok, people: [{ uid: P1, features: { web: false } }] }, /Tính năng riêng/],
+    [{ ...ok, people: Array.from({ length: 201 }, (_, i) => ({ uid: String(1234567890123456n + BigInt(i)) })) }, /tối đa 200/],
+    [null, /Chưa chọn ai/],
+  ];
+  for (const [body, re] of bad) assert.throws(() => parseDm(body), (e) => e instanceof InvalidPermissions && re.test(e.message), JSON.stringify(body)?.slice(0, 60));
+});
+
+test('makeDmEnv: config.yaml thắng .env; "open" → mọi người; cờ mở cổng của Hermes; đọc lại khi tệp đổi', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'zd-dmenv-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const envFile = join(dir, '.env');
+  const configFile = join(dir, 'config.yaml');
+  const read = makeDmEnv({ envFile, configFile, inherited: { ZALO_ALLOW_ALL_USERS: 'true' } });
+  assert.deepEqual(read(), { legacyWho: 'owners', gatewayOpen: true }, 'không có tệp: mặc định owner-only, cờ từ môi trường dịch vụ');
+  let stamp = 1_700_000_000;
+  const put = (path, text) => { writeFileSync(path, text); stamp += 10; utimesSync(path, stamp, stamp); };
+  put(envFile, 'ZALO_DM_POLICY=open\nZALO_ALLOW_ALL_USERS=false\n');
+  assert.deepEqual(read(), { legacyWho: 'everyone', gatewayOpen: false });
+  put(configFile, 'platforms:\n  zalo:\n    extra:\n      dm_policy: owner-only\n');
+  assert.equal(read().legacyWho, 'owners', 'extra.dm_policy trong config.yaml thắng .env như adapter');
+  put(envFile, 'GATEWAY_ALLOW_ALL_USERS=1\n');
+  assert.equal(read().gatewayOpen, true);
 });
