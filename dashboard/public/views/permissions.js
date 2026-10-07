@@ -49,12 +49,27 @@ function Toggle({ id, checked, onChange, label, hint }) {
   </div>`;
 }
 
-function Editor({ target, value, defaults, features, onSaved, onBack }) {
+export const LEAVE_MSG = 'Bạn có thay đổi chưa lưu ở nhóm này. Bỏ thay đổi và chuyển nhóm?';
+export const SAVED_DEFAULT_MSG = 'Đã lưu — nhóm này đang dùng mặc định. Bot hiện không thấy nhóm này nên nhóm được ẩn khỏi danh sách.';
+
+/** Được rời mục đang sửa không: không có thay đổi chưa lưu, hoặc người dùng đồng ý bỏ. */
+export function mayLeave(dirty, ask) {
+  return !dirty || Boolean(ask(LEAVE_MSG));
+}
+
+/** Sau khi lưu, nhóm còn trong danh sách không — nhóm chỉ có trong tệp, đưa về mặc định thì mất mục trong tệp. */
+export function staysListed(id, perms, groups) {
+  return id === DEFAULTS_KEY || Boolean(perms.groups[id]) || (groups || []).some((g) => g.id === id);
+}
+
+function Editor({ target, value, defaults, features, onSaved, onBack, onDirty }) {
   const isGroup = target.id !== DEFAULTS_KEY;
   const [draft, setDraft] = useState(() => pick(value));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
   const dirty = !sameSettings(draft, value);
+  useEffect(() => { onDirty(dirty); }, [dirty]);
+  useEffect(() => () => onDirty(false), []);
   const set = (patch) => { setDraft((d) => ({ ...d, ...patch })); setMsg({}); };
   const setFeature = (k, v) => { setDraft((d) => ({ ...d, features: { ...d.features, [k]: v } })); setMsg({}); };
 
@@ -65,8 +80,7 @@ function Editor({ target, value, defaults, features, onSaved, onBack }) {
     try {
       const path = isGroup ? `/api/permissions/groups/${encodeURIComponent(target.id)}` : '/api/permissions/defaults';
       const r = await api(path, { method: 'PUT', body: draft });
-      onSaved(r);
-      setMsg({ ok: 'Đã lưu — bot áp dụng ngay, không cần khởi động lại.' });
+      if (onSaved(r, target.id)) setMsg({ ok: 'Đã lưu — bot áp dụng ngay, không cần khởi động lại.' });
     } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
   }
 
@@ -109,6 +123,36 @@ export function Permissions() {
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
+  const [dirty, setDirty] = useState(false);
+  const [flash, setFlash] = useState('');
+
+  // Đang có thay đổi chưa lưu: hỏi trước khi đóng/tải lại trang, hoặc đổi trang qua thanh bên / nút Lùi.
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const here = location.hash;
+    const onUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    // popstate đến trước hashchange (bấm link thanh bên, nút Lùi/Tiến, sửa địa chỉ). Huỷ → trả lại địa chỉ cũ ngay,
+    // để khi hashchange tới thì bộ định tuyến của app.js vẫn thấy trang này và không chuyển.
+    const onPop = () => {
+      if (location.hash === here || mayLeave(true, (m) => window.confirm(m))) return;
+      history.replaceState(history.state, '', here);
+    };
+    addEventListener('beforeunload', onUnload);
+    addEventListener('popstate', onPop);
+    return () => { removeEventListener('beforeunload', onUnload); removeEventListener('popstate', onPop); };
+  }, [dirty]);
+
+  function choose(id) {
+    if (id === selected || !mayLeave(dirty, (m) => window.confirm(m))) return;
+    setFlash(''); setSelected(id);
+  }
+
+  function onSaved(r, id) {
+    setPerms(r);
+    if (staysListed(id, r, groups)) return true;
+    setFlash(SAVED_DEFAULT_MSG); setSelected(null);
+    return false;
+  }
 
   useEffect(() => {
     let alive = true;
@@ -144,6 +188,7 @@ export function Permissions() {
     <${PageHead} title="Phân quyền Bot" sub="Chọn bot được làm gì trong từng nhóm. Lưu là có hiệu lực ngay." />
     ${perms.corrupt ? html`<${Notice} kind="warn">Tệp phân quyền bị hỏng nên bot đang dùng mặc định (mọi tính năng bật). Lưu lại một mục bất kỳ để ghi tệp mới.<//>` : null}
     ${groupsError ? html`<${Notice} kind="warn">Chưa lấy được danh sách nhóm: ${groupsError} Danh sách dưới đây chỉ có nhóm đã chỉnh trước đó hoặc đã có trong Phiên chat.<//>` : null}
+    <${Live} ok=${flash} />
     <div class=${`perm${target ? ' has-sel' : ''}`}>
       <section class="card perm-list" aria-label="Nhóm">
         <div class="chat-search">
@@ -153,14 +198,14 @@ export function Permissions() {
         </div>
         <ul class="conv-list">
           <li><button type="button" class=${`conv${selected === DEFAULTS_KEY ? ' active' : ''}`}
-            aria-current=${selected === DEFAULTS_KEY ? 'true' : undefined} onClick=${() => setSelected(DEFAULTS_KEY)}>
+            aria-current=${selected === DEFAULTS_KEY ? 'true' : undefined} onClick=${() => choose(DEFAULTS_KEY)}>
             <span class="conv-top"><span class="conv-name"><${Icon} name="shield" size=${16} /> Mặc định cho nhóm mới</span></span>
             <span class="conv-preview">Nhóm chưa chỉnh riêng dùng mục này</span>
           </button></li>
           ${shown.map((g) => {
             const badge = groupBadge(g);
             return html`<li key=${g.id}><button type="button" class=${`conv${selected === g.id ? ' active' : ''}`}
-              aria-current=${selected === g.id ? 'true' : undefined} onClick=${() => setSelected(g.id)}>
+              aria-current=${selected === g.id ? 'true' : undefined} onClick=${() => choose(g.id)}>
               <span class="conv-top"><span class="conv-name">${g.name}</span>
                 ${badge ? html`<span class=${`badge badge-${badge.kind}`}>${badge.text}</span>` : null}</span>
               <span class="conv-preview">${sub(g)}</span>
@@ -173,7 +218,7 @@ export function Permissions() {
       <section class="card perm-edit" aria-label="Quyền của nhóm">
         ${target
           ? html`<${Editor} key=${target.id} target=${target} value=${pick(target)}
-              defaults=${pick(perms.defaults)} features=${perms.features} onSaved=${setPerms} onBack=${() => setSelected(null)} />`
+              defaults=${pick(perms.defaults)} features=${perms.features} onSaved=${onSaved} onDirty=${setDirty} onBack=${() => choose(null)} />`
           : html`<p class="muted chat-empty">Chọn "Mặc định" hoặc một nhóm bên trái để chỉnh.</p>`}
       </section>
     </div>`;

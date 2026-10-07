@@ -132,3 +132,20 @@ test('phân quyền: gộp nhóm của bot với tệp, so thay đổi, nhãn tr
   const same = mergeGroups([], { defaults: perms.defaults, groups: { '500': { name: 'Tổ Văn', custom: true, ...perms.defaults } } });
   assert.equal(same[0].custom, false, 'mục trong tệp trùng hẳn mặc định thì không hiện "Chỉnh riêng"');
 });
+
+test('phân quyền: hỏi trước khi bỏ thay đổi chưa lưu; nhóm chỉ còn trong tệp về mặc định thì rời danh sách', async () => {
+  const { mayLeave, staysListed, LEAVE_MSG, DEFAULTS_KEY } = await import('./views/permissions.js');
+  const asked = [];
+  const ask = (answer) => (m) => { asked.push(m); return answer; };
+  assert.equal(mayLeave(false, ask(false)), true);
+  assert.deepEqual(asked, [], 'không có thay đổi thì không hỏi');
+  assert.equal(mayLeave(true, ask(false)), false);
+  assert.equal(mayLeave(true, ask(true)), true);
+  assert.deepEqual(asked, [LEAVE_MSG, LEAVE_MSG]);
+  assert.equal(LEAVE_MSG, 'Bạn có thay đổi chưa lưu ở nhóm này. Bỏ thay đổi và chuyển nhóm?');
+  const perms = { groups: { '300': {} } };
+  assert.equal(staysListed(DEFAULTS_KEY, perms, []), true);
+  assert.equal(staysListed('300', perms, []), true, 'còn mục trong tệp');
+  assert.equal(staysListed('200', perms, [{ id: '200' }]), true, 'bot còn thấy nhóm');
+  assert.equal(staysListed('400', perms, []), false, 'chỉ có trong tệp, vừa về mặc định');
+});
