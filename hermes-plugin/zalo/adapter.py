@@ -1146,6 +1146,10 @@ class ZaloAdapter(BasePlatformAdapter):
         kết quả (``metadata["job_id"]``). Việc do chủ nhân tạo vẫn gửi — chủ
         nhân không bao giờ bị bảng này chặn; job cron gốc của Hermes chỉ chủ
         nhân tạo được nên cũng gửi. Đọc job hay quyền lỗi → gửi như thường.
+
+        Giới hạn: chỉ chặn được tin chữ. Hermes gửi tệp/ảnh/thoại từ thẻ
+        ``MEDIA:`` của job qua ``media_metadata`` không kèm ``job_id``, nên
+        phần đó vẫn có thể tới nhóm đang tắt. Muốn dừng hẳn thì xoá việc hẹn giờ.
         """
         job_id = str(metadata.get("job_id") or "")
         if not job_id or _group_permissions is None:

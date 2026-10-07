@@ -97,7 +97,7 @@ function Editor({ target, value, defaults, features, onSaved, onBack, onDirty })
     <fieldset class="perm-set">
       <legend>Cách bot trả lời</legend>
       <${Toggle} id=${`${p}-active`} checked=${draft.active} onChange=${(v) => set({ active: v })} label="Hoạt động"
-        hint="Tắt thì bot không trả lời thành viên trong nhóm (vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi). Việc hẹn giờ do thành viên tạo cho nhóm vẫn chạy nhưng không gửi gì vào nhóm; việc chủ nhân hẹn vẫn gửi." />
+        hint="Tắt thì bot không trả lời thành viên trong nhóm (vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi). Việc hẹn giờ do thành viên tạo không còn gửi tin chữ vào nhóm đang tắt; muốn dừng hẳn, nhờ chủ nhân xoá việc đó. Việc chủ nhân hẹn vẫn gửi." />
       <${Toggle} id=${`${p}-tag`} checked=${draft.replyOnlyTagged} onChange=${(v) => set({ replyOnlyTagged: v })} label="Chỉ trả lời khi được tag"
         hint="Tắt thì bot trả lời mọi tin trong nhóm." />
     </fieldset>

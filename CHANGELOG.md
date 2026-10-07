@@ -8,7 +8,7 @@ Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
 - **Dashboard: Phân quyền Bot theo nhóm.** Mỗi nhóm có công tắc Hoạt động, Chỉ trả lời khi được tag và 9 tính năng (tra cứu web, gửi và tạo tệp, tin nhắn thoại, nhắc hẹn, hẹn giờ cho nhóm, kho tài liệu, sổ người quen, tra cứu học thuật, video); có mục Mặc định — nhóm chỉnh riêng chỉ giữ những mục khác mặc định, mục còn lại đi theo Mặc định. Quản trị và Chủ bot đều chỉnh được; mọi lần lưu ghi vào Nhật ký. Trang cảnh báo khi rời đi lúc còn thay đổi chưa lưu.
 - **Bot áp dụng phân quyền ngay khi lưu**, không cần khởi động lại: công cụ được kiểm tra đúng lúc gọi, và lượt của thành viên kèm một dòng "Nhóm này đang tắt: …" liệt kê tính năng đang tắt, nên bot không hứa việc mình không được làm; chủ nhân không bao giờ bị chặn. Tắt "Hẹn giờ cho nhóm" chỉ chặn tạo việc mới.
-- **Nhóm tắt "Hoạt động":** bot bỏ qua tin của thành viên (không trả lời) nhưng vẫn giữ làm ngữ cảnh khi chủ nhân hỏi. Việc hẹn giờ do thành viên tạo cho nhóm vẫn chạy nhưng không gửi kết quả vào nhóm; việc chủ nhân hẹn vẫn gửi.
+- **Nhóm tắt "Hoạt động":** bot bỏ qua tin của thành viên (không trả lời) nhưng vẫn giữ làm ngữ cảnh khi chủ nhân hỏi. Việc hẹn giờ do thành viên tạo không còn gửi tin chữ vào nhóm đang tắt; muốn dừng hẳn, nhờ chủ nhân xoá việc đó. Việc chủ nhân hẹn vẫn gửi.
 
 ### Sửa
 
