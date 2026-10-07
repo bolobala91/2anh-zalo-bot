@@ -158,5 +158,76 @@ class GuardFeatureTest(PermissionsFile, unittest.TestCase):
         self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
 
 
+class AdapterGroupRulesTest(PermissionsFile, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(patch.dict(os.environ, {"ZALO_ALLOWED_USERS": OWNER}))
+
+    def make_adapter(self, reply_only_tagged=True):
+        adapter = zalo_adapter.ZaloAdapter(PlatformConfig(enabled=True, extra={
+            "bridge_url": "ws://127.0.0.1:9", "reply_only_tagged": reply_only_tagged, "ack_gestures": False,
+        }))
+        adapter._self_profile = {"user_id": "bot-uid", "display_name": "Lăng Tiêu"}
+        adapter._flood.check = lambda _uid: None
+        self.handled = []
+
+        async def handle(event):
+            self.handled.append(event)
+
+        adapter.handle_message = handle
+        return adapter
+
+    async def say(self, adapter, msg_id, sender, text, *, tagged=True, thread=GROUP_A):
+        frame = {"type": "message", "id": msg_id, "threadId": thread,
+                 "threadType": zalo_adapter.THREAD_TYPE_GROUP, "senderUid": sender,
+                 "senderName": "Lan", "text": text}
+        if tagged:
+            frame["mentions"] = [{"uid": "bot-uid"}]
+        with patch.object(zalo_adapter, "_zalo_tools", return_value=zalo_tools):
+            await adapter._on_message(frame)
+
+    async def test_inactive_group_ignores_members_but_keeps_context_and_owner(self):
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"active": False}}})
+        adapter = self.make_adapter()
+        await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu chào bot")
+        self.assertEqual(self.handled, [])
+        self.assertEqual(list(adapter._recent_group_messages[GROUP_A])[0]["text"], "@Lăng Tiêu chào bot")
+        await self.say(adapter, "m2", OWNER, "@Lăng Tiêu tóm tắt nhóm")
+        self.assertEqual(len(self.handled), 1)
+        await self.say(adapter, "m3", MEMBER, "@Lăng Tiêu chào", thread=GROUP_B)
+        self.assertEqual(len(self.handled), 2)
+
+    async def test_reply_only_tagged_overrides_global_flag_per_group(self):
+        self.write({"version": 1, "defaults": {}, "groups": {GROUP_A: {"replyOnlyTagged": False}}})
+        adapter = self.make_adapter(reply_only_tagged=True)
+        await self.say(adapter, "m1", MEMBER, "ai biết lịch họp không", tagged=False)
+        self.assertEqual(len(self.handled), 1)
+        await self.say(adapter, "m2", MEMBER, "ai biết lịch họp không", tagged=False, thread=GROUP_B)
+        self.assertEqual(len(self.handled), 1)
+
+        self.write({"version": 1, "defaults": {"replyOnlyTagged": True}, "groups": {}})
+        adapter = self.make_adapter(reply_only_tagged=False)
+        await self.say(adapter, "m3", MEMBER, "ai biết lịch họp không", tagged=False)
+        self.assertEqual(len(self.handled), 0)
+
+    async def test_member_turn_lists_disabled_features_owner_turn_does_not(self):
+        self.write({"version": 1, "defaults": {"features": {"video": False}},
+                    "groups": {GROUP_A: {"features": {"web": False}}}})
+        adapter = self.make_adapter()
+        await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu tra giá vàng")
+        context = self.handled[0].channel_context
+        self.assertIn("Nhóm này đang tắt: tra cứu web, tải và xem thông tin video", context)
+        await self.say(adapter, "m2", OWNER, "@Lăng Tiêu tra giá vàng")
+        self.assertNotIn("đang tắt", self.handled[1].channel_context or "")
+
+    async def test_corrupt_file_never_silences_the_bot(self):
+        self.write("{hỏng")
+        adapter = self.make_adapter()
+        with self.assertLogs(gp.logger, level="WARNING"):
+            await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu chào")
+        self.assertEqual(len(self.handled), 1)
+        self.assertNotIn("đang tắt", self.handled[0].channel_context or "")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -92,6 +92,7 @@ from agent.secret_scope import get_secret as _scoped_get_secret
 # ghi chú trong plugins/zalo_tools/__init__.py về việc Hermes nạp platform
 # plugin theo kiểu lười.
 from plugins.zalo_tools.tools import TOOLSET_OWNER, TOOLSET_PUBLIC
+from plugins.zalo_tools import group_permissions as _group_permissions
 
 from .flood import JUST_MUTED as FLOOD_JUST_MUTED
 from .flood import MUTED as FLOOD_MUTED
@@ -837,10 +838,20 @@ class ZaloAdapter(BasePlatformAdapter):
             return
 
         is_owner = self._is_owner(sender_uid)
+        # Bảng phân quyền nhóm của dashboard (permissions.json, đọc lại khi tệp
+        # đổi). Nhóm bị tắt: tin của thành viên chỉ giữ làm ngữ cảnh như trên;
+        # chủ nhân không bao giờ bị chặn bởi tệp này.
+        group_rules = self._group_rules(thread_id) if is_group else None
+        if group_rules and not group_rules["active"] and not is_owner:
+            logger.debug("[zalo] nhóm %s đang tắt trên dashboard — %s chỉ giữ làm ngữ cảnh", thread_id, sender_uid)
+            return
+        reply_only_tagged = self._reply_only_tagged
+        if group_rules and group_rules["reply_only_tagged"] is not None:
+            reply_only_tagged = group_rules["reply_only_tagged"]
         mentioned = self._is_mentioned(frame, text, is_owner=is_owner)
         # Trong nhóm: không trả lời khi chưa được gọi, nhưng vẫn giữ tin đó trong
         # rolling memory ở trên để câu tag ngay sau có ảnh/ngữ cảnh gần nhất.
-        if is_group and self._reply_only_tagged and not mentioned:
+        if is_group and reply_only_tagged and not mentioned:
             logger.debug("[zalo] group message not addressed to the bot — saved as context only")
             return
 
@@ -967,6 +978,15 @@ class ZaloAdapter(BasePlatformAdapter):
             self._build_channel_context(context_entries, image_count, attach_failures)
             if is_group else self._image_failure_note(attach_failures)
         )
+        # Không hứa suông: thành viên hỏi trong nhóm đang tắt vài tính năng thì
+        # nói trước cho mô hình biết, khỏi hứa "để mình tra" rồi bị chặn.
+        if group_rules and not is_owner:
+            off = [feature for feature in _group_permissions.FEATURES if not group_rules["features"][feature]]
+            if off:
+                labels = ", ".join(_group_permissions.FEATURE_LABELS[feature] for feature in off)
+                note = (f"[Nhóm này đang tắt: {labels}. Đừng hứa hay thử làm những việc đó; "
+                        "nếu được nhờ, nói rõ chủ bot chưa bật tính năng này trong nhóm.]")
+                channel_context = f"{channel_context}\n{note}" if channel_context else note
         reply_to_text = None
         if quote:
             reply_to_text = str(quote.get("text") or "").strip() or None
@@ -1071,6 +1091,15 @@ class ZaloAdapter(BasePlatformAdapter):
             )
 
         await self.handle_message(event)
+
+    @staticmethod
+    def _group_rules(thread_id: str) -> Optional[Dict[str, Any]]:
+        """Quyền nhóm từ permissions.json; lỗi bất ngờ → None (hành xử như chưa có tệp)."""
+        try:
+            return _group_permissions.group_settings(thread_id)
+        except Exception as exc:
+            logger.warning("[zalo] không đọc được quyền nhóm %s: %s", thread_id, exc)
+            return None
 
     def _remember_turn(self, turn: Dict[str, Any]) -> None:
         """Nhớ danh tính theo mã tin để mỗi lượt agent gắn lại đúng người."""
