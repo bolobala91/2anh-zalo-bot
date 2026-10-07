@@ -23,6 +23,7 @@ import { createPermissionsStore, makeGlobalReplyOnlyTagged } from './lib/permiss
 import { createWatchdog } from './lib/watchdog.js';
 import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
+import { createBrandStore } from './lib/brand.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -66,6 +67,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
       stateFile: paths.watchdogFile, publicUrl: config.publicUrl, botName: () => botName,
     }),
     restartAssistant: makeRestartAssistant({ cmd: config.assistantRestartCmd, hermesHome: paths.hermesHome }),
+    brand: createBrandStore({ file: paths.brandFile, logoFile: paths.brandLogoFile }),
     publicDir: join(here, 'public'),
   };
 }

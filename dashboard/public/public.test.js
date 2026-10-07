@@ -100,9 +100,11 @@ test('giao diện không dùng innerHTML và không có style nội tuyến (CSP
   }
 });
 
-test('index.html không tải tài nguyên từ Internet', () => {
+test('index.html không tải tài nguyên từ Internet; nạp brand.css sau style.css để màu thương hiệu đè lên', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   assert.doesNotMatch(html, /(src|href)=["']https?:/);
+  assert.ok(html.indexOf('href="brand.css"') > html.indexOf('href="style.css"'));
+  assert.match(html, /id="brand-css"/);
 });
 
 test('phân quyền: gộp nhóm của bot với tệp, so thay đổi, nhãn trong danh sách', async () => {

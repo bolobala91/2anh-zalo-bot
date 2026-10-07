@@ -36,6 +36,10 @@ export const ACTION_LABELS = {
   telegram_settings: 'Đổi cài đặt Telegram cảnh báo',
   permissions_defaults: 'Đổi phân quyền mặc định',
   permissions_group: 'Đổi phân quyền nhóm',
+  brand_update: 'Đổi thương hiệu',
+  brand_logo: 'Đổi logo',
+  brand_logo_remove: 'Gỡ logo',
+  brand_reset: 'Khôi phục thương hiệu mặc định',
 };
 
 const REASONS = {
