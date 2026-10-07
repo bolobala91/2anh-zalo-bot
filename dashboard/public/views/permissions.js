@@ -19,7 +19,7 @@ export function mergeGroups(groups, perms) {
     if (seen.has(id)) return;
     seen.add(id);
     const own = perms.groups[id];
-    // Mục trong tệp có thể trùng hẳn mặc định (máy chủ ghi rõ cờ tag khi mặc định chưa có) — khi đó không coi là chỉnh riêng.
+    // Mục trong tệp có thể trùng hẳn mặc định (tệp của bản cũ từng ghi cờ tag vào từng nhóm) — khi đó không coi là chỉnh riêng.
     const custom = Boolean(own) && !sameSettings(own, perms.defaults);
     out.push({ id, name: name || `Nhóm …${id.slice(-4)}`, members, custom, ...pick(own || perms.defaults) });
   };
@@ -93,11 +93,11 @@ function Editor({ target, value, defaults, features, onSaved, onBack, onDirty })
     </header>
     <p class="muted small perm-note">${isGroup
       ? 'Chỉ áp cho thành viên trong nhóm này. Chủ nhân bot luôn dùng được mọi tính năng.'
-      : 'Áp cho nhóm mới và mọi nhóm chưa chỉnh riêng. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng không theo bảng này.'}</p>
+      : 'Áp cho mọi nhóm. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng không theo bảng này.'}</p>
     <fieldset class="perm-set">
       <legend>Cách bot trả lời</legend>
       <${Toggle} id=${`${p}-active`} checked=${draft.active} onChange=${(v) => set({ active: v })} label="Hoạt động"
-        hint="Tắt thì bot không trả lời thành viên trong nhóm (vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi)." />
+        hint="Tắt thì bot không trả lời thành viên trong nhóm (vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi). Việc hẹn giờ do thành viên tạo cho nhóm vẫn chạy nhưng không gửi gì vào nhóm; việc chủ nhân hẹn vẫn gửi." />
       <${Toggle} id=${`${p}-tag`} checked=${draft.replyOnlyTagged} onChange=${(v) => set({ replyOnlyTagged: v })} label="Chỉ trả lời khi được tag"
         hint="Tắt thì bot trả lời mọi tin trong nhóm." />
     </fieldset>
@@ -200,7 +200,7 @@ export function Permissions() {
           <li><button type="button" class=${`conv${selected === DEFAULTS_KEY ? ' active' : ''}`}
             aria-current=${selected === DEFAULTS_KEY ? 'true' : undefined} onClick=${() => choose(DEFAULTS_KEY)}>
             <span class="conv-top"><span class="conv-name"><${Icon} name="shield" size=${16} /> Mặc định cho nhóm mới</span></span>
-            <span class="conv-preview">Nhóm chưa chỉnh riêng dùng mục này</span>
+            <span class="conv-preview">Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định.</span>
           </button></li>
           ${shown.map((g) => {
             const badge = groupBadge(g);
