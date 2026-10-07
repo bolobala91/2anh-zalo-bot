@@ -234,6 +234,16 @@ class AdapterGroupRulesTest(PermissionsFile, unittest.IsolatedAsyncioTestCase):
         await self.say(adapter, "m2", OWNER, "@Lăng Tiêu tra giá vàng")
         self.assertNotIn("đang tắt", self.handled[1].channel_context or "")
 
+    async def test_half_updated_install_without_group_permissions_keeps_answering(self):
+        self.write({"version": 1, "defaults": {"features": {"web": False}},
+                    "groups": {GROUP_A: {"active": False}}})
+        adapter = self.make_adapter()
+        with patch.object(zalo_adapter, "_group_permissions", None):
+            self.assertIsNone(adapter._group_rules(GROUP_A))
+            await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu chào")
+        self.assertEqual(len(self.handled), 1)
+        self.assertNotIn("đang tắt", self.handled[0].channel_context or "")
+
     async def test_corrupt_file_never_silences_the_bot(self):
         self.write("{hỏng")
         adapter = self.make_adapter()
