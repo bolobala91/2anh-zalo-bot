@@ -103,5 +103,60 @@ class GroupPermissionsTest(PermissionsFile, unittest.TestCase):
         self.assertEqual(set(gp.FEATURE_LABELS), set(gp.FEATURES))
 
 
+class GuardFeatureTest(PermissionsFile, unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self.write({"version": 1, "defaults": {},
+                    "groups": {GROUP_A: {"features": {"web": False, "groupCron": False}}}})
+        self.addCleanup(zalo_tools.bind_turn, None)
+
+    def turn(self, *, thread=GROUP_A, owner=False, group=True):
+        zalo_tools.bind_turn({"sender_uid": OWNER if owner else MEMBER, "thread_id": thread,
+                              "is_group": group, "is_owner": owner, "text": ""})
+
+    def test_member_in_group_with_web_off_is_refused_in_plain_vietnamese(self):
+        self.turn()
+        verdict = zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "giá vàng"})
+        self.assertEqual(verdict["action"], "block")
+        self.assertIn("Nhóm này chưa bật tính năng tra cứu web", verdict["message"])
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_kb_list", {}))
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_send_sticker", {}))
+
+    def test_other_group_dm_and_owner_are_not_affected(self):
+        self.turn(thread=GROUP_B)
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
+        self.turn(owner=True)
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
+        self.write({"version": 1, "defaults": {"features": {"web": False}}, "groups": {}})
+        self.turn(thread=MEMBER, group=False)
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
+
+    def test_group_cron_off_blocks_only_create(self):
+        self.turn()
+        self.assertEqual(zalo_tools.guard_member_tool_call("zalo_group_cron", {"action": "create"})["action"], "block")
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_group_cron", {"action": "list"}))
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_group_cron", {"action": "remove", "job_id": "a"}))
+
+    def test_tool_call_bridge_is_checked_against_the_real_tool(self):
+        self.turn()
+        with patch("tools.tool_search.resolve_underlying_call",
+                   return_value=("zalo_web_read", {"url": "https://a.vn"}, None)):
+            verdict = zalo_tools.guard_member_tool_call(
+                "tool_call", {"name": "zalo_web_read", "arguments": {"url": "https://a.vn"}})
+        self.assertEqual(verdict["action"], "block")
+
+    def test_owner_turn_with_outsider_interjection_is_held_to_group_rules(self):
+        zalo_tools.bind_turn({"sender_uid": OWNER, "thread_id": GROUP_A, "is_group": True,
+                              "is_owner": True, "text": "", "seq": 1})
+        with patch.object(zalo_tools, "_outsider_spoke_after", return_value=True):
+            verdict = zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"})
+        self.assertEqual(verdict["action"], "block")
+        self.assertIn("chưa bật", verdict["message"])
+
+    def test_no_zalo_turn_means_no_check(self):
+        zalo_tools.bind_turn(None)
+        self.assertIsNone(zalo_tools.guard_member_tool_call("zalo_web_search", {"query": "x"}))
+
+
 if __name__ == "__main__":
     unittest.main()
