@@ -25,6 +25,8 @@ import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
 import { createBrandStore } from './lib/brand.js';
 import { createOwnersStore } from './lib/owners.js';
+import { createServiceChecker } from './lib/services.js';
+import { createHealthMonitor } from './lib/health-monitor.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +50,11 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
   const restartSidecar = makeRestartSidecar({ cmd: config.restartCmd, sidecarRoot: paths.sidecarRoot, port: sidecarPort });
   let botName = 'Bot Zalo';
   const watchedSidecar = { health: async () => { const h = await sidecar.health(); if (h?.zalo?.displayName) botName = h.zalo.displayName; return h; } };
+  const watchdog = createWatchdog({
+    sidecar: watchedSidecar, notify: (text) => linker.broadcast(text),
+    restartSidecar,
+    stateFile: paths.watchdogFile, publicUrl: config.publicUrl, botName: () => botName,
+  });
   return {
     paths, config, sidecar, linker,
     store: createStoreReader({ path: paths.sqliteFile }),
@@ -65,10 +72,11 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
       }),
       dmEnv: makeDmEnv({ envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, inherited: inheritedDm }),
     }),
-    watchdog: createWatchdog({
-      sidecar: watchedSidecar, notify: (text) => linker.broadcast(text),
-      restartSidecar,
-      stateFile: paths.watchdogFile, publicUrl: config.publicUrl, botName: () => botName,
+    watchdog,
+    // Sức khoẻ máy chủ: đo ổ đĩa chứa dữ liệu bot (HERMES_HOME); lượt gọi AI từ state.db của Hermes (chỉ đọc).
+    health: createHealthMonitor({
+      diskPath: paths.hermesHome, historyFile: paths.healthHistoryFile, usageFile: paths.aiUsageFile, stateDb: paths.hermesStateDb,
+      services: createServiceChecker({ hermesHome: paths.hermesHome, sidecarPort, dashboardPort: config.port }), watchdog,
     }),
     restartAssistant: makeRestartAssistant({ cmd: config.assistantRestartCmd, hermesHome: paths.hermesHome }),
     restartSidecar,
@@ -92,6 +100,9 @@ async function main() {
   app.listen(deps.config.port, '127.0.0.1', () => console.log(`[dashboard] đang chạy tại ${deps.config.publicUrl} (127.0.0.1:${deps.config.port})`));
   const tick = async () => { try { await deps.watchdog.tick(); } catch (e) { console.warn('[watchdog]', e.message); } };
   setInterval(tick, 30_000); tick();
+  // Đo máy chủ mỗi phút; lần đầu sau 5 giây để CPU có một khoảng đo thật.
+  const healthTick = async () => { try { await deps.health.tick(); } catch (e) { console.warn('[health]', e.message); } };
+  setTimeout(healthTick, 5_000); setInterval(healthTick, 60_000);
   (async function poll() {
     for (;;) {
       if (!deps.linker.configured()) { await new Promise((r) => setTimeout(r, 15_000)); continue; }

@@ -166,3 +166,54 @@ test('Zalo đang có sự cố: không báo thêm "Trợ lý", giữ nguyên tr�
   assert.equal(wd2.incidents().assistant.since, since);
   assert.equal(two.sent.length, 0);
 });
+
+// --- Máy chủ quá tải (spec §16.B) ---
+const host = (over = {}) => ({ cpuPct: 20, ramPct: 50, diskPct: 40, ...over });
+
+test('ổ đĩa > 90 %: báo ở lần đo thứ hai liên tiếp, kèm số % và link trang Sức khoẻ; hồi phục dưới 85 % thì báo', async (t) => {
+  const clock = { t: 0 };
+  const { make, sent } = mk(t, { h: ok }, clock); const wd = make();
+  await wd.checkHost(host({ diskPct: 93.4 }));
+  assert.equal(sent.length, 0, 'một lần đo lẻ chưa báo');
+  clock.t = 60_000; await wd.checkHost(host({ diskPct: 93.5 }));
+  assert.equal(sent.length, 1);
+  assert.match(sent[0], /Uyển Nhi: ổ đĩa máy chủ đã đầy 93\.5%/);
+  assert.match(sent[0], /https:\/\/d\.vn\/#\/health/);
+  clock.t = 120_000; await wd.checkHost(host({ diskPct: 88 }));
+  assert.equal(sent.length, 1, '88 % vẫn trên ngưỡng hết (85 %) — chưa báo hồi phục');
+  clock.t = 180_000; await wd.checkHost(host({ diskPct: 80 }));
+  assert.equal(sent.at(-1), '✅ Uyển Nhi: ổ đĩa máy chủ đã trở lại bình thường.');
+});
+
+test('RAM > 90 % phải kéo dài 5 phút, CPU > 90 % kéo dài 10 phút; một lần xuống dưới 85 % thì đếm lại', async (t) => {
+  const clock = { t: 0 };
+  const { make, sent } = mk(t, { h: ok }, clock); const wd = make();
+  for (let m = 0; m <= 4; m++) { clock.t = m * 60_000; await wd.checkHost(host({ ramPct: 95, cpuPct: 97 })); }
+  assert.equal(sent.length, 0, '4 phút: chưa báo');
+  clock.t = 5 * 60_000; await wd.checkHost(host({ ramPct: 95, cpuPct: 97 }));
+  assert.equal(sent.length, 1);
+  assert.match(sent[0], /RAM\) máy chủ đang dùng 95% suốt hơn 5 phút/);
+  clock.t = 6 * 60_000; await wd.checkHost(host({ ramPct: 95, cpuPct: 50 })); // CPU hạ → đếm lại
+  for (let m = 7; m <= 16; m++) { clock.t = m * 60_000; await wd.checkHost(host({ ramPct: 95, cpuPct: 97 })); }
+  assert.equal(sent.filter((s) => /CPU/.test(s)).length, 0, 'chưa đủ 10 phút liên tục');
+  clock.t = 17 * 60_000; await wd.checkHost(host({ ramPct: 95, cpuPct: 97 }));
+  assert.match(sent.at(-1), /CPU máy chủ bận 97% suốt hơn 10 phút/);
+  assert.equal(sent.filter((s) => /RAM/.test(s)).length, 1, 'RAM chỉ báo một lần, nhắc lại sau 6 giờ');
+  clock.t = 5 * 60_000 + 6 * 3600_000; await wd.checkHost(host({ ramPct: 96, cpuPct: 97 }));
+  assert.match(sent.filter((s) => /RAM/.test(s)).at(-1), /96%/);
+});
+
+test('máy chủ: khởi động lại dashboard không báo trùng; số đo null giữ nguyên trạng thái; không đụng các sự cố Zalo', async (t) => {
+  const clock = { t: 0 };
+  const { make, sent } = mk(t, { h: ok }, clock);
+  let wd = make();
+  await wd.checkHost(host({ diskPct: 95 })); clock.t = 60_000; await wd.checkHost(host({ diskPct: 95 }));
+  assert.equal(sent.length, 1);
+  wd = make(); // khởi động lại
+  clock.t = 120_000; await wd.checkHost(host({ diskPct: 95 }));
+  clock.t = 180_000; await wd.checkHost(host({ diskPct: null }));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(Object.keys(wd.incidents()), ['disk']);
+  await wd.tick();
+  assert.deepEqual(Object.keys(wd.incidents()), ['disk']);
+});
