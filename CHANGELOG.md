@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.15.3] — 2026-10-11
+
+### Sửa
+- Bot nay đọc được ảnh trong tin được trả lời (quote/reply) và các ảnh khác mà trước đây hay báo "tải tệp quá thời gian chờ".
+  - Nguyên nhân: một số máy chủ ảnh của Zalo (ví dụ `photo-stal-10.zdn.vn`) trả về một địa chỉ IPv6 đứng đầu danh sách nhưng máy chủ bot không kết nối tới được. Bộ tải chờ địa chỉ đó tới 30 giây, mà mỗi lượt tải chỉ có 15 giây, nên hết giờ trước khi kịp thử địa chỉ IPv4 còn dùng được.
+  - Cách sửa: mỗi địa chỉ chỉ được chờ kết nối 3 giây rồi chuyển sang địa chỉ kế tiếp. Ảnh thường cũng tải qua bộ tải này. Đo trên VPS: tấm ảnh trước đây hỏng nay tải xong trong khoảng 3 giây.
+
 ## [2.15.2] — 2026-10-11
 
 ### Sửa

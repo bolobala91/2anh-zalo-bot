@@ -3315,5 +3315,61 @@ class ZaloFriendToolsTest(unittest.IsolatedAsyncioTestCase):
         ])
 
 
+class AttachmentDownloadTimeoutTests(unittest.IsolatedAsyncioTestCase):
+    """Máy chủ ảnh Zalo (vd. photo-stal-10.zdn.vn) có địa chỉ IPv6 đứng đầu nhưng không vào được từ VPS.
+    Bộ tải thử từng IP theo thứ tự; chờ kết nối 30 s mỗi IP thì hết hạn 15 s của lượt trước khi tới IPv4
+    (đo 11/10/2026: ảnh reply báo "tải tệp quá thời gian chờ" dù curl tải trong 0,35 s)."""
+
+    async def test_connect_timeout_is_short_so_a_dead_ip_falls_through_to_the_next(self):
+        seen = {}
+
+        class FakeResponse:
+            def raise_for_status(self):
+                pass
+
+            async def aiter_bytes(self):
+                yield b"\xff\xd8\xff data"
+
+        class FakeStream:
+            async def __aenter__(self):
+                return FakeResponse()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        class FakeClient:
+            def __init__(self, **kwargs):
+                seen.update(kwargs)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            def stream(self, *args, **kwargs):
+                return FakeStream()
+
+        with patch("tools.url_safety.create_ssrf_safe_async_client", FakeClient), \
+                patch("tools.url_safety.is_safe_url", return_value=True):
+            data = await zalo_adapter.ZaloAdapter._download_attachment("https://photo-stal-10.zdn.vn/gr/jpg/a/b.jpg")
+        self.assertEqual(data, b"\xff\xd8\xff data")
+        timeout = seen["timeout"]
+        self.assertLessEqual(timeout.connect, 5.0)
+        # Hai IP chết liền nhau vẫn còn thời gian cho IP thứ ba trong hạn của cả lượt.
+        self.assertLess(2 * timeout.connect, zalo_adapter.ATTACHMENT_TIMEOUT_S)
+
+    async def test_plain_images_use_the_same_fast_downloader(self):
+        async def fake_download(url):
+            self.assertEqual(url, "https://photo-stal-10.zdn.vn/gr/jpg/a/b.jpg")
+            return b"\xff\xd8\xff anh"
+
+        with patch.object(zalo_adapter.ZaloAdapter, "_download_attachment", staticmethod(fake_download)), \
+                patch.object(zalo_adapter, "cache_image_from_bytes", return_value="/cache/img.jpg") as cache:
+            path = await zalo_adapter.cache_image_from_url("https://photo-stal-10.zdn.vn/gr/jpg/a/b.jpg")
+        self.assertEqual(path, "/cache/img.jpg")
+        cache.assert_called_once_with(b"\xff\xd8\xff anh")
+
+
 if __name__ == "__main__":
     unittest.main()

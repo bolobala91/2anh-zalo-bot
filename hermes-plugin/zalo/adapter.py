@@ -80,7 +80,6 @@ from gateway.platforms.base import (
     MessageType,
     SendResult,
     cache_image_from_bytes,
-    cache_image_from_url,
     cache_media_bytes,
     validate_inbound_media_size,
 )
@@ -371,6 +370,20 @@ def _frame_carries_media(frame: Dict[str, Any]) -> bool:
 # Tải tệp đính kèm nằm ngay trên đường nhận tin: treo ở đây là cả hàng đợi tin
 # nhắn phải chờ. Quá hạn thì bỏ tệp, tin vẫn đi tiếp.
 ATTACHMENT_TIMEOUT_S = 15.0
+# Máy chủ ảnh Zalo có thể trả một địa chỉ IPv6 đứng đầu mà VPS không vào được (photo-stal-10.zdn.vn,
+# 11/10/2026). Bộ tải chống SSRF thử lần lượt từng IP; chờ kết nối 30 s mỗi IP thì hết hạn cả lượt
+# trước khi tới IPv4 → "tải tệp quá thời gian chờ" dù curl/trình duyệt tải ngay. Chờ ngắn để nhảy IP.
+CONNECT_TIMEOUT_S = 3.0
+
+
+async def cache_image_from_url(url: str) -> str:
+    """Tải ảnh qua bộ tải của plugin (chờ kết nối ngắn mỗi IP) rồi lưu cache.
+
+    Thay ``gateway.platforms.base.cache_image_from_url`` của Hermes: bản đó chờ kết nối 30 s mỗi IP
+    nên kẹt ở IPv6 chết như mô tả ở ``CONNECT_TIMEOUT_S``. Vẫn qua lớp chống SSRF và hạn mức cỡ tệp;
+    ``cache_image_from_bytes`` từ chối dữ liệu không phải ảnh (vd. trang lỗi HTML).
+    """
+    return cache_image_from_bytes(await ZaloAdapter._download_attachment(url))
 
 # Tệp thật của Zalo nằm trên CDN của Zalo, hoặc có đuôi tệp rõ ràng. Link người
 # dùng dán (github.com/x.git, trang tin…) thì không phải tệp: tải về vừa vô ích
@@ -1540,11 +1553,13 @@ class ZaloAdapter(BasePlatformAdapter):
     @staticmethod
     async def _download_attachment(url: str) -> bytes:
         """Tải một tệp đính kèm, chặn địa chỉ nội bộ và cắt theo hạn mức của Hermes."""
+        import httpx
         from tools.url_safety import create_ssrf_safe_async_client, is_safe_url
 
         if not is_safe_url(url):
             raise ValueError("Blocked unsafe URL (SSRF protection)")
-        async with create_ssrf_safe_async_client(timeout=30.0, follow_redirects=True) as client:
+        timeout = httpx.Timeout(30.0, connect=CONNECT_TIMEOUT_S)
+        async with create_ssrf_safe_async_client(timeout=timeout, follow_redirects=True) as client:
             body = bytearray()
             async with client.stream(
                 "GET", url,
