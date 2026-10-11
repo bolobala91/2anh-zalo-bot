@@ -92,6 +92,29 @@ export const GROUPS = [
   ] },
 ];
 
+// Mỗi mục một màu (ô biểu tượng ở thanh bên, tiêu đề thẻ trong trang) — kiểu macOS: nhìn màu là biết đang ở đâu.
+export const TINTS = {
+  '/': 'indigo', '/chats': 'blue', '/contacts': 'green', '/permissions': 'purple', '/schedules': 'orange',
+  '/memory': 'pink', '/kb': 'brown', '/insight': 'teal', '/second-brain': 'purple', '/mcp': 'cyan',
+  '/zalo': 'blue', '/agent': 'gray', '/ai': 'yellow', '/tools': 'gray', '/skills': 'green', '/audit': 'gray',
+  '/brand': 'pink', '/health': 'red', '/maintenance': 'indigo', '/settings': 'gray',
+  '/users': 'blue', '/owners': 'yellow', '/alerts': 'red', '/profile': 'gray', '/trace': 'gray',
+};
+export const tintOf = (path) => TINTS[path] || 'gray';
+
+function NavIcon({ path, icon }) {
+  return html`<span class=${`nav-ico tint-${tintOf(path)}`} aria-hidden="true"><${Icon} name=${icon} size=${16} /></span>`;
+}
+
+/** Số liệu nhỏ bên phải mục menu (như "CPU 59%"): tin hôm nay, CPU máy chủ, có bản mới. */
+export function navValue(path, status, notice) {
+  if (path === '/chats' && status?.today) return String((status.today.received || 0) + (status.today.sent || 0));
+  if (path === '/health' && Number.isFinite(status?.host?.cpuPct)) return `${Math.round(status.host.cpuPct)}%`;
+  if (path === '/zalo' && status) return status.sidecar === 'down' || status.zalo?.status !== 'logged-in' ? 'Tắt' : '';
+  if (path === '/maintenance' && notice?.newer) return 'Mới';
+  return '';
+}
+
 /** Tính năng bật theo cấu hình máy chủ (/api/features); lỗi → mọi tính năng tuỳ chọn ẩn. */
 function useFeatures() {
   const [features, setFeatures] = useState({});
@@ -157,8 +180,8 @@ export function noticeText(n) {
   return n.newer ? `Có bản mới ${n.latest}` : '';
 }
 
-function StatusStrip({ status, error, path, admin }) {
-  const notice = noticeText(useUpdateNotice());
+function StatusStrip({ status, error, path, admin, update }) {
+  const notice = noticeText(update);
   let lv;
   if (error) lv = { kind: 'warn', icon: 'warn', text: `Không cập nhật được trạng thái. ${error}` };
   else if (status) lv = statusLevel(status);
@@ -246,16 +269,19 @@ function MobileNav({ me, path, features }) {
         ${moreSections(more).map((sec) => html`<div key=${sec.label} class="nav-more-group" role="group" aria-label=${sec.label}>
           <div class="nav-label" aria-hidden="true">${sec.label}</div>
           ${sec.items.map((it) => html`<a key=${it.path} class=${`nav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`}
-            aria-current=${path === it.path ? 'page' : undefined}><${Icon} name=${it.icon} /><span>${it.text}</span></a>`)}
+            aria-current=${path === it.path ? 'page' : undefined}><${NavIcon} path=${it.path} icon=${it.icon} /><span>${it.text}</span></a>`)}
         </div>`)}
       </div>
     </details>
   </nav>`;
 }
 
-function Sidebar({ me, brand, path, features }) {
-  const link = (it) => html`<a class=${`nav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`}
-    aria-current=${path === it.path ? 'page' : undefined}><${Icon} name=${it.icon} /><span>${it.text}</span></a>`;
+function Sidebar({ me, brand, path, features, status, update }) {
+  const link = (it) => {
+    const v = navValue(it.path, status, update);
+    return html`<a class=${`nav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`}
+      aria-current=${path === it.path ? 'page' : undefined}><${NavIcon} path=${it.path} icon=${it.icon} /><span>${it.text}</span>${v ? html`<span class="nav-val">${v}</span>` : null}</a>`;
+  };
   return html`<aside class="sidebar">
     <div class="side-brand"><${BrandMark} brand=${brand} />
       <span class="side-brand-text"><span>${brand.name}</span><small>${brand.subtitle}</small></span></div>
@@ -285,6 +311,7 @@ function Message({ icon, title, children }) {
 export function Shell({ me, brand, path }) {
   const [status, error, refresh] = useStatus();
   const features = useFeatures();
+  const update = useUpdateNotice();
   const r = ROUTES[path];
   const mainRef = useRef(null);
   const crumbs = r ? crumbsFor(path) : [];
@@ -294,10 +321,10 @@ export function Shell({ me, brand, path }) {
   else if (r.admin && me.role !== 'admin') body = html`<${Message} icon="shield" title="Không có quyền">Trang này chỉ dành cho Quản trị. Nếu cần, hãy nhờ Quản trị làm giúp.<//>`;
   else body = html`<${r.view} me=${me} status=${status} refresh=${refresh} />`;
   return html`<div class="layout">
-    <${Sidebar} me=${me} brand=${brand} path=${path} features=${features} />
+    <${Sidebar} me=${me} brand=${brand} path=${path} features=${features} status=${status} update=${update} />
     <div class="main-col">
-      <${StatusStrip} status=${status} error=${error} path=${path} admin=${me.role === 'admin'} />
-      <main class="content" ref=${mainRef} tabindex="-1">
+      <${StatusStrip} status=${status} error=${error} path=${path} admin=${me.role === 'admin'} update=${update} />
+      <main class=${`content tint-${tintOf(path)}`} ref=${mainRef} tabindex="-1">
         ${crumbs.length ? html`<nav class="crumbs" aria-label="Vị trí trang"><ol>${crumbs.map((c, i) => html`<li key=${c}
           aria-current=${i === crumbs.length - 1 ? 'page' : undefined}>${c}</li>`)}</ol></nav>` : null}
         ${body}</main>

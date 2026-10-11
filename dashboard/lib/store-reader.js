@@ -51,6 +51,10 @@ export const SQL = {
   todayTotals: `
     SELECT COALESCE(SUM(is_self = 0), 0) AS received, COALESCE(SUM(is_self = 1), 0) AS sent
     FROM messages WHERE +account_id = ? AND timestamp_ms >= ? AND text NOT LIKE ?`,
+  // Tin nhận/gửi theo từng giờ trong ngày (giờ 0 = mốc đầu ngày truyền vào).
+  todayHourly: `
+    SELECT CAST((timestamp_ms - ?) / 3600000 AS INTEGER) AS h, COALESCE(SUM(is_self = 0), 0) AS received, COALESCE(SUM(is_self = 1), 0) AS sent
+    FROM messages WHERE +account_id = ? AND timestamp_ms >= ? AND text NOT LIKE ? GROUP BY h`,
   todayTop: `
     SELECT thread_id, COUNT(*) AS n FROM messages
     WHERE +account_id = ? AND thread_type = 1 AND timestamp_ms >= ? AND text NOT LIKE ?
@@ -326,11 +330,16 @@ export function createStoreReader({
 
   function todayStats(sinceMs) {
     const acc = account();
-    if (!acc) return { received: 0, sent: 0, topGroups: [] };
+    if (!acc) return { received: 0, sent: 0, hourly: Array.from({ length: 24 }, () => 0), topGroups: [] };
     const d = open();
     const totals = d.prepare(SQL.todayTotals).get(acc, sinceMs, SECRET);
     const top = d.prepare(SQL.todayTop).all(acc, sinceMs, SECRET);
-    return { received: Number(totals.received), sent: Number(totals.sent), topGroups: top.map((g) => ({ threadId: g.thread_id, count: Number(g.n) })) };
+    const hourly = Array.from({ length: 24 }, () => 0);
+    for (const row of d.prepare(SQL.todayHourly).all(sinceMs, acc, sinceMs, SECRET)) {
+      const h = Number(row.h);
+      if (h >= 0 && h < 24) hourly[h] = Number(row.received) + Number(row.sent);
+    }
+    return { received: Number(totals.received), sent: Number(totals.sent), hourly, topGroups: top.map((g) => ({ threadId: g.thread_id, count: Number(g.n) })) };
   }
 
   function senderNames(uids) {

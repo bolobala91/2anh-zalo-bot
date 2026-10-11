@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.10.0] — 2026-10-11
+
+### Đổi — Giao diện kiểu macOS
+- **Mỗi mục một màu**: biểu tượng ở thanh bên (và tấm "Thêm" trên điện thoại) nằm trong ô vuông bo góc có màu; tiêu đề thẻ trong trang mang đúng màu của mục đang mở (Phiên chat xanh dương, Lịch hẹn cam, Trí nhớ hồng, Sức khoẻ đỏ, Skill xanh lá…).
+- **Số liệu ngay trên menu**: Phiên chat (số tin hôm nay), Sức khoẻ máy chủ (CPU %), Tài khoản Zalo ("Tắt" khi mất kết nối), Bảo trì ("Mới" khi có bản cập nhật).
+- **Trang Tổng quan mới**: 6 thẻ số lớn — Zalo, Tin nhắn hôm nay (biểu đồ chấm theo giờ), Máy chủ (CPU/RAM/ổ đĩa, biểu đồ chấm CPU 60 phút, nhãn "! Cao" khi quá tải), Trợ lý AI (lượt gọi hôm nay, biểu đồ theo ngày), Lỗi gần nhất, Nhóm sôi nổi hôm nay (thanh ngang). Bấm thẻ để mở trang chi tiết.
+- Nền trắng, thanh bên xám nhạt, thẻ nền xám không viền bo góc lớn; mục đang mở tô màu thương hiệu.
+- `/api/status` có thêm số tin theo giờ hôm nay và số đo máy chủ mới nhất.
+
 ## [2.9.7] — 2026-10-11
 
 ### Thêm — Phiên chat

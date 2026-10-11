@@ -102,7 +102,7 @@ test('tin hôm nay và 5 nhóm sôi nổi nhất đọc từ lịch sử, kể c
   const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
   const expected = { received: 3, sent: 1, topGroups: [
     { threadId: '200', count: 2, name: 'Tổ Hoá' }, { threadId: '987654', count: 1, name: 'Nhóm …7654' },
-  ] };
+  ], hourly: Array.from({ length: 24 }, (_, h) => (h === 0 ? 4 : 0)) };
   assert.deepEqual((await call('/api/status', { cookie })).json.today, expected);
   down = true;
   const res = await call('/api/status', { cookie });

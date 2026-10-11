@@ -1022,3 +1022,88 @@ a.update-pill:hover { background: rgba(255, 255, 255, .3); }
   .compose > .live { grid-row: 4; }
 }
 .msg-act-danger:hover { color: var(--danger); border-color: var(--danger); }
+
+/* ===================== Giao diện kiểu macOS (v2.10): màu theo mục, ô biểu tượng màu, thẻ nền xám ===================== */
+:root {
+  --bg: #ffffff;
+  --panel: #f4f4f6;
+  --side-bg: #f6f6f8;
+  --radius: 18px;
+}
+.tint-blue { --tint: #0b6bcb; }
+.tint-green { --tint: #1a8a3d; }
+.tint-red { --tint: #d63045; }
+.tint-orange { --tint: #c2570c; }
+.tint-yellow { --tint: #a66b00; }
+.tint-teal { --tint: #0f766e; }
+.tint-cyan { --tint: #0e7490; }
+.tint-purple { --tint: #7c3aed; }
+.tint-pink { --tint: #c2185b; }
+.tint-indigo { --tint: #4f46e5; }
+.tint-brown { --tint: #92400e; }
+.tint-gray { --tint: #5b6574; }
+
+/* Thanh bên: nền xám nhạt, mỗi mục một ô biểu tượng màu, mục đang mở tô màu thương hiệu. */
+.sidebar { background: var(--side-bg); }
+.layout { background: linear-gradient(90deg, var(--side-bg) 239px, var(--border) 239px 240px, var(--bg) 240px); }
+.nav-ico {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  border-radius: 7px; background: var(--tint, var(--muted)); color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18), 0 1px 2px rgba(15, 23, 42, .12);
+}
+.nav-ico .icon { color: #fff; }
+.nav-item { gap: 10px; padding: 7px 8px; }
+.nav-item > span:not(.nav-ico):not(.nav-val) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.nav-item:hover { background: rgba(15, 23, 42, .05); }
+.nav-item.active { background: var(--brand); color: #fff; font-weight: 600; }
+.nav-item.active .nav-ico { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45); }
+.nav-item.active .icon { color: #fff; }
+.nav-val { flex: none; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.nav-item.active .nav-val { color: rgba(255, 255, 255, .85); }
+
+/* Thẻ: nền xám, không viền, bo góc lớn; phần tử bên trong (ô nhập, thẻ con) vẫn trắng để nổi lên. */
+.card { background: var(--panel); border-color: transparent; box-shadow: none; border-radius: var(--radius); }
+.card .card, .card-sub { background: var(--card); }
+.card-sub { border-style: solid; border-color: transparent; }
+/* Tiêu đề thẻ mang màu của mục đang mở. */
+.content[class*="tint-"] .card > h2, .content[class*="tint-"] .card-sub > h3, .content[class*="tint-"] .mem-block > h3 { color: var(--tint); }
+
+/* Thẻ số liệu (Tổng quan): ô biểu tượng + tiêu đề màu, nhãn nhỏ, số lớn, 3 chỉ số phụ, biểu đồ chấm. */
+.metric { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; }
+a.metric:hover { color: inherit; background: #eeeef1; }
+.metric-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.metric-head .nav-ico { width: 30px; height: 30px; border-radius: 8px; }
+.metric-title { flex: 1; font-size: 17px; font-weight: 700; color: var(--tint); }
+.metric-go { color: var(--muted); }
+.metric-label { font-size: 14px; color: var(--muted); }
+.metric-big { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 40px; font-weight: 800; line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.metric-big small { font-size: 18px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.metric-big.is-text { font-size: 24px; letter-spacing: -.01em; }
+.metric-pill { margin-left: auto; align-self: center; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+.metric-pill.is-warn { background: #fdecc8; color: #8a5300; }
+.metric-pill.is-danger { background: #fde2e4; color: #b4232f; }
+.metric-pill.is-ok { background: #dcf3e3; color: #156b33; }
+.metric-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.metric-facts dt { font-size: 13px; color: var(--muted); }
+.metric-facts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dots {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-rows: repeat(4, 6px); gap: 4px 2px; justify-items: center; overflow: hidden;
+  margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--tint) 9%, #fff);
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--tint) 22%, #fff); }
+.dot.on { background: var(--tint); }
+.bars { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.bar-top { display: flex; justify-content: space-between; gap: 10px; font-weight: 600; }
+.bar-top span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-top span:last-child { flex: none; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar-track { height: 6px; margin-top: 6px; border-radius: 999px; background: color-mix(in srgb, var(--tint) 18%, #fff); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 999px; background: var(--tint); }
+.bar-w-0 { width: 0; } .bar-w-1 { width: 10%; } .bar-w-2 { width: 20%; } .bar-w-3 { width: 30%; } .bar-w-4 { width: 40%; } .bar-w-5 { width: 50%; }
+.bar-w-6 { width: 60%; } .bar-w-7 { width: 70%; } .bar-w-8 { width: 80%; } .bar-w-9 { width: 90%; } .bar-w-10 { width: 100%; }
+@media (max-width: 760px) {
+  .layout { background: var(--bg); }
+  .metric-big { font-size: 34px; }
+  .metric-facts { gap: 6px; }
+  .dots { grid-template-rows: repeat(4, 5px); gap: 3px; padding: 10px; }
+  .dot { width: 5px; height: 5px; }
+}

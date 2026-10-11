@@ -128,7 +128,10 @@ test('tin mã đăng nhập không tính vào danh sách hội thoại và số 
   ]);
   const r = s.reader();
   assert.deepEqual(r.listConversations().map((c) => [c.threadId, c.total, c.lastAtMs]), [['100', 1, 1000]]);
-  assert.deepEqual(r.todayStats(0), { received: 1, sent: 0, topGroups: [] });
+  const { hourly, ...rest } = r.todayStats(0);
+  assert.deepEqual(rest, { received: 1, sent: 0, topGroups: [] });
+  assert.equal(hourly.length, 24);
+  assert.equal(hourly.reduce((a, b) => a + b, 0), 1, 'tin mã đăng nhập không tính vào biểu đồ theo giờ');
 });
 
 test('tìm toàn văn: không phân biệt hoa thường tiếng Việt; % và _ là chữ thường', (t) => {

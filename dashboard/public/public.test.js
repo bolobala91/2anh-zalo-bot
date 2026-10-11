@@ -1014,3 +1014,18 @@ test('Phiên chat: dò "@" đang gõ và tính vị trí tag trên nội dung g�
   assert.deepEqual(placeMentions('@Lan và @Minh Anh trực', picks), [{ pos: 0, len: 4, uid: '1' }, { pos: 8, len: 9, msg: 9 }]);
   assert.deepEqual(placeMentions('@Lan @Lan', [{ name: 'Lan', uid: '1' }, { name: 'Lan', uid: '1' }]).map((m) => m.pos), [0, 5]);
 });
+
+test('Tổng quan: biểu đồ chấm và gộp cột; menu có màu và số liệu', async () => {
+  const { dotColumns, bucket } = await import('./views/overview.js');
+  assert.deepEqual(dotColumns([0, 1, 4], 4), [[false, false, false, false], [false, false, false, true], [true, true, true, true]]);
+  assert.deepEqual(dotColumns([0.1], 100)[0], [false, false, false, true], 'giá trị nhỏ vẫn sáng 1 chấm');
+  assert.deepEqual(bucket([1, 3, 5, 7], 2), [2, 6]);
+  assert.deepEqual(bucket([1, 2], 5), [1, 2]);
+  const { navValue, tintOf } = await import('./views/shell.js');
+  assert.equal(tintOf('/chats'), 'blue');
+  assert.equal(tintOf('/la'), 'gray');
+  assert.equal(navValue('/chats', { today: { received: 3, sent: 2 } }), '5');
+  assert.equal(navValue('/health', { host: { cpuPct: 12.6 } }), '13%');
+  assert.equal(navValue('/maintenance', null, { newer: true }), 'Mới');
+  assert.equal(navValue('/', {}), '');
+});
