@@ -20,7 +20,7 @@ const BARE_VALUE = /^[A-Za-z0-9_.,*?:/-]*$/;
 // Chỉ đọc, chỉ dùng phía máy chủ (giai đoạn 7): nơi đặt sổ người quen/kho tài liệu, địa chỉ bộ nhớ dài hạn.
 // OPENVIKING_API_KEY là khoá bí mật — dashboard dùng để gọi OpenViking, KHÔNG BAO GIỜ trả ra trình duyệt.
 export const READ_ONLY_KEYS = new Set([
-  'ZALO_PEOPLE_FILE', 'ZALO_KB_DIR', 'ZALO_KB_PUBLIC_DIRS', 'ZALO_KB_ALLOWED_ROOTS',
+  'ZALO_PEOPLE_FILE', 'ZALO_CALL_WORDS_FILE', 'ZALO_KB_DIR', 'ZALO_KB_PUBLIC_DIRS', 'ZALO_KB_ALLOWED_ROOTS',
   'ZALO_SECOND_BRAIN_URL', 'OPENVIKING_ACCOUNT', 'OPENVIKING_USER', 'OPENVIKING_API_KEY',
   // Giai đoạn 7B: danh sách model chọn nhanh của lệnh /model, công cụ MCP mở cho thành viên.
   'ZALO_MODEL_CHOICES', 'ZALO_MODEL_DEFAULT', 'ZALO_PUBLIC_MCP', 'ZALO_STUDIO_IMAGE_URL',

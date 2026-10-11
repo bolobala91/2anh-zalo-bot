@@ -29,6 +29,7 @@ import { mcpRoutes } from './routes/mcp.js';
 import { settingsRoutes } from './routes/settings.js';
 import { skillRoutes } from './routes/skills.js';
 import { maintenanceRoutes } from './routes/maintenance.js';
+import { callWordsRoutes } from './routes/call-words.js';
 
 export function createDashboardApp(deps) {
   const app = express();
@@ -64,6 +65,7 @@ export function createDashboardApp(deps) {
   if (deps.settings) app.use('/api', settingsRoutes(deps));
   if (deps.hermesAdmin) app.use('/api', skillRoutes(deps));
   if (deps.maintenance) app.use('/api', maintenanceRoutes(deps));
+  if (deps.callWords) app.use('/api', callWordsRoutes(deps));
   app.use('/api', adminRoutes(deps));
   // Gắn ở gốc: router này có cả /api/brand lẫn /brand.css, /brand/logo.png (công khai, trước giao diện tĩnh).
   app.use(brandRoutes(deps));

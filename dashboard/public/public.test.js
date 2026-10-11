@@ -1029,3 +1029,12 @@ test('Tổng quan: biểu đồ chấm và gộp cột; menu có màu và số l
   assert.equal(navValue('/maintenance', null, { newer: true }), 'Mới');
   assert.equal(navValue('/', {}), '');
 });
+
+test('Cách gọi bot: thử câu khớp từ khoá như plugin', async () => {
+  const { matchWord, wordsDiff } = await import('./views/call-words.js');
+  const words = [{ text: 'tiêu', at: 'start' }, { text: 'tiêu ơi', at: 'any' }];
+  assert.equal(matchWord('Tiêu tra giá vàng', words).text, 'tiêu');
+  assert.equal(matchWord('anh hỏi tiêu ơi', words).text, 'tiêu ơi');
+  assert.equal(matchWord('hôm nay tiêu nhiều', words), null);
+  assert.equal(wordsDiff([{ text: 'a', at: 'any' }], [{ text: 'b', at: 'any' }]), 2);
+});

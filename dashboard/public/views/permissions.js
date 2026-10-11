@@ -7,11 +7,13 @@ import { fold } from '../fold.js';
 import { DmEditor, dmBadge } from './dm-permissions.js';
 import { StudioBox, applyPolicy, parseQuota, studioComplete } from './studio-box.js';
 import { QuotaEditor, quotaBadge } from './studio-quota.js';
+import { CallWordsEditor } from './call-words.js';
 
 export const DEFAULTS_KEY = 'defaults';
 // Mục "Nhắn riêng" và "Hạn mức xưởng" ở đầu danh sách; mã nhóm Zalo luôn là số nên không trùng.
 export const DM_KEY = 'dm';
 export const QUOTA_KEY = 'studio';
+export const CALL_KEY = 'call';
 const pick = (s) => ({ active: s.active, replyOnlyTagged: s.replyOnlyTagged, features: { ...s.features },
   studio: { ...(s.studio || {}) }, studioQuota: s.studioQuota ?? null });
 const sameBools = (a = {}, b = {}) => Object.keys({ ...a, ...b }).every((k) => a[k] === b[k]);
@@ -238,6 +240,12 @@ export function Permissions({ me }) {
               <span class=${`badge badge-${dmBadge(perms.dm).kind}`}>${dmBadge(perms.dm).text}</span></span>
             <span class="conv-preview">Ai được nhắn riêng với bot và bot được làm gì trong tin nhắn riêng.</span>
           </button></li>
+          <li><button type="button" class=${`conv${selected === CALL_KEY ? ' active' : ''}`}
+            aria-current=${selected === CALL_KEY ? 'true' : undefined} onClick=${() => choose(CALL_KEY)}>
+            <span class="conv-top"><span class="conv-name"><${Icon} name="chat" size=${16} /> Cách gọi bot</span>
+              <span class="badge badge-idle">Chủ nhân</span></span>
+            <span class="conv-preview">Từ khoá chủ nhân dùng để gọi bot trong nhóm mà không cần tag (vd. “Tiêu ơi”).</span>
+          </button></li>
           ${perms.studioFeatures ? html`<li><button type="button" class=${`conv${selected === QUOTA_KEY ? ' active' : ''}`}
             aria-current=${selected === QUOTA_KEY ? 'true' : undefined} onClick=${() => choose(QUOTA_KEY)}>
             <span class="conv-top"><span class="conv-name"><${Icon} name="list" size=${16} /> Hạn mức xưởng</span>
@@ -262,10 +270,12 @@ export function Permissions({ me }) {
         ${list.length && !shown.length ? html`<p class="muted small">Không có nhóm nào trùng tên — xoá bớt chữ trong ô lọc.</p>` : null}
         ${!list.length && !groupsError ? html`<p class="muted small">Bot chưa ở nhóm nào — thêm bot vào nhóm Zalo rồi tải lại trang.</p>` : null}
       </section>
-      <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : selected === QUOTA_KEY ? 'Hạn mức xưởng' : 'Quyền của nhóm'}>
+      <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : selected === QUOTA_KEY ? 'Hạn mức xưởng' : selected === CALL_KEY ? 'Cách gọi bot' : 'Quyền của nhóm'}>
         ${selected === DM_KEY
           ? html`<${DmEditor} key=${DM_KEY} dm=${perms.dm} features=${perms.dmFeatures} studioFeatures=${perms.studioFeatures || []}
               studioPolicy=${perms.studioPolicy} admin=${me?.role === 'admin'} onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} />`
+          : selected === CALL_KEY
+          ? html`<${CallWordsEditor} key=${CALL_KEY} onDirty=${setDirty} onBack=${() => choose(null)} />`
           : selected === QUOTA_KEY
           ? html`<${QuotaEditor} key=${QUOTA_KEY} studio=${perms.studio} admin=${me?.role === 'admin'}
               onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} />`

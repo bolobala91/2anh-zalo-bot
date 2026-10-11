@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.11.0] — 2026-10-11
+
+### Thêm
+- **Cách gọi bot** (Phân quyền Bot, Quản trị và Chủ bot): xem và sửa các từ khoá **chủ nhân** dùng để gọi bot trong nhóm mà không cần tag.
+  - Hai loại: **Ở đầu tin** (vd. "Tiêu tra giá vàng") và **Ở bất kỳ đâu** (vd. "… Tiêu ơi giúp anh"); thêm, xoá tuỳ ý (tối đa 50); ô **Thử một câu** cho biết bot có trả lời không.
+  - Chưa sửa thì dùng đúng cách gọi cũ dựng từ tên bot (tên đầy đủ + tên ngắn; "… ơi", "chào …", "… đâu", "nhờ …", cả không dấu). **Khôi phục mặc định** bất cứ lúc nào. Danh sách rỗng = chủ nhân cũng phải tag.
+  - Có hiệu lực ngay (plugin đọc lại khi tệp đổi), không cần khởi động lại. Người khác vẫn phải tag như trước.
+- Plugin: `zalo/call_words.py`, tệp `<HERMES_HOME>/zalo/call-words.json` (hoặc `ZALO_CALL_WORDS_FILE`).
+
 ## [2.10.0] — 2026-10-11
 
 ### Đổi — Giao diện kiểu macOS

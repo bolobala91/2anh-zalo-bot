@@ -33,6 +33,7 @@ import { createHermesMemory } from './lib/hermes-memory.js';
 import { createSchedules, hermesBin } from './lib/schedules.js';
 import { createHermesAdmin } from './lib/hermes-admin.js';
 import { createMaintenance } from './lib/maintenance.js';
+import { createCallWords } from './lib/call-words.js';
 import { createKbStore } from './lib/kb-store.js';
 import { createInsightAi } from './lib/insight-ai.js';
 import { createAgentConfig, createSoul } from './lib/agent-config.js';
@@ -122,6 +123,8 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     agentTrace: createAgentTrace({ dbPath: paths.hermesStateDb }),
     mcpServers: createMcpServers({ configFile: paths.hermesConfigFile, publicMcp: () => readEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP') }),
     hermesAdmin,
+    // Cách gọi bot: cùng tệp plugin đọc (ZALO_CALL_WORDS_FILE trong .env Hermes thắng).
+    callWords: createCallWords({ file: readEnvKey(paths.hermesEnvFile, 'ZALO_CALL_WORDS_FILE') || join(paths.hermesHome, 'zalo', 'call-words.json') }),
     maintenance: createMaintenance({ hermesBin: hermesBin({ hermesHome: paths.hermesHome, env }), dataDir: paths.dataDir, sidecarRoot: paths.sidecarRoot,
       pluginYaml: () => { try { return readFileSync(join(hermesAdmin.root(), 'plugins', 'zalo_tools', 'plugin.yaml'), 'utf8'); } catch { return ''; } } }),
     settings: createSettings({ envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, inherited: inheritedSettings }),

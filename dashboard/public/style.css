@@ -1107,3 +1107,13 @@ a.metric:hover { color: inherit; background: #eeeef1; }
   .dots { grid-template-rows: repeat(4, 5px); gap: 3px; padding: 10px; }
   .dot { width: 5px; height: 5px; }
 }
+
+/* Cách gọi bot: từ khoá dạng thẻ có nút xoá */
+.word-chips { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.word-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); font-weight: 600; }
+.word-x { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.word-x:hover { background: var(--danger-soft); color: var(--danger); }
+.word-x:focus-visible { outline: none; box-shadow: var(--focus); }
+.word-add { display: flex; flex-wrap: wrap; gap: 8px; }
+.word-add input { flex: 1 1 200px; min-width: 0; }
+@media (max-width: 760px) { .word-x { width: 40px; height: 40px; } }

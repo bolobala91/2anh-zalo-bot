@@ -102,6 +102,7 @@ from .flood import JUST_MUTED as FLOOD_JUST_MUTED
 from .flood import MUTED as FLOOD_MUTED
 from .flood import FloodGuard
 from . import model_command as _model_command
+from . import call_words as _call_words
 
 
 def _transcode_to_m4a(audio_path: str) -> Optional[str]:
@@ -1298,14 +1299,9 @@ class ZaloAdapter(BasePlatformAdapter):
 
         # 2. Các cách gọi thân thuộc không cần @ (Nhi ơi, Tiêu ơi, chào Nhi...)
         # CHỈ dành riêng cho CHỦ NHÂN (sếp). Người khác bắt buộc phải tag.
-        if is_owner:
-            for n in names:
-                if low.startswith(f"{n} ") or low == n:
-                    return True
-                if f"{n} ơi" in low or f"{n} oi" in low or f"chào {n}" in low or f"chao {n}" in low:
-                    return True
-                if f"{n} đâu" in low or f"{n} dau" in low or f"nhờ {n}" in low or f"nho {n}" in low:
-                    return True
+        # Danh sách sửa được trên dashboard (Phân quyền Bot › Cách gọi bot); chưa sửa thì theo tên bot như trước.
+        if is_owner and _call_words.matches(low, _call_words.owner_words(name)):
+            return True
 
         return False
 
