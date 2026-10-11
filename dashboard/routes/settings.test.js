@@ -30,7 +30,7 @@ test('Cấu hình: chỉ Quản trị; lưu đặt cờ chờ đúng đích + Nh
   assert.match(readFileSync(join(deps.dir, 'config.yaml'), 'utf8'), /dm_policy: open/);
   assert.match(readFileSync(join(deps.dir, 'hermes.env'), 'utf8'), /^ZALO_HISTORY_RETENTION_DAYS=90$/m);
   const flags = deps.restartFlags.get();
-  assert.deepEqual(flags.assistant.reasons, ['Cấu hình: Nhắn riêng khi chưa chọn ở Phân quyền Bot']);
+  assert.ok(!flags.assistant, 'Nhắn riêng áp dụng ngay — không đặt cờ khởi động lại trợ lý');
   assert.deepEqual(flags.sidecar.reasons, ['Cấu hình: Giữ lịch sử trò chuyện (ngày)']);
   assert.match(deps.activity.list().find((e) => e.action === 'settings_update').detail, /owner-only → open/);
   assert.equal((await call('/api/admin/settings', { method: 'PUT', cookie: admin, body: { values: { TELEGRAM_BOT_TOKEN: 'x' } } })).status, 400);

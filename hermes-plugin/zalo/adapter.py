@@ -103,6 +103,7 @@ from .flood import MUTED as FLOOD_MUTED
 from .flood import FloodGuard
 from . import model_command as _model_command
 from . import call_words as _call_words
+from . import live_settings as _live_settings
 
 
 def _transcode_to_m4a(audio_path: str) -> Optional[str]:
@@ -550,34 +551,6 @@ class ZaloAdapter(BasePlatformAdapter):
             extra.get("bridge_token")
             or _get_scoped_secret("ZALO_BRIDGE_TOKEN", "")
         ).strip()
-        self._reply_only_tagged: bool = _truthy(
-            extra.get("reply_only_tagged",
-                      _get_scoped_secret("ZALO_GROUP_REPLY_ONLY_TAGGED", "true")),
-            default=True,
-        )
-        # Ai được nhắn riêng với bot.
-        #   owner-only  chỉ người trong ZALO_ALLOWED_USERS  (mặc định)
-        #   open        bất kỳ ai
-        # Trong nhóm thì luôn mở: ai tag bot cũng được trả lời, nhưng chỉ với
-        # bộ công cụ công khai (xem toolsets_for_source).
-        self._dm_policy: str = str(
-            extra.get("dm_policy", _get_scoped_secret("ZALO_DM_POLICY", "owner-only"))
-        ).strip().lower()
-
-        # Báo đã xem + thả cảm xúc khi nhận tin. Tắt được cho ai muốn bot
-        # hoạt động kín tiếng.
-        self._ack_gestures: bool = _truthy(
-            extra.get("ack_gestures", _get_scoped_secret("ZALO_ACK_GESTURES", "true")),
-            default=True,
-        )
-        self._auto_react: bool = _truthy(
-            extra.get("auto_react", _get_scoped_secret("ZALO_AUTO_REACT", "true")),
-            default=True,
-        )
-        # Hỏi về ảnh/tệp ("xem ảnh này", "gộp 2 file") thì lật lại bao nhiêu tin gần nhất trong nhóm để lấy
-        # ảnh/tệp nạp cho trợ lý (Cấu hình › Đọc ảnh và tệp). Ảnh xa hơn chỉ còn là đường link, trợ lý không xem được.
-        self._media_lookback: int = _media_lookback(
-            extra.get("media_lookback", _get_scoped_secret("ZALO_MEDIA_LOOKBACK", str(MEDIA_LOOKBACK_DEFAULT))))
         # Tài khoản bot khác trong cùng nhóm (vd. hai bot của cùng chủ nhân):
         # tin của họ vẫn giữ làm ngữ cảnh, nhưng không bao giờ gọi dậy bot này,
         # để hai bot không trả lời qua lại lẫn nhau.
@@ -585,12 +558,6 @@ class ZaloAdapter(BasePlatformAdapter):
         if isinstance(ignored, (list, tuple, set)):
             ignored = ",".join(str(uid) for uid in ignored)
         self._ignored_senders = set(_split_ids(str(ignored or "")))
-        # Nhóm chỉ chủ nhân gọi được bot (vd. nhóm cộng đồng đông người mà bot
-        # vào để nghe và tổng hợp): người khác tag thì im, tin vẫn giữ làm ngữ cảnh.
-        owner_only = extra.get("owner_only_groups", _get_scoped_secret("ZALO_OWNER_ONLY_GROUPS", ""))
-        if isinstance(owner_only, (list, tuple, set)):
-            owner_only = ",".join(str(gid) for gid in owner_only)
-        self._owner_only_groups = set(_split_ids(str(owner_only or "")))
         # Lệnh /model của chủ nhân: danh sách chọn nhanh và model để /model default quay về.
         choices = extra.get("model_choices", _get_scoped_secret("ZALO_MODEL_CHOICES", ""))
         if isinstance(choices, (list, tuple)):
@@ -609,11 +576,13 @@ class ZaloAdapter(BasePlatformAdapter):
         # Ngưỡng đặt rộng tay có chủ đích: sáu tin trong mười lăm giây nhanh
         # hơn nhịp hỏi của người thật khá nhiều, nên người dùng bình thường
         # gần như không bao giờ chạm tới.
-        self._flood = FloodGuard(
-            threshold=int(_get_scoped_secret("ZALO_FLOOD_THRESHOLD", "6") or 6),
-            window_s=float(_get_scoped_secret("ZALO_FLOOD_WINDOW_S", "15") or 15),
-            mute_s=float(_get_scoped_secret("ZALO_FLOOD_MUTE_S", "90") or 90),
-        )
+        self._flood = FloodGuard()
+        # Các cài đặt ở trang Cấu hình của dashboard: đọc lúc khởi động và đọc lại ngay khi .env / config.yaml
+        # đổi (xem live_settings.py) — không cần khởi động lại trợ lý.
+        self._apply_settings(extra)
+        from hermes_constants import get_hermes_home
+        self._settings_watcher = _live_settings.SettingsWatcher(get_hermes_home)
+        self._settings_extra = dict(extra)
 
         self._ws = None
         self._reader_task: Optional[asyncio.Task] = None
@@ -821,7 +790,70 @@ class ZaloAdapter(BasePlatformAdapter):
         self._message_tasks.add(task)
         task.add_done_callback(self._message_tasks.discard)
 
+    def _apply_settings(self, extra: Dict[str, Any]) -> None:
+        """Đặt các cài đặt của trang Cấu hình (extra của config.yaml thắng .env như trước)."""
+        self._reply_only_tagged: bool = _truthy(
+            extra.get("reply_only_tagged",
+                      _get_scoped_secret("ZALO_GROUP_REPLY_ONLY_TAGGED", "true")),
+            default=True,
+        )
+        # Ai được nhắn riêng với bot.
+        #   owner-only  chỉ người trong ZALO_ALLOWED_USERS  (mặc định)
+        #   open        bất kỳ ai
+        # Trong nhóm thì luôn mở: ai tag bot cũng được trả lời, nhưng chỉ với
+        # bộ công cụ công khai (xem toolsets_for_source).
+        self._dm_policy: str = str(
+            extra.get("dm_policy", _get_scoped_secret("ZALO_DM_POLICY", "owner-only"))
+        ).strip().lower()
+        # Báo đã xem + thả cảm xúc khi nhận tin. Tắt được cho ai muốn bot
+        # hoạt động kín tiếng.
+        self._ack_gestures: bool = _truthy(
+            extra.get("ack_gestures", _get_scoped_secret("ZALO_ACK_GESTURES", "true")),
+            default=True,
+        )
+        self._auto_react: bool = _truthy(
+            extra.get("auto_react", _get_scoped_secret("ZALO_AUTO_REACT", "true")),
+            default=True,
+        )
+        # Hỏi về ảnh/tệp ("xem ảnh này", "gộp 2 file") thì lật lại bao nhiêu tin gần nhất trong nhóm để lấy
+        # ảnh/tệp nạp cho trợ lý (Cấu hình › Đọc ảnh và tệp). Ảnh xa hơn chỉ còn là đường link, trợ lý không xem được.
+        self._media_lookback: int = _media_lookback(
+            extra.get("media_lookback", _get_scoped_secret("ZALO_MEDIA_LOOKBACK", str(MEDIA_LOOKBACK_DEFAULT))))
+        # Nhóm chỉ chủ nhân gọi được bot (vd. nhóm cộng đồng đông người mà bot
+        # vào để nghe và tổng hợp): người khác tag thì im, tin vẫn giữ làm ngữ cảnh.
+        owner_only = extra.get("owner_only_groups", _get_scoped_secret("ZALO_OWNER_ONLY_GROUPS", ""))
+        if isinstance(owner_only, (list, tuple, set)):
+            owner_only = ",".join(str(gid) for gid in owner_only)
+        self._owner_only_groups = set(_split_ids(str(owner_only or "")))
+        # Ngưỡng chống nhắn dồn đặt rộng tay có chủ đích: sáu tin trong mười lăm
+        # giây nhanh hơn nhịp hỏi của người thật khá nhiều.
+        self._flood.configure(
+            threshold=int(_get_scoped_secret("ZALO_FLOOD_THRESHOLD", "6") or 6),
+            window_s=float(_get_scoped_secret("ZALO_FLOOD_WINDOW_S", "15") or 15),
+            mute_s=float(_get_scoped_secret("ZALO_FLOOD_MUTE_S", "90") or 90),
+        )
+        # Ô nhớ tin nhóm đang có giữ lại, chỉ nới cỡ cho đủ số tin xem lại mới.
+        need = max(GROUP_CONTEXT_LIMIT, self._media_lookback + 1)
+        for tid, bucket in list(getattr(self, "_recent_group_messages", {}).items()):
+            if isinstance(bucket, deque) and bucket.maxlen != need:
+                self._recent_group_messages[tid] = deque(bucket, maxlen=need)
+
+    def _reload_settings_if_changed(self) -> None:
+        """Dashboard vừa lưu Cấu hình (.env / config.yaml đổi) → áp dụng ngay. Lỗi thì giữ cài đặt cũ."""
+        watcher = getattr(self, "_settings_watcher", None)
+        if watcher is None:
+            return
+        try:
+            changed, extra = watcher.poll()
+            if changed:
+                if extra is not None:
+                    self._settings_extra = extra
+                self._apply_settings(self._settings_extra)
+        except Exception:
+            logger.warning("[zalo] không áp dụng lại được cấu hình — giữ cài đặt cũ", exc_info=True)
+
     async def _on_message(self, frame: Dict[str, Any]) -> None:
+        self._reload_settings_if_changed()
         text = (frame.get("text") or "").strip()
         # Chỉ nhặt URL khi tin thật sự có tệp đính kèm: thẻ chia sẻ link cũng có
         # href và ảnh thu nhỏ, nhặt luôn thì link bị tải về như ảnh.

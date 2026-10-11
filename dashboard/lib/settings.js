@@ -4,7 +4,8 @@
  *  - đọc/ghi ở đâu: `.env` của Hermes (env-file.js) hoặc `platforms.zalo.extra` của config.yaml (config-yaml.js),
  *    đúng thứ tự ưu tiên adapter đọc (extraWins: config.yaml thắng .env; ngược lại .env thắng);
  *  - kiểu + giới hạn để kiểm giá trị;
- *  - cần khởi động lại gì (trợ lý / kết nối Zalo) — mọi khoá ở đây adapter/sidecar đọc lúc khởi động.
+ *  - cần khởi động lại gì: phần lớn áp dụng ngay (plugin đọc lại tệp khi đổi); chỉ mục sidecar đọc lúc khởi động
+ *    (giữ lịch sử) hoặc đăng ký công cụ lúc nạp (kết bạn) mới cần khởi động lại.
  * Ghi vào đúng nơi đang có hiệu lực: khoá đang nằm trong config.yaml thì sửa config.yaml, còn lại sửa .env.
  */
 import { parseEnv } from 'node:util';
@@ -12,21 +13,23 @@ import { existsSync, readFileSync } from 'node:fs';
 import { writeEnvKeys } from './env-file.js';
 import { editConfigYaml, readConfigYaml } from './config-yaml.js';
 
-const A = ['assistant']; const S = ['sidecar']; const AS = ['assistant', 'sidecar'];
+const S = ['sidecar']; const AS = ['assistant', 'sidecar'];
+// Áp dụng ngay: plugin đọc lại .env / config.yaml khi đổi (hermes-plugin/zalo/live_settings.py) — không cần khởi động lại.
+const NOW = [];
 export const SETTINGS = [
-  { id: 'replyOnlyTagged', group: 'Trả lời', label: 'Trong nhóm chỉ trả lời khi được tag', hint: 'Mặc định cho mọi nhóm; từng nhóm vẫn chỉnh riêng ở Phân quyền Bot.', type: 'bool', env: 'ZALO_GROUP_REPLY_ONLY_TAGGED', extra: 'reply_only_tagged', extraWins: false, def: true, restart: A },
-  { id: 'dmPolicy', group: 'Trả lời', label: 'Nhắn riêng khi chưa chọn ở Phân quyền Bot', hint: '"Chỉ chủ nhân" hoặc "Mọi người". Mục Nhắn riêng ở Phân quyền Bot (nếu đã lưu) thắng cài đặt này.', type: 'enum', options: [{ value: 'owner-only', label: 'Chỉ chủ nhân' }, { value: 'open', label: 'Mọi người' }], env: 'ZALO_DM_POLICY', extra: 'dm_policy', extraWins: true, def: 'owner-only', restart: A },
-  { id: 'ackGestures', group: 'Trả lời', label: 'Báo đã xem khi nhận tin', type: 'bool', env: 'ZALO_ACK_GESTURES', extra: 'ack_gestures', extraWins: true, def: true, restart: A },
-  { id: 'autoReact', group: 'Trả lời', label: 'Thả cảm xúc tự động', type: 'bool', env: 'ZALO_AUTO_REACT', extra: 'auto_react', extraWins: true, def: true, restart: A },
-  { id: 'ownerOnlyGroups', group: 'Trả lời', label: 'Nhóm chỉ chủ nhân gọi được bot', hint: 'Người khác tag bot thì bot im, tin vẫn được lưu làm ngữ cảnh. Nên chỉnh ở Phân quyền Bot (tắt nhóm) — nhóm đã phân quyền riêng ở đó thì phân quyền đó thắng danh sách này.', type: 'ids', max: 50, env: 'ZALO_OWNER_ONLY_GROUPS', extra: 'owner_only_groups', extraWins: true, def: [], restart: A },
-  { id: 'floodThreshold', group: 'Chống nhắn dồn', label: 'Số tin tối đa trong một khoảng', type: 'int', min: 2, max: 50, env: 'ZALO_FLOOD_THRESHOLD', def: 6, restart: A },
-  { id: 'floodWindow', group: 'Chống nhắn dồn', label: 'Khoảng tính (giây)', type: 'int', min: 5, max: 600, env: 'ZALO_FLOOD_WINDOW_S', decimal: true, def: 15, restart: A },
-  { id: 'floodMute', group: 'Chống nhắn dồn', label: 'Bỏ qua người nhắn dồn trong (giây)', type: 'int', min: 10, max: 3600, env: 'ZALO_FLOOD_MUTE_S', decimal: true, def: 90, restart: A },
+  { id: 'replyOnlyTagged', group: 'Trả lời', label: 'Trong nhóm chỉ trả lời khi được tag', hint: 'Mặc định cho mọi nhóm; từng nhóm vẫn chỉnh riêng ở Phân quyền Bot.', type: 'bool', env: 'ZALO_GROUP_REPLY_ONLY_TAGGED', extra: 'reply_only_tagged', extraWins: false, def: true, restart: NOW },
+  { id: 'dmPolicy', group: 'Trả lời', label: 'Nhắn riêng khi chưa chọn ở Phân quyền Bot', hint: '"Chỉ chủ nhân" hoặc "Mọi người". Mục Nhắn riêng ở Phân quyền Bot (nếu đã lưu) thắng cài đặt này.', type: 'enum', options: [{ value: 'owner-only', label: 'Chỉ chủ nhân' }, { value: 'open', label: 'Mọi người' }], env: 'ZALO_DM_POLICY', extra: 'dm_policy', extraWins: true, def: 'owner-only', restart: NOW },
+  { id: 'ackGestures', group: 'Trả lời', label: 'Báo đã xem khi nhận tin', type: 'bool', env: 'ZALO_ACK_GESTURES', extra: 'ack_gestures', extraWins: true, def: true, restart: NOW },
+  { id: 'autoReact', group: 'Trả lời', label: 'Thả cảm xúc tự động', type: 'bool', env: 'ZALO_AUTO_REACT', extra: 'auto_react', extraWins: true, def: true, restart: NOW },
+  { id: 'ownerOnlyGroups', group: 'Trả lời', label: 'Nhóm chỉ chủ nhân gọi được bot', hint: 'Người khác tag bot thì bot im, tin vẫn được lưu làm ngữ cảnh. Nên chỉnh ở Phân quyền Bot (tắt nhóm) — nhóm đã phân quyền riêng ở đó thì phân quyền đó thắng danh sách này.', type: 'ids', max: 50, env: 'ZALO_OWNER_ONLY_GROUPS', extra: 'owner_only_groups', extraWins: true, def: [], restart: NOW },
+  { id: 'floodThreshold', group: 'Chống nhắn dồn', label: 'Số tin tối đa trong một khoảng', type: 'int', min: 2, max: 50, env: 'ZALO_FLOOD_THRESHOLD', def: 6, restart: NOW },
+  { id: 'floodWindow', group: 'Chống nhắn dồn', label: 'Khoảng tính (giây)', type: 'int', min: 5, max: 600, env: 'ZALO_FLOOD_WINDOW_S', decimal: true, def: 15, restart: NOW },
+  { id: 'floodMute', group: 'Chống nhắn dồn', label: 'Bỏ qua người nhắn dồn trong (giây)', type: 'int', min: 10, max: 3600, env: 'ZALO_FLOOD_MUTE_S', decimal: true, def: 90, restart: NOW },
   { id: 'friendTools', group: 'Kết bạn và an toàn', label: 'Cho chủ nhân nhờ bot kết bạn, lập nhóm với người lạ', type: 'bool', env: 'ZALO_FRIEND_TOOLS', def: false, restart: AS },
-  { id: 'confirmDangerous', group: 'Kết bạn và an toàn', label: 'Bắt chủ nhân gửi mã xác nhận trước thao tác nguy hiểm', hint: 'Chặn thêm trường hợp tài liệu/trang web bot đọc có cài lệnh ẩn.', type: 'bool', env: 'ZALO_CONFIRM_DANGEROUS', def: false, restart: A },
-  { id: 'kbPublicDirs', group: 'Tài liệu và MCP', label: 'Thư mục kho tài liệu mở cho mọi người', hint: 'Tên thư mục cấp 1 trong kho, cách nhau bằng dấu phẩy. Để trống = cả kho.', type: 'names', max: 20, env: 'ZALO_KB_PUBLIC_DIRS', def: [], restart: A },
-  { id: 'publicMcp', group: 'Tài liệu và MCP', label: 'Kết nối MCP thành viên được dùng', hint: 'Tên kết nối (được dùng * và ?). Mở cho thành viên là cho người ngoài dùng tài nguyên của chủ bot — cân nhắc kỹ.', type: 'patterns', max: 20, env: 'ZALO_PUBLIC_MCP', def: [], restart: A, confirm: true },
-  { id: 'mediaLookback', group: 'Đọc ảnh và tệp', label: 'Số tin gần nhất bot xem lại để tìm ảnh/tệp', hint: 'Khi được hỏi về ảnh hay tệp (vd. "xem ảnh này", "gộp 2 file vừa gửi") trong nhóm, bot lật lại chừng này tin để lấy ảnh/tệp mà đọc. Mặc định 3. Đặt cao thì đọc được ảnh gửi xa hơn nhưng tốn thêm lượt AI cho mỗi ảnh; chỉ tính các tin nhận được từ lần khởi động lại trợ lý gần nhất.', type: 'int', min: 1, max: 30, env: 'ZALO_MEDIA_LOOKBACK', extra: 'media_lookback', extraWins: true, def: 3, restart: A },
+  { id: 'confirmDangerous', group: 'Kết bạn và an toàn', label: 'Bắt chủ nhân gửi mã xác nhận trước thao tác nguy hiểm', hint: 'Chặn thêm trường hợp tài liệu/trang web bot đọc có cài lệnh ẩn.', type: 'bool', env: 'ZALO_CONFIRM_DANGEROUS', def: false, restart: NOW },
+  { id: 'kbPublicDirs', group: 'Tài liệu và MCP', label: 'Thư mục kho tài liệu mở cho mọi người', hint: 'Tên thư mục cấp 1 trong kho, cách nhau bằng dấu phẩy. Để trống = cả kho.', type: 'names', max: 20, env: 'ZALO_KB_PUBLIC_DIRS', def: [], restart: NOW },
+  { id: 'publicMcp', group: 'Tài liệu và MCP', label: 'Kết nối MCP thành viên được dùng', hint: 'Tên kết nối (được dùng * và ?). Mở cho thành viên là cho người ngoài dùng tài nguyên của chủ bot — cân nhắc kỹ.', type: 'patterns', max: 20, env: 'ZALO_PUBLIC_MCP', def: [], restart: NOW, confirm: true },
+  { id: 'mediaLookback', group: 'Đọc ảnh và tệp', label: 'Số tin gần nhất bot xem lại để tìm ảnh/tệp', hint: 'Khi được hỏi về ảnh hay tệp (vd. "xem ảnh này", "gộp 2 file vừa gửi") trong nhóm, bot lật lại chừng này tin để lấy ảnh/tệp mà đọc. Mặc định 3. Đặt cao thì đọc được ảnh gửi xa hơn nhưng tốn thêm lượt AI cho mỗi ảnh; chỉ tính các tin nhận được từ lần khởi động lại trợ lý gần nhất.', type: 'int', min: 1, max: 30, env: 'ZALO_MEDIA_LOOKBACK', extra: 'media_lookback', extraWins: true, def: 3, restart: NOW },
   { id: 'historyDays', group: 'Lưu trữ', label: 'Giữ lịch sử trò chuyện (ngày)', type: 'int', min: 30, max: 3650, env: 'ZALO_HISTORY_RETENTION_DAYS', def: 365, restart: S },
 ];
 

@@ -78,6 +78,7 @@ const suites = [
   { label: 'test_zalo_keypool.py', module: 'test_zalo_keypool', cwd: REPO_ROOT },
   { label: 'test_dashboard_hermes_admin.py', module: 'test_dashboard_hermes_admin', cwd: REPO_ROOT },
   { label: 'test_zalo_call_words.py', module: 'test_zalo_call_words', cwd: REPO_ROOT },
+  { label: 'test_zalo_live_settings.py', module: 'test_zalo_live_settings', cwd: REPO_ROOT },
   { label: 'scripts/test_lay_token_facebook.py', module: 'scripts.test_lay_token_facebook', cwd: REPO_ROOT },
   { label: 'tts/test_vieneu_provider.py', module: 'test_vieneu_provider', cwd: join(REPO_ROOT, 'tts') },
 ];

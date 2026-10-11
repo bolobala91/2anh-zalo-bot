@@ -1038,3 +1038,10 @@ test('Cách gọi bot: thử câu khớp từ khoá như plugin', async () => {
   assert.equal(matchWord('hôm nay tiêu nhiều', words), null);
   assert.equal(wordsDiff([{ text: 'a', at: 'any' }], [{ text: 'b', at: 'any' }]), 2);
 });
+
+test('Cấu hình: câu "có hiệu lực ngay" / "cần khởi động lại"', async () => {
+  const { restartText } = await import('./views/settings.js');
+  assert.equal(restartText([]), 'đổi xong có hiệu lực ngay');
+  assert.equal(restartText(['sidecar']), 'đổi xong cần khởi động lại kết nối Zalo');
+  assert.equal(restartText(['assistant', 'sidecar']), 'đổi xong cần khởi động lại trợ lý và kết nối Zalo');
+});

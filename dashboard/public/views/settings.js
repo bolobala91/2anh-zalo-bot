@@ -4,6 +4,12 @@ import { api } from '../api.js';
 import { html, Live, PageHead, SaveBar, Spinner, Toggle } from '../ui.js';
 import { RestartBanner } from './restart-banner.js';
 
+/** Câu cho biết đổi xong cần làm gì. */
+export function restartText(restart) {
+  if (!restart.length) return 'đổi xong có hiệu lực ngay';
+  return `đổi xong cần khởi động lại ${restart.includes('sidecar') ? (restart.includes('assistant') ? 'trợ lý và kết nối Zalo' : 'kết nối Zalo') : 'trợ lý'}`;
+}
+
 /** Chữ trong ô nhập → giá trị gửi lên theo kiểu của mục. */
 export function parseInput(s, text) {
   if (s.type === 'int') return /^\d+$/.test(text.trim()) ? Number(text.trim()) : NaN;
@@ -20,7 +26,7 @@ export const SOURCE_LABELS = { env: 'Cài đặt của trợ lý (.env)', config
 
 function Field({ s, value, onChange }) {
   const id = `set-${s.id}`;
-  const note = html`<small class="muted">${s.hint ? `${s.hint} ` : ''}Đang lấy từ: ${SOURCE_LABELS[s.source]} · đổi xong cần khởi động lại ${s.restart.includes('sidecar') ? (s.restart.includes('assistant') ? 'trợ lý và kết nối Zalo' : 'kết nối Zalo') : 'trợ lý'}.</small>`;
+  const note = html`<small class="muted">${s.hint ? `${s.hint} ` : ''}Đang lấy từ: ${SOURCE_LABELS[s.source]} · ${restartText(s.restart)}.</small>`;
   if (s.type === 'bool') return html`<${Toggle} id=${id} checked=${value} onChange=${onChange} label=${s.label} hint=${note} />`;
   if (s.type === 'enum') return html`<div class="field"><label for=${id}>${s.label}</label>
     <select id=${id} value=${value} onChange=${(e) => onChange(e.currentTarget.value)}>${s.options.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}</select>${note}</div>`;
@@ -70,7 +76,12 @@ export function Settings() {
     e.preventDefault();
     if (changes.publicMcp && !confirm('Mở kết nối MCP cho thành viên nghĩa là người ngoài dùng được tài nguyên của chủ bot qua kết nối đó. Tiếp tục?')) return;
     setBusy(true); setMsg({});
-    try { take(await api('/api/admin/settings', { method: 'PUT', body: { values: changes } })); setVersion((v) => v + 1); setMsg({ ok: 'Đã lưu — bấm "Khởi động lại ngay" ở dải vàng để áp dụng.' }); } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
+    // Phần lớn cài đặt áp dụng ngay (plugin đọc lại tệp khi đổi); chỉ vài mục còn cần khởi động lại.
+    const needRestart = list.some((s) => s.id in changes && s.restart.length);
+    try {
+      take(await api('/api/admin/settings', { method: 'PUT', body: { values: changes } })); setVersion((v) => v + 1);
+      setMsg({ ok: needRestart ? 'Đã lưu — có mục cần khởi động lại: bấm "Khởi động lại ngay" ở dải vàng.' : 'Đã lưu — có hiệu lực ngay từ tin nhắn tiếp theo.' });
+    } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
   }
   const groups = [...new Set(list.map((s) => s.group))];
   return html`${head}<${RestartBanner} version=${version} />

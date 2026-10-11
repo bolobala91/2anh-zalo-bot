@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.13.0] — 2026-10-11
+
+### Đổi
+- **Cấu hình áp dụng ngay, không cần khởi động lại trợ lý**: plugin tự đọc lại `.env` / `config.yaml` khi dashboard lưu (kiểm tra mỗi vài giây khi có tin tới) — chỉ trả lời khi tag, nhắn riêng, báo đã xem, thả cảm xúc, nhóm chỉ chủ nhân, chống nhắn dồn, số tin xem lại tìm ảnh, xác nhận thao tác nguy hiểm, kho tài liệu mở, MCP mở cho thành viên. Chỉ nạp lại đúng các khoá an toàn này, không bao giờ khoá bí mật.
+- Còn cần khởi động lại: **Kết bạn với người lạ** (đăng ký công cụ lúc khởi động) và **Giữ lịch sử** (kết nối Zalo đọc lúc khởi động). Trang Cấu hình ghi rõ từng mục "có hiệu lực ngay" hay "cần khởi động lại".
+
 ## [2.12.0] — 2026-10-11
 
 ### Thêm

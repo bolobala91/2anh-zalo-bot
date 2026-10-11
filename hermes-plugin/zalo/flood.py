@@ -35,11 +35,15 @@ class FloodGuard:
 
     def __init__(self, threshold: int = 6, window_s: float = 15.0,
                  mute_s: float = 90.0) -> None:
+        self._hits: Dict[str, Deque[float]] = {}
+        self._muted_until: Dict[str, float] = {}
+        self.configure(threshold, window_s, mute_s)
+
+    def configure(self, threshold: int = 6, window_s: float = 15.0, mute_s: float = 90.0) -> None:
+        """Đổi ngưỡng (trang Cấu hình lưu là áp dụng ngay); giữ nguyên các lượt đã đếm."""
         self._threshold = max(2, int(threshold))
         self._window = max(1.0, float(window_s))
         self._mute = max(1.0, float(mute_s))
-        self._hits: Dict[str, Deque[float]] = {}
-        self._muted_until: Dict[str, float] = {}
 
     def check(self, uid: str, now: float = None) -> str:
         """Ghi nhận một tin và cho biết có nên xử lý tiếp không."""
