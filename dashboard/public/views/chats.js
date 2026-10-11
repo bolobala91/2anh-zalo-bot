@@ -6,7 +6,7 @@ import { html, Icon, Live, Notice, PageHead, Spinner, fmtTime } from '../ui.js';
 import { fold, indexOfFolded, markMatches } from '../fold.js';
 import { classifyMedia } from '../media.js';
 import { FileCard, Lightbox, MediaPanel, Thumb, VideoCard } from './chat-media.js';
-import { PermsPanel } from './chat-perms.js';
+import { PermsIcon, PermsPanel, permsTint } from './chat-perms.js';
 
 export { markMatches };
 
@@ -574,8 +574,8 @@ function Thread({ conv, onBack }) {
         onClick=${() => toggle('search')} aria-label="Tìm trong hội thoại" title="Tìm trong hội thoại"><${Icon} name="search" /></button>
       <button type="button" ref=${toggles.media} class=${`btn btn-ghost btn-sm head-tool${side === 'media' ? ' active' : ''}`} aria-pressed=${side === 'media' ? 'true' : 'false'}
         onClick=${() => toggle('media')} aria-label="Ảnh/Video · Tệp · Link" title="Ảnh/Video · Tệp · Link"><${Icon} name="image" /><span class="head-tool-label">Ảnh/Video · Tệp · Link</span></button>
-      <button type="button" ref=${toggles.perms} class=${`btn btn-ghost btn-sm head-tool${side === 'perms' ? ' active' : ''}`} aria-pressed=${side === 'perms' ? 'true' : 'false'}
-        onClick=${() => toggle('perms')} aria-label=${group ? 'Quyền của bot trong nhóm này' : 'Quyền nhắn riêng của người này'} title="Phân quyền Bot"><${Icon} name="shield" /><span class="head-tool-label">Quyền</span></button>
+      <button type="button" ref=${toggles.perms} class=${`btn btn-ghost btn-sm head-tool head-perms ${permsTint()}${side === 'perms' ? ' active' : ''}`} aria-pressed=${side === 'perms' ? 'true' : 'false'}
+        onClick=${() => toggle('perms')} aria-label=${group ? 'Quyền của bot trong nhóm này' : 'Quyền nhắn riêng của người này'} title="Phân quyền Bot"><${PermsIcon} /><span class="head-tool-label">Quyền</span></button>
     </header>
     <${Live} error=${error || recallMsg.error} ok=${recallMsg.ok} />
     ${newer ? html`<div class="jump-bar"><span class="muted small">Đang xem tin cũ.</span>

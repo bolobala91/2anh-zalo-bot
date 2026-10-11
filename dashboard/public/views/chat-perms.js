@@ -7,6 +7,13 @@ import { html, Icon, Notice, SaveBar, Spinner, Toggle } from '../ui.js';
 import { Editor, mergeGroups } from './permissions.js';
 import { addPerson, dmDraft, dmPayload, sameDm, WHO_OPTIONS } from './dm-permissions.js';
 import { lockedByPolicy } from './studio-box.js';
+import { tintOf } from './shell.js';
+
+/** Ô biểu tượng khiên cùng màu với mục "Phân quyền Bot" ở thanh bên (đổi màu ở đó thì ở đây đổi theo). */
+export const permsTint = () => `tint-${tintOf('/permissions')}`;
+export function PermsIcon({ size = 14 }) {
+  return html`<span class=${`nav-ico perms-ico ${permsTint()}`} aria-hidden="true"><${Icon} name="shield" size=${size} /></span>`;
+}
 
 const UID = /^[1-9]\d{14,21}$/;
 const LEAVE = 'Bạn có thay đổi quyền chưa lưu. Bỏ thay đổi và đóng?';
@@ -126,7 +133,7 @@ export function PermsPanel({ conv, onClose }) {
 
   return html`<aside class="side-panel perms-panel" aria-label=${group ? 'Quyền của nhóm' : 'Quyền nhắn riêng'} onKeyDown=${(e) => { if (e.key === 'Escape') close(); }}>
     <header class="side-head">
-      <h3>${group ? 'Quyền của nhóm' : 'Quyền nhắn riêng'}</h3>
+      <h3 class="perms-title"><${PermsIcon} size=${13} />${group ? 'Quyền của nhóm' : 'Quyền nhắn riêng'}</h3>
       <button type="button" class="btn btn-ghost btn-sm" onClick=${close} aria-label="Đóng bảng quyền"><${Icon} name="close" /></button>
     </header>
     <div class="side-body">

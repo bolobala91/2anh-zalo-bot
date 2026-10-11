@@ -1135,3 +1135,8 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .perms-more { margin: 14px 0 4px; }
 /* Bảng Quyền nổi đè lên khung tin (không đẩy khung tin hẹp lại — tên nhóm dài bị dọc từng chữ). */
 @media (min-width: 1200px) { .chat-thread:has(> .perms-panel) > :not(.side-panel) { margin-right: 0; } .perms-panel { width: min(400px, 100%); } }
+/* Nút Quyền: ô khiên cùng màu mục Phân quyền Bot ở thanh bên; đang mở thì nền nhạt cùng màu. */
+.perms-ico { width: 22px; height: 22px; border-radius: 6px; }
+.thread-head > .head-perms { gap: 6px; }
+.thread-head > .head-perms.active { background: color-mix(in srgb, var(--tint) 12%, transparent); color: var(--tint); }
+.perms-title { display: inline-flex; align-items: center; gap: 8px; }

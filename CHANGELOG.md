@@ -2,6 +2,11 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.15.2] — 2026-10-11
+
+### Sửa
+- Nút **Quyền** trong Phiên chat và tiêu đề bảng Quyền dùng ô khiên màu tím, giống mục Phân quyền Bot ở thanh bên. Khi bảng đang mở, nút có nền tím nhạt.
+
 ## [2.15.1] — 2026-10-11
 
 ### Sửa
