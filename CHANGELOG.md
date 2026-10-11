@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.15.1] — 2026-10-11
+
+### Sửa
+- Bảng Quyền trong Phiên chat:
+  - Bảng nổi đè lên khung tin, không còn đẩy khung tin hẹp lại khiến tên nhóm dài bị dọc từng chữ.
+  - Mở chat riêng với chủ nhân thì bảng ghi rõ "chủ nhân luôn được", không còn báo nhầm "chưa được nhắn riêng".
+
 ## [2.15.0] — 2026-10-11
 
 ### Thêm

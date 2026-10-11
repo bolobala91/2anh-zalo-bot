@@ -19,6 +19,13 @@ async function ready(t, overrides = {}) {
   return { deps, call, admin, owner, disk };
 }
 
+test('phân quyền trả kèm UID chủ nhân (bảng Quyền trong Phiên chat nói "chủ nhân luôn được")', async (t) => {
+  const deps = makeDeps(t, { owners: { list: () => ['123456789012345678'] } });
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  assert.deepEqual((await call('/api/permissions', { cookie })).json.ownerUids, ['123456789012345678']);
+});
+
 test('chưa đăng nhập → 401 ở mọi route phân quyền', async (t) => {
   const { call } = await ready(t);
   for (const [path, method] of [['/api/permissions', 'GET'], ['/api/groups', 'GET'],

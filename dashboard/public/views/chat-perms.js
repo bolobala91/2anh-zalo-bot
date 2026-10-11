@@ -38,6 +38,7 @@ function DmQuick({ conv, perms, onSaved, onDirty }) {
   useEffect(() => { onDirty(dirty); }, [dirty]);
   useEffect(() => () => onDirty(false), []);
   if (!UID.test(uid)) return html`<${Notice} kind="info">Hội thoại này không có UID Zalo hợp lệ nên không chỉnh quyền được ở đây.<//>`;
+  if ((perms.ownerUids || []).includes(uid)) return html`<${Notice} kind="info"><strong>${conv.name}</strong> là chủ nhân bot — luôn nhắn riêng được và dùng được mọi tính năng, không cần phân quyền.<//>`;
 
   const { person, allowed } = dmStatus(draft, uid);
   const was = dmStatus(perms.dm, uid).allowed;

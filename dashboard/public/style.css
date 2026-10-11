@@ -1133,4 +1133,5 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .perms-panel .perm-grid { grid-template-columns: minmax(0, 1fr); }
 .perms-panel .save-bar { margin: 12px 0 0; padding: 10px 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); border-radius: 0; box-shadow: none; }
 .perms-more { margin: 14px 0 4px; }
-@media (min-width: 1200px) { .chat-thread:has(> .perms-panel) > :not(.side-panel) { margin-right: 392px; } .perms-panel { width: min(400px, 100%); } }
+/* Bảng Quyền nổi đè lên khung tin (không đẩy khung tin hẹp lại — tên nhóm dài bị dọc từng chữ). */
+@media (min-width: 1200px) { .chat-thread:has(> .perms-panel) > :not(.side-panel) { margin-right: 0; } .perms-panel { width: min(400px, 100%); } }
