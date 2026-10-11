@@ -226,7 +226,7 @@ export function Permissions({ me }) {
     ${perms.corrupt ? html`<${Notice} kind="warn">Tệp phân quyền bị hỏng nên bot đang dùng mặc định (mọi tính năng bật). Lưu lại một mục bất kỳ để ghi tệp mới.<//>` : null}
     ${groupsError ? html`<${Notice} kind="warn">Chưa lấy được danh sách nhóm: ${groupsError} Danh sách dưới đây chỉ có nhóm đã chỉnh trước đó hoặc đã có trong Phiên chat.<//>` : null}
     <${Live} ok=${flash} />
-    <div class=${`perm${target || selected === DM_KEY || selected === QUOTA_KEY ? ' has-sel' : ''}`}>
+    <div class=${`perm${target || selected === DM_KEY || selected === QUOTA_KEY || selected === CALL_KEY ? ' has-sel' : ''}`}>
       <section class="card perm-list" aria-label="Nhóm">
         <div class="chat-search">
           <label for="perm-q" class="sr-only">Lọc nhóm theo tên</label>

@@ -2,6 +2,11 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.11.1] — 2026-10-11
+
+### Sửa
+- Phân quyền Bot trên điện thoại: bấm "Cách gọi bot" không mở được khung sửa. Thẻ từ khoá gọn hơn.
+
 ## [2.11.0] — 2026-10-11
 
 ### Thêm

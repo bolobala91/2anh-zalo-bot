@@ -1116,4 +1116,4 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .word-x:focus-visible { outline: none; box-shadow: var(--focus); }
 .word-add { display: flex; flex-wrap: wrap; gap: 8px; }
 .word-add input { flex: 1 1 200px; min-width: 0; }
-@media (max-width: 760px) { .word-x { width: 40px; height: 40px; } }
+@media (max-width: 760px) { .word-x { width: 34px; height: 34px; } .word-chip { font-size: 14px; } }
