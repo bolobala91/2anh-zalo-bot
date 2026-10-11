@@ -2,6 +2,11 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.12.0] — 2026-10-11
+
+### Thêm
+- **Cấu hình › Đọc ảnh và tệp**: chỉnh **số tin gần nhất bot xem lại để tìm ảnh/tệp** khi được hỏi trong nhóm (1–30, mặc định 3 như trước; biến `ZALO_MEDIA_LOOKBACK`). Trước đây ảnh gửi cách quá 3 tin thì bot chỉ thấy đường link (thường dạng JXL) và không đọc được. Hỏi về tệp / gọi suông cũng lật lại theo số này khi lớn hơn 5. Bot tự nhớ đủ số tin cần. Cần khởi động lại trợ lý sau khi đổi.
+
 ## [2.11.1] — 2026-10-11
 
 ### Sửa

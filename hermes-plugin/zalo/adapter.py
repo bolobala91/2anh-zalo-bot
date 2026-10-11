@@ -293,6 +293,17 @@ VOICE_RESEND_WINDOW_SECONDS = 600
 GROUP_CONTEXT_LIMIT = 8
 # Bao nhiêu tin được kể lại khi bot bị gọi trơ, không kèm câu hỏi nào.
 BARE_CALL_CONTEXT = 5
+# Hỏi về ảnh/tệp: mặc định lật lại 3 tin (ảnh + một câu caption); admin chỉnh 1–30 (ZALO_MEDIA_LOOKBACK).
+MEDIA_LOOKBACK_DEFAULT = 3
+MEDIA_LOOKBACK_MAX = 30
+
+
+def _media_lookback(raw: Any) -> int:
+    try:
+        n = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return MEDIA_LOOKBACK_DEFAULT
+    return max(1, min(MEDIA_LOOKBACK_MAX, n))
 # Gọi suông: chỉ có tiếng gọi, không có nội dung. "@Lăng Tiêu", "Lăng Tiêu ơi",
 # "@Lăng Tiêu đâu rồi" — tất cả đều mang nghĩa "đọc lại xem đang bàn gì đi".
 _CALL_ONLY_WORDS = frozenset(
@@ -563,6 +574,10 @@ class ZaloAdapter(BasePlatformAdapter):
             extra.get("auto_react", _get_scoped_secret("ZALO_AUTO_REACT", "true")),
             default=True,
         )
+        # Hỏi về ảnh/tệp ("xem ảnh này", "gộp 2 file") thì lật lại bao nhiêu tin gần nhất trong nhóm để lấy
+        # ảnh/tệp nạp cho trợ lý (Cấu hình › Đọc ảnh và tệp). Ảnh xa hơn chỉ còn là đường link, trợ lý không xem được.
+        self._media_lookback: int = _media_lookback(
+            extra.get("media_lookback", _get_scoped_secret("ZALO_MEDIA_LOOKBACK", str(MEDIA_LOOKBACK_DEFAULT))))
         # Tài khoản bot khác trong cùng nhóm (vd. hai bot của cùng chủ nhân):
         # tin của họ vẫn giữ làm ngữ cảnh, nhưng không bao giờ gọi dậy bot này,
         # để hai bot không trả lời qua lại lẫn nhau.
@@ -1417,7 +1432,8 @@ class ZaloAdapter(BasePlatformAdapter):
     def _remember_group_message(self, thread_id: str, entry: Dict[str, Any]) -> None:
         bucket = self._recent_group_messages.get(thread_id)
         if bucket is None:
-            bucket = deque(maxlen=GROUP_CONTEXT_LIMIT)
+            # Nhớ đủ để còn lật lại được số tin admin đặt (cộng chính tin đang hỏi).
+            bucket = deque(maxlen=max(GROUP_CONTEXT_LIMIT, getattr(self, "_media_lookback", MEDIA_LOOKBACK_DEFAULT) + 1))
             self._recent_group_messages[thread_id] = bucket
         bucket.append(entry)
 
@@ -1436,11 +1452,12 @@ class ZaloAdapter(BasePlatformAdapter):
         about_files = bool(_FILE_CONTEXT_RE.search(text))
         if not (_IMAGE_CONTEXT_RE.search(text) or bare_call or about_files):
             return []
-        # Bỏ chính tin đang hỏi. Hỏi về ảnh thì 3 tin là đủ (ảnh + một câu
-        # caption). Gọi suông thì kể lại 5 tin để bot biết nhóm đang bàn gì rồi
-        # mới mở miệng, thay vì hỏi ngược "anh cần gì ạ?".
+        # Bỏ chính tin đang hỏi. Hỏi về ảnh thì lật lại số tin admin đặt (mặc
+        # định 3: ảnh + một câu caption). Gọi suông / hỏi về tệp thì kể lại ít
+        # nhất 5 tin để bot biết nhóm đang bàn gì, thay vì hỏi ngược "anh cần gì ạ?".
+        lookback = getattr(self, "_media_lookback", MEDIA_LOOKBACK_DEFAULT)
         prior = [item for item in bucket if item.get("id") != current.get("id")]
-        return prior[-BARE_CALL_CONTEXT:] if bare_call or about_files else prior[-3:]
+        return prior[-max(BARE_CALL_CONTEXT, lookback):] if bare_call or about_files else prior[-lookback:]
 
     @staticmethod
     def _media_urls_from_entries(entries: List[Dict[str, Any]]) -> List[str]:

@@ -846,6 +846,23 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([m["id"] for m in got], ["3", "4", "5", "6", "7"])
         self.assertEqual(adapter._recent_context_for_question("g1", {"id": "9", "text": "@bot thời tiết mai"}), [])
 
+    def test_image_lookback_is_configurable(self):
+        adapter = self.make_adapter()
+        adapter._recent_group_messages["g1"] = [{"id": str(i), "text": f"tin {i}"} for i in range(1, 13)]
+        ask = {"id": "99", "text": "@bot xem ảnh này"}
+        self.assertEqual([m["id"] for m in adapter._recent_context_for_question("g1", ask)], ["10", "11", "12"], "mặc định 3 tin")
+        adapter._media_lookback = 10
+        self.assertEqual(len(adapter._recent_context_for_question("g1", ask)), 10)
+        got = adapter._recent_context_for_question("g1", {"id": "99", "text": "@bot gộp 2 file pdf vừa gửi"})
+        self.assertEqual(len(got), 10, "hỏi về tệp cũng lật lại theo số admin đặt khi lớn hơn 5")
+        from importlib import import_module
+        mod = import_module(type(adapter).__module__)
+        self.assertEqual([mod._media_lookback(v) for v in ("7", "0", "99", "abc", None)], [7, 1, 30, 3, 3])
+        adapter._recent_group_messages.clear()
+        for i in range(15):
+            adapter._remember_group_message("g2", {"id": str(i), "text": "x"})
+        self.assertEqual(len(adapter._recent_group_messages["g2"]), 11, "nhớ đủ số tin admin đặt + tin đang hỏi")
+
     async def test_owner_dm_with_undownloadable_image_still_reaches_the_agent_with_the_reason(self):
         adapter = self.make_adapter()
         handled = []
