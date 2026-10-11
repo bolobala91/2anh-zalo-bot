@@ -84,7 +84,8 @@ export function staysListed(id, perms, groups) {
   return id === DEFAULTS_KEY || id === DM_KEY || id === QUOTA_KEY || Boolean(perms.groups[id]) || (groups || []).some((g) => g.id === id);
 }
 
-function Editor({ target, value, defaults, features, studioFeatures, studioPolicy, defaultQuota, onSaved, onBack, onDirty }) {
+/** Sửa quyền một nhóm/mặc định. `head=false` khi nhúng vào bảng Quyền của Phiên chat (bảng đã có tiêu đề). */
+export function Editor({ target, value, defaults, features, studioFeatures, studioPolicy, defaultQuota, onSaved, onBack, onDirty, head = true }) {
   const isGroup = target.id !== DEFAULTS_KEY;
   const [draft, setDraft] = useState(() => pick(value));
   const [qText, setQText] = useState(() => quotaText(value.studioQuota));
@@ -111,11 +112,11 @@ function Editor({ target, value, defaults, features, studioFeatures, studioPolic
 
   const p = `perm-${target.id}`;
   return html`<form class="perm-form" onSubmit=${save} novalidate>
-    <header class="thread-head">
+    ${head ? html`<header class="thread-head">
       <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
       <h2>${target.name}</h2>
       ${isGroup && target.members ? html`<span class="tag">${target.members} thành viên</span>` : null}
-    </header>
+    </header>` : null}
     ${isGroup && target.ownerOnly ? html`<${Notice} kind="warn">Nhóm này đang nằm trong danh sách cũ <strong>Nhóm chỉ chủ nhân gọi được bot</strong> (trang Cấu hình): thành viên tag bot thì bot im. Lưu phân quyền riêng cho nhóm ở đây thì phân quyền này thắng danh sách đó.<//>` : null}
     <div class="perm-note-row">
       <p class="muted small perm-note">${isGroup

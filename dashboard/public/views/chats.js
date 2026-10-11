@@ -6,6 +6,7 @@ import { html, Icon, Live, Notice, PageHead, Spinner, fmtTime } from '../ui.js';
 import { fold, indexOfFolded, markMatches } from '../fold.js';
 import { classifyMedia } from '../media.js';
 import { FileCard, Lightbox, MediaPanel, Thumb, VideoCard } from './chat-media.js';
+import { PermsPanel } from './chat-perms.js';
 
 export { markMatches };
 
@@ -430,7 +431,7 @@ function Thread({ conv, onBack }) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadingNewer, setLoadingNewer] = useState(false);
   const [error, setError] = useState('');
-  const [side, setSide] = useState(null); // 'search' | 'media'
+  const [side, setSide] = useState(null); // 'search' | 'media' | 'perms'
   const [flash, setFlash] = useState(null);
   const [lightbox, setLightbox] = useState(null); // { items, index }
   const box = useRef(null);
@@ -560,7 +561,7 @@ function Thread({ conv, onBack }) {
   }
 
   const toggle = (name) => setSide((cur) => (cur === name ? null : name));
-  const toggles = { search: useRef(null), media: useRef(null) };
+  const toggles = { search: useRef(null), media: useRef(null), perms: useRef(null) };
   // Đóng bảng thì trả tiêu điểm về đúng nút đã mở nó trên đầu khung tin.
   const closeSide = (name) => { setSide(null); setTimeout(() => toggles[name].current?.focus(), 0); };
   const group = conv.threadType === 1;
@@ -573,6 +574,8 @@ function Thread({ conv, onBack }) {
         onClick=${() => toggle('search')} aria-label="Tìm trong hội thoại" title="Tìm trong hội thoại"><${Icon} name="search" /></button>
       <button type="button" ref=${toggles.media} class=${`btn btn-ghost btn-sm head-tool${side === 'media' ? ' active' : ''}`} aria-pressed=${side === 'media' ? 'true' : 'false'}
         onClick=${() => toggle('media')} aria-label="Ảnh/Video · Tệp · Link" title="Ảnh/Video · Tệp · Link"><${Icon} name="image" /><span class="head-tool-label">Ảnh/Video · Tệp · Link</span></button>
+      <button type="button" ref=${toggles.perms} class=${`btn btn-ghost btn-sm head-tool${side === 'perms' ? ' active' : ''}`} aria-pressed=${side === 'perms' ? 'true' : 'false'}
+        onClick=${() => toggle('perms')} aria-label=${group ? 'Quyền của bot trong nhóm này' : 'Quyền nhắn riêng của người này'} title="Phân quyền Bot"><${Icon} name="shield" /><span class="head-tool-label">Quyền</span></button>
     </header>
     <${Live} error=${error || recallMsg.error} ok=${recallMsg.ok} />
     ${newer ? html`<div class="jump-bar"><span class="muted small">Đang xem tin cũ.</span>
@@ -591,6 +594,7 @@ function Thread({ conv, onBack }) {
       </ol>`}
     <${Compose} conv=${conv} onSent=${() => kick.current()} reply=${reply} onClearReply=${() => setReply(null)} mentionReq=${mentionReq} />
     ${side === 'search' ? html`<${ThreadSearch} conv=${conv} onJump=${jumpTo} onClose=${() => closeSide('search')} />` : null}
+    ${side === 'perms' ? html`<${PermsPanel} conv=${conv} onClose=${() => closeSide('perms')} />` : null}
     ${side === 'media' ? html`<${MediaPanel} conv=${conv} onClose=${() => closeSide('media')} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
     ${lightbox ? html`<${Lightbox} items=${lightbox.items} index=${lightbox.index}
       onIndex=${(index) => setLightbox((cur) => ({ ...cur, index }))} onClose=${() => setLightbox(null)} />` : null}`;

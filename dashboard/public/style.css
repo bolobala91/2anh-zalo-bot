@@ -1128,3 +1128,9 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .word-add { display: flex; flex-wrap: wrap; gap: 8px; }
 .word-add input { flex: 1 1 200px; min-width: 0; }
 @media (max-width: 760px) { .word-x { width: 34px; height: 34px; } .word-chip { font-size: 14px; } }
+
+/* Bảng Quyền trong Phiên chat: một cột, thanh Lưu dính đáy bảng (không tràn lề như trong thẻ của tab Phân quyền). */
+.perms-panel .perm-grid { grid-template-columns: minmax(0, 1fr); }
+.perms-panel .save-bar { margin: 12px 0 0; padding: 10px 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); border-radius: 0; box-shadow: none; }
+.perms-more { margin: 14px 0 4px; }
+@media (min-width: 1200px) { .chat-thread:has(> .perms-panel) > :not(.side-panel) { margin-right: 392px; } .perms-panel { width: min(400px, 100%); } }

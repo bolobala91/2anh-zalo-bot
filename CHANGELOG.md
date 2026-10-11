@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.15.0] — 2026-10-11
+
+### Thêm
+- Nút **Quyền** (🛡) ở đầu khung Phiên chat cho chỉnh phân quyền ngay tại chỗ, không phải đổi tab:
+  - **Chat riêng:** một công tắc "Cho nhắn riêng với bot" cho đúng người đang xem, kèm tính năng riêng và xưởng của người đó. Nếu đang ở chế độ "Chỉ chủ nhân", lưu sẽ chuyển sang "Chủ nhân và những người trong danh sách" (những người khác vẫn bị chặn như cũ).
+  - **Nhóm:** dùng đúng trình sửa quyền nhóm của tab Phân quyền: Hoạt động, Chỉ trả lời khi được tag, tính năng, xưởng và số lượt.
+  - Lưu xong có hiệu lực ngay và được ghi Nhật ký như khi lưu ở tab Phân quyền Bot. Tab đó vẫn giữ đầy đủ mọi mục.
+
 ## [2.14.1] — 2026-10-11
 
 ### Sửa
