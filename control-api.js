@@ -5,6 +5,8 @@
  */
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
+import { realpathSync } from 'node:fs';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 const ZALO_UID = /^[1-9]\d{14,21}$/;
 const MAX_TEXT = 2000;
@@ -38,7 +40,7 @@ function tokenOk(header, expected) {
   return want.length > 0 && supplied.length === want.length && timingSafeEqual(supplied, want);
 }
 
-export function createControlRouter({ token, health, qr, logout, send, loginCode, groups, groupMembers = null, recall = null, directory = null }) {
+export function createControlRouter({ token, health, qr, logout, send, loginCode, groups, groupMembers = null, recall = null, sendFile = null, outboxDir = null, directory = null }) {
   const router = express.Router();
   router.use((req, res, next) => (tokenOk(req.get('authorization'), token)
     ? next() : res.status(401).json({ ok: false, error: 'unauthorized' })));
@@ -88,6 +90,21 @@ export function createControlRouter({ token, health, qr, logout, send, loginCode
     return {};
   }));
   router.get('/groups', wrap(async () => ({ groups: await groups() })));
+  // Gửi ảnh/tệp từ Phiên chat: chỉ nhận tệp nằm trong thư mục tạm của dashboard (outboxDir) — không bao giờ gửi
+  // một đường dẫn tuỳ ý trên máy chủ ra Zalo.
+  if (sendFile && outboxDir) {
+    router.post('/send-file', wrap(async (req) => {
+      const { threadId, threadType, path, actor } = req.body || {};
+      if (!/^\d+$/.test(String(threadId ?? ''))) throw bad('threadId không hợp lệ');
+      if (threadType !== 0 && threadType !== 1) throw bad('threadType phải là 0 hoặc 1');
+      let real;
+      try { real = realpathSync(String(path ?? '')); } catch { throw bad('Không thấy tệp cần gửi'); }
+      const root = (() => { try { return realpathSync(outboxDir); } catch { return resolve(outboxDir); } })();
+      const rel = relative(root, real);
+      if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw bad('Tệp không nằm trong thư mục gửi của dashboard');
+      return { result: await sendFile({ threadId: String(threadId), threadType, path: real, actor: checkActor(actor) }) };
+    }));
+  }
   // Thu hồi tin do chính bot gửi (bấm từ Phiên chat). Bot tự kiểm đúng là tin của mình.
   if (recall) {
     router.post('/recall', wrap(async (req) => {

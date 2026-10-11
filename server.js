@@ -9,7 +9,7 @@ import { loadRepoEnv, loadHermesEnv } from './scripts/setup-env.js';
 import { Zalo } from 'zca-js';
 import { tryReconnect, saveSession, clearSession, fetchProfile, zaloOptions } from './auth.js';
 import { setupBotListener } from './bot-handler.js';
-import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached, sendSystemNotice, auditDashboardAction, acquireSendQuota, fetchGroupMembers, recallOwnMessage } from './hermes-bridge.js';
+import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached, sendSystemNotice, auditDashboardAction, acquireSendQuota, fetchGroupMembers, recallOwnMessage, sendFileNotice } from './hermes-bridge.js';
 import { openZaloStore } from './zalo-store.js';
 import { createRuntimeHealth } from './runtime-health.js';
 import { importLegacyHermesHistory } from './legacy-history-import.js';
@@ -87,6 +87,12 @@ app.use('/control', createControlRouter({
       msgId: quote.msgId, cliMsgId: quote.cliMsgId || quote.msgId, uidFrom: quote.isSelf ? String(api.getOwnId()) : quote.uidFrom,
     } : null;
     return sendSystemNotice({ api, threadId, threadType, text, mentions, quote: q, actorUid: actor, actorRole: 'dashboard', action: 'dashboard_send' });
+  },
+  // Ảnh/tệp gửi từ Phiên chat: dashboard đặt tệp vào <HERMES_HOME>/zalo/dashboard/outbox, chỉ thư mục đó được nhận.
+  outboxDir: process.env.HERMES_HOME ? join(process.env.HERMES_HOME, 'zalo', 'dashboard', 'outbox') : null,
+  sendFile: ({ threadId, threadType, path, actor }) => {
+    if (!api) throw new Error('Zalo chưa đăng nhập');
+    return sendFileNotice({ api, threadId, threadType, path, actorUid: actor });
   },
   recall: ({ threadId, threadType, msgId, cliMsgId, actor }) => {
     if (!api) throw new Error('Zalo chưa đăng nhập');

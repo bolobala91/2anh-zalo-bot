@@ -1,7 +1,7 @@
 // Phiên chat (spec §9): trái là hội thoại + tìm toàn văn; phải là tin nhắn (bot canh phải, khác màu),
 // cuộn lên tải tin cũ, ô soạn gửi dưới tên bot. Chữ tin nhắn chỉ đi qua htm — không bao giờ thành HTML.
 import { useEffect, useLayoutEffect, useRef, useState } from '../vendor/hooks.mjs';
-import { api } from '../api.js';
+import { api, sendFile } from '../api.js';
 import { html, Icon, Live, Notice, PageHead, Spinner, fmtTime } from '../ui.js';
 import { fold, indexOfFolded, markMatches } from '../fold.js';
 import { classifyMedia } from '../media.js';
@@ -221,7 +221,25 @@ function ThreadSearch({ conv, onJump, onClose }) {
  * Ô soạn gửi dưới tên bot. Trả lời: thanh "Đang trả lời …" (gửi kèm trích dẫn). Nhóm: gõ "@" hiện danh sách thành viên
  * để gắn tag thật; "Nhắc tên" từ một tin chèn "@Tên " của người gửi tin đó.
  */
+// Ảnh/tệp gửi kèm (khớp SEND_FILE_TYPES / MAX_SEND_FILE của routes/chats.js).
+export const ATTACH_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'zip', 'rar', '7z', 'mp3', 'm4a', 'wav', 'mp4', 'mov'];
+export const ATTACH_MAX = 25 * 1024 * 1024;
+const MAX_ATTACH = 10;
+const sizeText = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+/** Kiểm một tệp trước khi đưa vào hàng chờ → câu lỗi hoặc ''. */
+export function attachProblem(name, size) {
+  const ext = (/\.([A-Za-z0-9]{1,5})$/.exec(String(name || '')) || [])[1]?.toLowerCase();
+  if (!ext || !ATTACH_TYPES.includes(ext)) return `“${name || 'tệp'}”: loại tệp này không gửi được.`;
+  if (size > ATTACH_MAX) return `“${name}” nặng ${sizeText(size)} — tối đa 25 MB.`;
+  if (!size) return `“${name}” rỗng.`;
+  return '';
+}
+
 function Compose({ conv, onSent, reply, onClearReply, mentionReq }) {
+  const [files, setFiles] = useState([]); // [{ id, file, preview? }]
+  const [drag, setDrag] = useState(false);
+  const picker = useRef(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
@@ -233,7 +251,34 @@ function Compose({ conv, onSent, reply, onClearReply, mentionReq }) {
   const area = useRef(null);
   const group = conv.threadType === 1;
 
-  useEffect(() => { setText(''); setPicks([]); setMembers(null); setQuery(null); }, [conv.threadId]);
+  useEffect(() => { setText(''); setPicks([]); setMembers(null); setQuery(null); setFiles([]); }, [conv.threadId]);
+  function addFiles(list) {
+    const errors = [];
+    const next = [];
+    for (let f of [...list]) {
+      // Ảnh dán từ bộ nhớ tạm không có đuôi thì đặt tên theo giờ.
+      if (!/\.[A-Za-z0-9]{1,5}$/.test(f.name || '') && /^image\//.test(f.type)) {
+        f = new File([f], `anh-dan-${Date.now()}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type });
+      }
+      const problem = attachProblem(f.name, f.size);
+      if (problem) { errors.push(problem); continue; }
+      next.push({ id: `${Date.now()}-${Math.random()}`, file: f, preview: null });
+    }
+    setFiles((cur) => [...cur, ...next].slice(0, MAX_ATTACH));
+    if (files.length + next.length > MAX_ATTACH) errors.push(`Mỗi lần gửi tối đa ${MAX_ATTACH} tệp.`);
+    // Xem trước ảnh bằng data: URL (CSP chỉ cho ảnh từ chính trang và data:).
+    for (const item of next) {
+      if (!/^image\//.test(item.file.type) || item.file.size > 8 * 1048576) continue;
+      const fr = new FileReader();
+      fr.onload = () => setFiles((cur) => cur.map((x) => (x.id === item.id ? { ...x, preview: String(fr.result) } : x)));
+      fr.readAsDataURL(item.file);
+    }
+    setMsg(errors.length ? { error: errors.join(' ') } : {});
+  }
+  function onPaste(e) {
+    const pasted = [...(e.clipboardData?.files || [])];
+    if (pasted.length) { e.preventDefault(); addFiles(pasted); }
+  }
   function insertAt(pos, removeLen, insert) {
     const el = area.current;
     const next = text.slice(0, pos) + insert + text.slice(pos + removeLen);
@@ -280,16 +325,26 @@ function Compose({ conv, onSent, reply, onClearReply, mentionReq }) {
     e?.preventDefault();
     if (busy) return;
     const body = text.trim();
-    if (!body) { setMsg({ error: 'Nội dung đang trống — gõ tin nhắn rồi gửi.' }); return; }
+    if (!body && !files.length) { setMsg({ error: 'Nội dung đang trống — gõ tin nhắn hoặc đính kèm ảnh/tệp rồi gửi.' }); return; }
     if (body.length > MAX_TEXT) { setMsg({ error: `Tin nhắn dài quá ${MAX_TEXT} ký tự — rút gọn hoặc chia làm nhiều tin.` }); return; }
     setBusy(true); setMsg({});
     const mentions = group ? placeMentions(body, picks) : [];
     try {
-      await api(`/api/chats/${encodeURIComponent(conv.threadId)}/send`, {
-        method: 'POST', body: { text: body, threadType: conv.threadType, ...(reply ? { replyTo: reply.id } : {}), ...(mentions.length ? { mentions } : {}) },
-      });
-      setText((cur) => (cur.trim() === body ? '' : cur)); setPicks([]); onClearReply();
-      setMsg({ ok: 'Đã gửi dưới tên bot.' }); onSent();
+      // Chữ (kèm trả lời / nhắc tên) đi trước, ảnh/tệp gửi lần lượt sau — mỗi tệp một tin như trên Zalo.
+      if (body) {
+        await api(`/api/chats/${encodeURIComponent(conv.threadId)}/send`, {
+          method: 'POST', body: { text: body, threadType: conv.threadType, ...(reply ? { replyTo: reply.id } : {}), ...(mentions.length ? { mentions } : {}) },
+        });
+        setText((cur) => (cur.trim() === body ? '' : cur)); setPicks([]); onClearReply();
+      }
+      let sent = 0;
+      for (const item of files) {
+        setMsg({ ok: `Đang gửi ${item.file.name}…` });
+        await sendFile(`/api/chats/${encodeURIComponent(conv.threadId)}/send-file?type=${conv.threadType}`, item.file);
+        sent += 1;
+        setFiles((cur) => cur.filter((x) => x.id !== item.id));
+      }
+      setMsg({ ok: sent ? `Đã gửi${body ? ' tin và' : ''} ${sent} tệp dưới tên bot.` : 'Đã gửi dưới tên bot.' }); onSent();
     } catch (err) {
       // 504: chưa rõ tin đã đi chưa; 409: vừa gửi đúng tin này. Giữ nguyên chữ trong ô, làm mới khung tin để người dùng tự kiểm.
       setMsg({ error: err.message });
@@ -305,7 +360,15 @@ function Compose({ conv, onSent, reply, onClearReply, mentionReq }) {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(e);
   }
   const replyView = reply ? messageView(reply) : null;
-  return html`<form class="compose" onSubmit=${send} novalidate>
+  return html`<form class=${`compose${drag ? ' is-drag' : ''}`} onSubmit=${send} novalidate
+    onDragOver=${(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDrag(true); } }}
+    onDragLeave=${(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDrag(false); }}
+    onDrop=${(e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); setDrag(false); addFiles(e.dataTransfer.files); } }}>
+    ${files.length ? html`<ul class="attach-list" aria-label="Ảnh/tệp sẽ gửi">${files.map((f) => html`<li key=${f.id} class="attach-item">
+      ${f.preview ? html`<img src=${f.preview} alt="" />` : html`<span class="attach-ico" aria-hidden="true"><${Icon} name="file" size=${18} /></span>`}
+      <span class="attach-name"><span>${f.file.name}</span><small class="muted">${sizeText(f.file.size)}</small></span>
+      <button type="button" class="word-x" disabled=${busy} aria-label=${`Bỏ ${f.file.name}`} onClick=${() => setFiles((cur) => cur.filter((x) => x.id !== f.id))}><${Icon} name="close" size=${14} /></button>
+    </li>`)}</ul>` : null}
     ${reply ? html`<div class="reply-bar">
       <${Icon} name="reply" size=${16} />
       <span class="reply-main"><strong>Trả lời ${reply.isSelf ? 'Bot' : (reply.senderName || 'thành viên')}</strong>
@@ -322,10 +385,13 @@ function Compose({ conv, onSent, reply, onClearReply, mentionReq }) {
     <label for="chat-compose" class="sr-only">Tin nhắn gửi dưới tên bot</label>
     <textarea id="chat-compose" ref=${area} rows="2" maxlength=${MAX_TEXT} value=${text} readOnly=${busy}
       placeholder=${group ? (narrow() ? 'Nhắn dưới tên bot… (@ để nhắc tên)' : 'Nhắn dưới tên bot… (@ để nhắc tên, Ctrl+Enter để gửi)') : (narrow() ? 'Nhắn dưới tên bot…' : 'Nhắn dưới tên bot… (Ctrl+Enter để gửi)')}
-      aria-describedby="chat-compose-help" aria-autocomplete=${group ? 'list' : undefined} onInput=${onInput} onKeyDown=${onKeyDown}
+      aria-describedby="chat-compose-help" aria-autocomplete=${group ? 'list' : undefined} onInput=${onInput} onKeyDown=${onKeyDown} onPaste=${onPaste}
       onBlur=${() => setTimeout(() => setQuery(null), 150)}></textarea>
     <div class="compose-foot">
-      <small class="muted"><span id="chat-compose-help">Tin gửi dưới tên bot, ghi vào Nhật ký kèm tên bạn.</span> ${text.length}/${MAX_TEXT}</small>
+      <small class="muted"><span id="chat-compose-help">Tin gửi dưới tên bot, ghi vào Nhật ký kèm tên bạn. Dán ảnh (Ctrl+V) hoặc kéo thả tệp vào đây.</span> ${text.length}/${MAX_TEXT}</small>
+      <input ref=${picker} type="file" class="sr-only" multiple accept=${ATTACH_TYPES.map((x) => `.${x}`).join(',')} tabindex="-1" aria-hidden="true"
+        onChange=${(e) => { addFiles(e.currentTarget.files); e.currentTarget.value = ''; }} />
+      <button type="button" class="btn btn-secondary btn-sm attach-btn" disabled=${busy} onClick=${() => picker.current?.click()} aria-label="Đính kèm ảnh hoặc tệp" title="Đính kèm ảnh/tệp"><${Icon} name="clip" size=${16} /></button>
       <button class="btn btn-primary btn-sm" disabled=${busy}><${Icon} name="send" size=${16} /> ${busy ? 'Đang gửi…' : 'Gửi'}</button>
     </div>
     <${Live} error=${msg.error} ok=${msg.ok} />

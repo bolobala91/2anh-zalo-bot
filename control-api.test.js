@@ -43,6 +43,27 @@ test('gửi tin tay chuyển đúng người gửi xuống', async (t) => {
   assert.deepEqual(calls.at(-1), ['send', { threadId: '9', threadType: 1, text: 'Chào', actor: 'khach' }]);
 });
 
+test('gửi tệp chỉ nhận tệp nằm trong outbox của dashboard', async (t) => {
+  const { mkdtempSync, mkdirSync, writeFileSync, realpathSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = mkdtempSync(join(tmpdir(), 'zd-outbox-'));
+  const outboxDir = join(root, 'outbox');
+  mkdirSync(join(outboxDir, 'x'), { recursive: true });
+  const inside = join(outboxDir, 'x', 'a.png');
+  const outside = join(root, 'secret.txt');
+  writeFileSync(inside, 'a'); writeFileSync(outside, 'b');
+  const sent = [];
+  const { call } = await serve(t, { outboxDir, sendFile: async (m) => { sent.push(m); return { msgId: '2' }; } });
+  const post = (path) => call('/send-file', { method: 'POST', body: { threadId: '9', threadType: 1, path, actor: 'khach' } });
+  assert.equal((await post(inside)).status, 200);
+  assert.equal(sent[0].path, realpathSync(inside));
+  for (const p of [outside, join(outboxDir, '..', 'secret.txt'), outboxDir, join(outboxDir, 'khong-co.png')]) {
+    assert.equal((await post(p)).status, 400, p);
+  }
+  assert.equal(sent.length, 1);
+});
+
 test('gửi tin tay từ chối khi thiếu chữ hoặc quá 2000 ký tự', async (t) => {
   const { call } = await serve(t);
   assert.equal((await call('/send', { method: 'POST', body: { threadId: '9', threadType: 1, text: '  ', actor: 'a' } })).status, 400);

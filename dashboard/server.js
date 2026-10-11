@@ -123,6 +123,8 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     agentTrace: createAgentTrace({ dbPath: paths.hermesStateDb }),
     mcpServers: createMcpServers({ configFile: paths.hermesConfigFile, publicMcp: () => readEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP') }),
     hermesAdmin,
+    // Ảnh/tệp gửi tay từ Phiên chat đặt tạm ở đây; kết nối Zalo chỉ nhận tệp trong đúng thư mục này.
+    outboxDir: join(paths.dataDir, 'outbox'),
     // Cách gọi bot: cùng tệp plugin đọc (ZALO_CALL_WORDS_FILE trong .env Hermes thắng).
     callWords: createCallWords({ file: readEnvKey(paths.hermesEnvFile, 'ZALO_CALL_WORDS_FILE') || join(paths.hermesHome, 'zalo', 'call-words.json') }),
     maintenance: createMaintenance({ hermesBin: hermesBin({ hermesHome: paths.hermesHome, env }), dataDir: paths.dataDir, sidecarRoot: paths.sidecarRoot,

@@ -39,6 +39,8 @@ export function createSidecarClient({ baseUrl = 'http://127.0.0.1:3872', token, 
     send: async (m) => (await call('/send', { method: 'POST', body: m, limitMs: sendTimeoutMs, distinctTimeout: true })).result,
     loginCode: (m) => call('/login-code', { method: 'POST', body: m }),
     groups: async () => (await call('/groups')).groups,
+    // Gửi ảnh/tệp lớn qua Zalo có thể lâu (tải lên) — hạn 60 giây, quá hạn chưa chắc là thất bại.
+    sendFile: async (m) => (await call('/send-file', { method: 'POST', body: m, limitMs: 60_000, distinctTimeout: true })).result,
     recall: async (m) => (await call('/recall', { method: 'POST', body: m, limitMs: sendTimeoutMs })).result,
     groupMembers: async (groupId) => {
       const { total, members } = await call(`/group-members?groupId=${encodeURIComponent(groupId)}`, { limitMs: sendTimeoutMs });

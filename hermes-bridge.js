@@ -789,6 +789,31 @@ export async function recallOwnMessage({ api, threadId, threadType, msgId, cliMs
   });
 }
 
+/**
+ * Gửi một ảnh/tệp dưới tên bot, bấm từ dashboard (Phiên chat). `path` đã được control-api kiểm là nằm trong thư mục
+ * tạm của dashboard. Ghi audit_log (dashboard_send_file) như tin chữ gửi tay.
+ */
+export async function sendFileNotice({ api, threadId, threadType, path, actorUid }) {
+  if (!activeStore) throw new Error('Zalo store is not ready');
+  const requestId = `dashboard-file-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  activeStore.beginAudit({
+    requestId, accountId: activeAccountId, actorUid: String(actorUid), actorRole: 'dashboard', action: 'dashboard_send_file', category: 'send',
+    threadId: String(threadId), threadType: Number(threadType),
+    targetSummary: { commandType: 'send_file', threadId: String(threadId), threadType: Number(threadType) },
+  });
+  try {
+    const result = await api.sendMessage({ msg: '', attachments: [String(path)] }, String(threadId), Number(threadType));
+    rememberOutboundResult(result, threadId, threadType, '', 'sendMessage');
+    activeStore.finishAudit(requestId, 'succeeded');
+    activeHealth?.markOutbound();
+    return safeResult(result);
+  } catch (error) {
+    activeStore.finishAudit(requestId, 'failed', { error: 'operation_failed' });
+    activeHealth?.recordError('system_notice_failed', 'operation_failed');
+    throw error;
+  }
+}
+
 export async function sendSystemNotice({
   api, threadId, threadType, text, mentions = null, quote = null,
   actorUid = 'system', actorRole = 'system', action = 'send_system_notice', remember = true,

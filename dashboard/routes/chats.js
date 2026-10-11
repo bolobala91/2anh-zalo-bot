@@ -1,4 +1,7 @@
 import express from 'express';
+import { randomBytes } from 'node:crypto';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { requireAuth } from '../lib/http-guards.js';
 import { parseCursor } from '../lib/store-reader.js';
 import { fallbackName } from '../lib/thread-names.js';
@@ -6,6 +9,16 @@ import { failSidecar, failStore } from '../lib/route-errors.js';
 
 const THREAD_ID = /^\d{1,32}$/;
 const MAX_TEXT = 2000;
+// Ảnh/tệp gửi tay từ Phiên chat: tối đa 25 MB, chỉ các loại thường dùng (không gửi tệp chạy được).
+export const MAX_SEND_FILE = 25 * 1024 * 1024;
+export const SEND_FILE_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'zip', 'rar', '7z', 'mp3', 'm4a', 'wav', 'mp4', 'mov'];
+/** Tên tệp an toàn để đặt trên đĩa: bỏ đường dẫn, ký tự lạ; đuôi phải nằm trong danh sách. Sai → ''. */
+export function safeSendName(raw) {
+  const base = String(raw ?? '').split(/[\\/]/).pop().normalize('NFC').replace(/[\u0000-\u001f<>:"|?*]/g, '').trim().slice(-120);
+  const m = /^(.*)\.([A-Za-z0-9]{1,5})$/.exec(base);
+  if (!m || !SEND_FILE_TYPES.includes(m[2].toLowerCase())) return '';
+  return `${m[1].replace(/^[.\s]+/, '').trim() || 'tep'}.${m[2].toLowerCase()}`;
+}
 const DUP_MS = 30_000;
 const DUP_MAX = 1000;
 const READ_FAIL = 'Chưa đọc được lịch sử trò chuyện — tải lại trang, nếu vẫn lỗi hãy báo người cài đặt.';
@@ -17,7 +30,7 @@ const MEDIA_KINDS = ['photo', 'file', 'link'];
 export const parseType = (v) => (v === 0 || v === '0' ? 0 : v === 1 || v === '1' ? 1 : null);
 const cursorOk = (v) => v === undefined || v === '' || (typeof v === 'string' && parseCursor(v) !== null);
 
-export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10, windowMs: 60_000 }, now = Date.now }) {
+export function chatRoutes({ store, sidecar, threadNames, outboxDir = null, sendLimit = { max: 10, windowMs: 60_000 }, now = Date.now }) {
   const r = express.Router();
   const bad = (res, error) => res.status(400).json({ ok: false, error });
   const nameOf = (groups, id, type, peerName = '') => (type === 1 ? groups.get(id) : peerName) || fallbackName(id, type);
@@ -114,6 +127,32 @@ export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10,
       const { total, members } = await sidecar.groupMembers(req.params.threadId);
       res.json({ ok: true, total, members: members.map((m) => ({ uid: String(m.id), name: String(m.displayName) })) });
     } catch (err) { failSidecar(res, err); }
+  });
+
+  // Gửi ảnh/tệp dưới tên bot (dán ảnh, kéo thả, nút đính kèm ở Phiên chat): thân nhị phân + X-File-Name, ?type=0|1.
+  // Đặt tạm vào outbox (bot chỉ nhận tệp trong đó), gửi xong thì xoá. Chung hạn mức gửi tay với tin chữ.
+  r.post('/chats/:threadId/send-file', requireAuth, express.raw({ type: 'application/octet-stream', limit: MAX_SEND_FILE }), async (req, res) => {
+    const type = parseType(req.query.type);
+    if (!THREAD_ID.test(req.params.threadId) || type === null) return bad(res, BAD_THREAD);
+    if (!outboxDir) return res.status(503).json({ ok: false, error: 'Máy này chưa bật gửi tệp từ dashboard.' });
+    let raw = '';
+    try { raw = decodeURIComponent(String(req.get('x-file-name') || '')); } catch { /* tên hỏng */ }
+    const name = safeSendName(raw);
+    if (!name) return bad(res, `Chỉ gửi được ảnh, tài liệu, tệp nén, âm thanh, video (${SEND_FILE_TYPES.join(', ')}).`);
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return bad(res, 'Chưa nhận được tệp — chọn lại tệp.');
+    try {
+      if (!store.hasThread(req.params.threadId, type)) return res.status(404).json({ ok: false, error: 'Không thấy hội thoại này trong lịch sử — chọn lại từ danh sách.' });
+    } catch (err) { return failStore(res, err, READ_FAIL); }
+    if (!allowSend(req.user.username)) return res.status(429).json({ ok: false, error: 'Bạn đang gửi quá nhanh — đợi một phút rồi gửi tiếp.' });
+    const dir = join(outboxDir, randomBytes(8).toString('hex'));
+    try {
+      mkdirSync(dir, { recursive: true });
+      const path = join(dir, name);
+      writeFileSync(path, req.body, { mode: 0o600 });
+      await sidecar.sendFile({ threadId: req.params.threadId, threadType: type, path, actor: req.user.username });
+      store.invalidateConversations?.();
+      res.json({ ok: true, name });
+    } catch (err) { failSidecar(res, err); } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
   // Thu hồi một tin của bot (theo rowid trong đúng hội thoại). Tin người khác → 400; ghi Nhật ký Zalo kèm tên người bấm.

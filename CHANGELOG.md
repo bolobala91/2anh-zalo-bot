@@ -2,6 +2,17 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.14.0] — 2026-10-11
+
+### Thêm
+- Phiên chat gửi được ảnh và tệp dưới tên bot. Có ba cách: dán ảnh (Ctrl+V), kéo thả tệp vào khung soạn, hoặc bấm nút ghim 📎.
+  - Ảnh có ô xem trước. Bỏ từng tệp trước khi gửi được.
+  - Mỗi lần gửi tối đa 10 tệp, mỗi tệp tối đa 25 MB.
+  - Gửi được ảnh, PDF, Word, Excel, PowerPoint, txt, csv, md, tệp nén, âm thanh và video.
+  - Nếu có chữ, chữ được gửi trước (kèm trả lời và nhắc tên), sau đó từng tệp được gửi thành một tin riêng.
+  - Mỗi lần gửi được ghi vào Nhật ký kèm tên người bấm.
+  - Tệp chỉ nằm tạm trong thư mục gửi của dashboard và bị xoá ngay sau khi gửi. Kết nối Zalo từ chối mọi tệp nằm ngoài thư mục đó.
+
 ## [2.13.2] — 2026-10-11
 
 ### Sửa
