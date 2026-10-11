@@ -582,6 +582,12 @@ class ZaloAdapter(BasePlatformAdapter):
         self._apply_settings(extra)
         from hermes_constants import get_hermes_home
         self._settings_watcher = _live_settings.SettingsWatcher(get_hermes_home)
+        # Ghi mốc NGAY lúc khởi động (gateway vừa nạp .env): nếu đợi tới tin đầu tiên, một lần lưu Cấu hình
+        # trước tin đó sẽ bị coi là mốc và không bao giờ được áp dụng.
+        try:
+            self._settings_watcher.poll(force=True)
+        except Exception:
+            logger.debug("[zalo] chưa ghi được mốc cấu hình", exc_info=True)
         self._settings_extra = dict(extra)
 
         self._ws = None

@@ -2,6 +2,11 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.13.1] — 2026-10-11
+
+### Sửa
+- Cấu hình áp dụng ngay: lưu Cấu hình trước khi bot nhận tin đầu tiên sau khi khởi động thì thay đổi bị bỏ qua — nay ghi mốc ngay lúc khởi động.
+
 ## [2.13.0] — 2026-10-11
 
 ### Đổi

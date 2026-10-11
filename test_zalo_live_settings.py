@@ -96,7 +96,7 @@ class AdapterLiveTest(unittest.TestCase):
             adapter = ZaloAdapter(PlatformConfig(enabled=True, extra={}))
             clock = Clock()
             adapter._settings_watcher = ls.SettingsWatcher(lambda: home, interval_s=3, clock=clock)
-            adapter._reload_settings_if_changed()
+            adapter._settings_watcher.poll(force=True)  # như lúc khởi động: ghi mốc
             self.assertEqual(adapter._media_lookback, 3)
             (home / ".env").write_text("ZALO_MEDIA_LOOKBACK=12\nZALO_FLOOD_THRESHOLD=20\nZALO_AUTO_REACT=false\n", encoding="utf-8")
             os.utime(home / ".env", (200, 200))
