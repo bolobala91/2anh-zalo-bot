@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.16.1] — 2026-10-12
+
+### Sửa
+- Thẻ **Tài khoản của tôi** ở cuối thanh bên:
+  - Ô chữ cái trước đây bị kéo giãn thành một viên dài, làm chữ "Tài khoản của tôi" bị cắt. Nay ô này là hình tròn 30 px.
+  - Hai dòng chữ không còn tràn ra ngoài.
+  - Khi đang ở trang Tài khoản, dòng phụ đổi sang trắng mờ cho dễ đọc trên nền xanh.
+
 ## [2.16.0] — 2026-10-12
 
 ### Thêm
