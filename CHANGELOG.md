@@ -2,6 +2,11 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.13.2] — 2026-10-11
+
+### Sửa
+- Cập nhật bot trên Windows: đôi khi thất bại (rồi tự quay về bản cũ) vì Windows tạm giữ tệp plugin lúc đổi tên thư mục (`EPERM`, thường do trình diệt virus quét tệp vừa chép). Bộ cài nay thử lại tối đa ~5 giây.
+
 ## [2.13.1] — 2026-10-11
 
 ### Sửa

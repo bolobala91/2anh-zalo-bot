@@ -507,3 +507,14 @@ test('trí nhớ dài hạn: gợi ý bật chỉ in trên Linux có OpenViking 
   assert.equal(memoryHint({ hostPlatform: 'linux', provider: '', commandProbe: probe('khong-co') }), null);
   assert.equal(memoryHint({ hostPlatform: 'win32', provider: '', commandProbe: () => { throw new Error('không được gọi'); } }), null);
 });
+
+test('đổi tên thư mục plugin: Windows tạm giữ tệp thì thử lại; lỗi khác hoặc hết lượt thì báo', async () => {
+  const { renameWithRetry } = await import('./hermes-install-lib.js');
+  let n = 0;
+  const flaky = () => { n += 1; if (n < 3) throw Object.assign(new Error('busy'), { code: 'EPERM' }); };
+  renameWithRetry('a', 'b', { rename: flaky, platform: 'win32', waitMs: () => 1 });
+  assert.equal(n, 3);
+  assert.throws(() => renameWithRetry('a', 'b', { rename: () => { throw Object.assign(new Error('x'), { code: 'ENOENT' }); }, platform: 'win32', waitMs: () => 1 }), /x/);
+  assert.throws(() => renameWithRetry('a', 'b', { rename: () => { throw Object.assign(new Error('busy'), { code: 'EBUSY' }); }, platform: 'win32', tries: 3, waitMs: () => 1 }), /busy/);
+  assert.throws(() => renameWithRetry('a', 'b', { rename: () => { throw Object.assign(new Error('busy'), { code: 'EPERM' }); }, platform: 'linux' }), /busy/, 'Linux không thử lại');
+});

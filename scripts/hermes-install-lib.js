@@ -199,6 +199,19 @@ function within(parent, child) {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 }
 
+/**
+ * Đổi tên thư mục, thử lại khi Windows tạm giữ tệp (EPERM/EBUSY/EACCES: trình diệt virus đang quét tệp vừa chép,
+ * hoặc trợ lý đang mở tệp) — hay gặp khi cập nhật bot lúc trợ lý đang chạy. Tối đa ~5 giây.
+ */
+export function renameWithRetry(from, to, { rename = renameSync, tries = 10, waitMs = (i) => 100 * (i + 1), platform: plat = platform() } = {}) {
+  for (let i = 0; ; i += 1) {
+    try { rename(from, to); return; } catch (error) {
+      if (plat !== 'win32' || !['EPERM', 'EBUSY', 'EACCES'].includes(error?.code) || i >= tries - 1) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs(i));
+    }
+  }
+}
+
 function atomicReplaceDirectory(source, destination) {
   const parent = dirname(destination);
   if (!within(parent, destination)) throw new Error(`Đích plugin không an toàn: ${destination}`);
@@ -211,14 +224,14 @@ function atomicReplaceDirectory(source, destination) {
   let movedOld = false;
   try {
     if (existsSync(destination)) {
-      renameSync(destination, backup);
+      renameWithRetry(destination, backup);
       movedOld = true;
     }
-    renameSync(staging, destination);
+    renameWithRetry(staging, destination);
     if (movedOld) rmSync(backup, { recursive: true, force: true });
   } catch (error) {
     if (existsSync(staging)) rmSync(staging, { recursive: true, force: true });
-    if (movedOld && !existsSync(destination) && existsSync(backup)) renameSync(backup, destination);
+    if (movedOld && !existsSync(destination) && existsSync(backup)) renameWithRetry(backup, destination);
     throw error;
   }
 }
