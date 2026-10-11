@@ -2,6 +2,12 @@
 
 [English](README.md) | **Tiếng Việt**
 
+<p align="center">
+  <a href="https://zalo.me/g/5fli05n11mnwu4ntdqhq"><img alt="Tham gia nhóm Zalo cộng đồng 2Anh" src="https://img.shields.io/badge/Zalo-C%E1%BB%99ng%20%C4%91%E1%BB%93ng%202Anh-0068FF?style=for-the-badge"></a>
+  <a href="https://2anhaieducation.pro.vn/"><img alt="Trang 2Anh AI Education" src="https://img.shields.io/badge/Web-2Anh%20AI%20Education-0F766E?style=for-the-badge"></a>
+  <a href="https://www.facebook.com/luonghaianh1208"><img alt="Facebook Lương Hải Anh" src="https://img.shields.io/badge/Facebook-L%C6%B0%C6%A1ng%20H%E1%BA%A3i%20Anh-1877F2?style=for-the-badge"></a>
+</p>
+
 Cầu nối đưa **Zalo** vào [Hermes Agent](https://github.com/NousResearch/hermes-agent) như một nền tảng đầy đủ — ngang hàng với Telegram, Discord, Slack.
 
 Nhắn tin trên Zalo là nói chuyện với chính con agent đang chạy trên máy bạn: đủ tools, memory, skills và cron.
@@ -776,6 +782,18 @@ Dashboard chỉ nghe ở `127.0.0.1`, **không có mật khẩu**. Đừng mở 
 | Cổng bị chiếm | Đổi `ZCA_PORT` / `ZALO_BRIDGE_PORT` trong `.env` |
 
 Log của sidecar in ra terminal đang chạy `npm start`, đồng thời chép vào `logs/sidecar.log` kèm giờ (quá 5 MB tự dời sang `logs/sidecar.log.1`) — chạy ngầm vẫn tra lại được. Log Hermes nằm ở `<hermes>/logs/gateway.log`.
+
+---
+
+## Cộng đồng 2Anh
+
+Muốn dùng thử bot trước khi đặt, hỏi cách cài, hay xem người khác đang dùng bot làm gì? Vào **nhóm Zalo cộng đồng 2Anh**. Nhóm dành cho mọi người, không riêng giáo viên. Trong nhóm có bot thật để anh chị nhắn thử.
+
+- 💬 Nhóm Zalo cộng đồng 2Anh: <https://zalo.me/g/5fli05n11mnwu4ntdqhq>
+- 🌐 Trang 2Anh AI Education: <https://2anhaieducation.pro.vn/>
+- 👤 Facebook tác giả (Lương Hải Anh): <https://www.facebook.com/luonghaianh1208>
+
+Dashboard quản trị cũng có nút **Cộng đồng 2Anh** trên thanh trạng thái đầu mỗi trang.
 
 ---
 

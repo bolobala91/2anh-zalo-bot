@@ -1,6 +1,7 @@
 // Ủng hộ tác giả: nút mở cửa sổ có mã VietQR (MB Bank) + số tài khoản, bấm để chép.
 import { useState } from '../vendor/hooks.mjs';
 import { html, Dialog, Icon } from '../ui.js';
+import { CommunityLinks } from './community.js';
 
 export const DONATE = { bank: 'MB Bank', account: '0328186264', name: 'LUONG HAI ANH' };
 
@@ -20,6 +21,7 @@ function DonateDialog({ onClose }) {
         <dt>Chủ tài khoản</dt><dd>${DONATE.name}</dd>
       </dl>
       <p class="muted small">Quét mã bằng ứng dụng ngân hàng bất kỳ.</p>
+      <${CommunityLinks} />
     </div>
   <//>`;
 }

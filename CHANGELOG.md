@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.16.0] — 2026-10-12
+
+### Thêm
+- Nút **Cộng đồng 2Anh** (màu xanh Zalo) trên thanh trạng thái đầu mỗi trang dashboard. Bấm vào sẽ mở nhóm Zalo cộng đồng 2Anh trong tab mới. Nhóm dành cho mọi người, có bot thật để nhắn thử trước khi đặt dùng.
+- Cửa sổ **Ủng hộ tác giả** có thêm link nhóm Zalo, trang 2Anh AI Education và Facebook tác giả.
+- README (tiếng Việt và tiếng Anh) có các nút cộng đồng ở đầu trang và mục **Cộng đồng 2Anh**.
+
+💬 Nhóm Zalo cộng đồng 2Anh: https://zalo.me/g/5fli05n11mnwu4ntdqhq
+🌐 https://2anhaieducation.pro.vn/ · 👤 https://www.facebook.com/luonghaianh1208
+
 ## [2.15.3] — 2026-10-11
 
 ### Sửa

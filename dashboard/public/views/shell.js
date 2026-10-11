@@ -25,6 +25,7 @@ import { Mcp } from './mcp.js';
 import { Skills } from './skills.js';
 import { Maintenance } from './maintenance.js';
 import { DonateButton } from './donate.js';
+import { CommunityButton } from './community.js';
 import { Settings } from './settings.js';
 
 const STATUS_MS = 3000;
@@ -192,6 +193,7 @@ function StatusStrip({ status, error, path, admin, update }) {
       ${notice ? (admin && path !== '/maintenance' ? html`<a class="update-pill" href="#/maintenance"><${Icon} name="download" size=${16} /> ${notice}</a>`
         : html`<span class="update-pill" title=${admin ? '' : 'Báo người quản trị để cập nhật'}><${Icon} name="download" size=${16} /> ${notice}</span>`) : null}
       ${lv.qr && path !== '/zalo' ? html`<a class="btn btn-light btn-sm" href="#/zalo"><${Icon} name="qr" size=${16} /> Quét mã đăng nhập lại</a>` : null}
+      <${CommunityButton} />
       <${DonateButton} className="donate-pill" />
     </span>
   </div>`;

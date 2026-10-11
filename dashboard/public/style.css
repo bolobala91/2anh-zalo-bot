@@ -917,6 +917,19 @@ button.flow-node:hover { border-color: var(--brand); }
 .donate-pill:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 .strip .dialog { font-weight: 400; font-size: 15px; }
 @media (prefers-reduced-motion: reduce) { .donate-pill { transition: none; } .donate-pill:hover { transform: none; } }
+/* Cộng đồng 2Anh: viên thuốc xanh Zalo cạnh nút Ủng hộ, mở nhóm Zalo trong tab mới. */
+.community-pill {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 14px; border-radius: 999px;
+  background: #0068ff; color: #fff; font-size: 14px; font-weight: 700; text-decoration: none;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .18); transition: transform .15s ease, box-shadow .15s ease;
+}
+.community-pill .icon { color: #fff; }
+.community-pill:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(15, 23, 42, .25); }
+.community-pill:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .community-pill { transition: none; } .community-pill:hover { transform: none; } }
+.community-links { border-top: 1px solid var(--border); padding-top: 10px; }
+.community-links ul { margin: 6px 0 0; padding-left: 18px; }
+.community-links li { margin: 4px 0; }
 .update-pill {
   display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 14px; border-radius: 999px;
   background: rgba(255, 255, 255, .18); color: inherit; border: 1px solid rgba(255, 255, 255, .55);
@@ -956,6 +969,8 @@ a.update-pill:hover { background: rgba(255, 255, 255, .3); }
   .strip .btn-light { padding-inline: 10px; }
   .donate-pill, .update-pill { min-height: 40px; padding: 6px 12px; font-size: 13px; }
   .donate-more { display: none; }
+  .community-pill { min-height: 40px; padding: 6px 12px; font-size: 13px; }
+  .community-more { display: none; }
   .update-pill .update-more { display: none; }
 
   /* Gọn lề: nhiều chỗ hơn cho nội dung. */

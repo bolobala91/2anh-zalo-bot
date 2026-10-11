@@ -2,6 +2,12 @@
 
 **English** | [Tiếng Việt](README.vi.md)
 
+<p align="center">
+  <a href="https://zalo.me/g/5fli05n11mnwu4ntdqhq"><img alt="Tham gia nhóm Zalo cộng đồng 2Anh" src="https://img.shields.io/badge/Zalo-C%E1%BB%99ng%20%C4%91%E1%BB%93ng%202Anh-0068FF?style=for-the-badge"></a>
+  <a href="https://2anhaieducation.pro.vn/"><img alt="Trang 2Anh AI Education" src="https://img.shields.io/badge/Web-2Anh%20AI%20Education-0F766E?style=for-the-badge"></a>
+  <a href="https://www.facebook.com/luonghaianh1208"><img alt="Facebook Lương Hải Anh" src="https://img.shields.io/badge/Facebook-L%C6%B0%C6%A1ng%20H%E1%BA%A3i%20Anh-1877F2?style=for-the-badge"></a>
+</p>
+
 Connect a personal Zalo account to [Hermes Agent](https://github.com/NousResearch/hermes-agent) as a full messaging platform alongside Telegram, Discord, and Slack.
 
 Messages sent through Zalo reach the same Hermes agent running on your computer, with its tools, memory, skills, and scheduled jobs.
@@ -246,6 +252,16 @@ npm run uninstall:hermes -- --hermes-home <path-to-Hermes-home>
 ```
 
 The uninstaller removes only the managed Zalo plugin directories. It preserves the sidecar `.env`, Zalo session/history, and optional TTS environment, and does not edit Hermes `config.yaml` — the `plugins.enabled`, `platforms.zalo`, and `known_plugin_toolsets.zalo` entries stay behind, so remove them by hand if you are not reinstalling. Each install also keeps the previous file as `config.yaml.bak-<timestamp>`.
+
+## Community
+
+Try the bot before ordering, ask installation questions, or see what other people use it for: join the **2Anh Zalo community group**. It is open to everyone, not only teachers, and a live bot is in the group so you can talk to it.
+
+- 💬 2Anh Zalo community group: <https://zalo.me/g/5fli05n11mnwu4ntdqhq>
+- 🌐 2Anh AI Education: <https://2anhaieducation.pro.vn/>
+- 👤 Author on Facebook (Lương Hải Anh): <https://www.facebook.com/luonghaianh1208>
+
+The admin dashboard has the same link: the **Cộng đồng 2Anh** button on the status bar at the top of every page.
 
 ## Ủng hộ tác giả / Support the author
 
