@@ -189,3 +189,25 @@ test('nhắc tên (@): vị trí phải đúng "@…" trong nội dung; nhắc t
   }
   assert.equal((await call('/api/chats/100/send', { method: 'POST', cookie, body: { text: '@Lan', threadType: 0, mentions: [{ uid: '5550001', pos: 0, len: 4 }] } })).status, 400, 'tin riêng không gắn tag');
 });
+
+test('thu hồi: chỉ tin của bot, gửi đúng mã Zalo xuống bot; tin người khác → 400; Zalo từ chối → câu dễ hiểu', async (t) => {
+  const deps = makeDeps(t);
+  seedHistory(deps, { messages: [
+    chatMsg({ threadId: '200', threadType: 1, msgId: '7001', senderUid: '5550001', text: 'Tin của Lan' }),
+    chatMsg({ threadId: '200', threadType: 1, msgId: '7002', cliMsgId: '8002', senderUid: '0', text: 'Tin của bot', isSelf: true }),
+  ] });
+  const recalls = [];
+  deps.sidecar.recall = async (m) => { recalls.push(m); if (m.msgId === 'fail') throw Object.assign(new Error('Zalo lỗi -1'), { statusCode: 502 }); return {}; };
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const [lan, bot] = (await call('/api/chats/200/messages?type=1', { cookie })).json.messages;
+  const recall = (msg) => call('/api/chats/200/recall', { method: 'POST', cookie, body: { threadType: 1, msg } });
+  assert.equal((await recall(lan.id)).status, 400);
+  assert.equal((await recall(bot.id)).status, 200);
+  assert.deepEqual(recalls, [{ threadId: '200', threadType: 1, msgId: '7002', cliMsgId: '8002', actor: 'khach' }]);
+  deps.sidecar.recall = async () => { throw Object.assign(new Error('Zalo lỗi -1'), { statusCode: 502 }); };
+  t.mock.method(console, 'error', () => {});
+  const old = await recall(bot.id);
+  assert.equal(old.status, 422);
+  assert.match(old.json.error, /quá thời hạn/);
+});

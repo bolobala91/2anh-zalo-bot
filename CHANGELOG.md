@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.9.7] — 2026-10-11
+
+### Thêm — Phiên chat
+- Nút **Thu hồi** cho tin do bot gửi (rê chuột hoặc bấm giữ tin → Thu hồi, có hỏi xác nhận). Thu hồi trên Zalo, khung chat hiện "[Tin đã thu hồi]", ghi Nhật ký Zalo kèm tên người bấm. Chỉ tin của bot; Zalo từ chối (thường do quá hạn thu hồi) thì báo rõ.
+- Tin đã thu hồi hiện nhãn "[Tin đã thu hồi]" thay vì bong bóng trống, không còn nút thao tác.
+
 ## [2.9.6] — 2026-10-11
 
 ### Thêm — Phiên chat

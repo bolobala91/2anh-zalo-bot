@@ -771,6 +771,24 @@ export async function auditDashboardAction({ action, actor, threadId, threadType
   }
 }
 
+/**
+ * Thu hồi một tin DO CHÍNH BOT gửi, bấm từ dashboard (Phiên chat). Chỉ tin của bot (findOwnMessage) — không bao giờ
+ * đụng tin người khác. Ghi audit_log (dashboard_recall) và đánh dấu đã thu hồi trong lịch sử như lệnh undo của trợ lý.
+ */
+export async function recallOwnMessage({ api, threadId, threadType, msgId, cliMsgId, actor }) {
+  return auditDashboardAction({ action: 'dashboard_recall', actor, threadId, threadType }, async () => {
+    const target = activeStore?.findOwnMessage(activeAccountId, String(threadId), Number(threadType), { msgId: String(msgId), cliMsgId: String(cliMsgId) });
+    if (!target) throw Object.assign(new Error('Không tìm thấy tin do bot gửi này (có thể đã thu hồi).'), { validation: true });
+    const result = await api.undo({ msgId: target.msgId, cliMsgId: target.cliMsgId }, String(threadId), Number(threadType));
+    try {
+      activeStore.markRecalled(activeAccountId, String(threadId), Number(threadType), target);
+    } catch (error) {
+      console.error('[history] không đánh dấu được tin đã thu hồi:', error?.message || error);
+    }
+    return safeResult(result);
+  });
+}
+
 export async function sendSystemNotice({
   api, threadId, threadType, text, mentions = null, quote = null,
   actorUid = 'system', actorRole = 'system', action = 'send_system_notice', remember = true,

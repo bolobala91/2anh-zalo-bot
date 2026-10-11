@@ -116,6 +116,28 @@ export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10,
     } catch (err) { failSidecar(res, err); }
   });
 
+  // Thu hồi một tin của bot (theo rowid trong đúng hội thoại). Tin người khác → 400; ghi Nhật ký Zalo kèm tên người bấm.
+  r.post('/chats/:threadId/recall', requireAuth, async (req, res) => {
+    const type = parseType(req.body?.threadType);
+    if (!THREAD_ID.test(req.params.threadId) || type === null) return bad(res, BAD_THREAD);
+    let ref;
+    try { ref = store.messageRef(req.params.threadId, type, req.body?.msg); } catch (err) { return failStore(res, err, READ_FAIL); }
+    if (!ref || !ref.isSelf) return bad(res, 'Chỉ thu hồi được tin do bot gửi.');
+    if (!ref.cliMsgId) return bad(res, 'Tin này thiếu mã Zalo (tin cũ nhập từ lịch sử) — không thu hồi được.');
+    try {
+      await sidecar.recall({ threadId: req.params.threadId, threadType: type, msgId: ref.msgId, cliMsgId: ref.cliMsgId, actor: req.user.username });
+      store.invalidateConversations?.();
+      res.json({ ok: true });
+    } catch (err) {
+      // Zalo từ chối thu hồi (thường do tin đã quá hạn thu hồi) → câu dễ hiểu thay vì "Zalo chưa phản hồi đúng".
+      if (err?.statusCode === 502 && !/^Zalo chưa đăng nhập$/.test(String(err.message))) {
+        console.error('[dashboard] thu hồi tin lỗi:', err.message);
+        return res.status(422).json({ ok: false, error: 'Zalo không cho thu hồi tin này — có thể tin đã quá thời hạn thu hồi.' });
+      }
+      failSidecar(res, err);
+    }
+  });
+
   r.post('/chats/:threadId/send', requireAuth, async (req, res) => {
     const { text, threadType, replyTo, mentions } = req.body || {};
     const type = parseType(threadType);

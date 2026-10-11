@@ -16,7 +16,7 @@ const LEAD = 30; // kết quả tìm: chỗ trùng nằm sâu thì cắt bớt p
 
 const TYPE_LABELS = {
   'chat.photo': 'Ảnh', 'chat.sticker': 'Nhãn dán', 'share.file': 'Tệp', 'chat.voice': 'Tin thoại',
-  'chat.video.msg': 'Video', 'group.poll': 'Bình chọn', 'chat.recommended': 'Danh thiếp', 'chat.delete': 'Tin đã thu hồi',
+  'chat.video.msg': 'Video', 'group.poll': 'Bình chọn', 'chat.recommended': 'Danh thiếp', 'chat.delete': 'Tin đã thu hồi', 'chat.undo': 'Tin đã thu hồi',
   'chat.gif': 'Ảnh động', 'chat.location.new': 'Vị trí', 'chat.link': 'Liên kết',
 };
 
@@ -120,7 +120,7 @@ export function placeMentions(body, picks) {
 
 const LONG_PRESS_MS = 450;
 
-function Bubble({ m, group, focus, onOpenPhoto, active, onActive, onReply, onMention }) {
+function Bubble({ m, group, focus, onOpenPhoto, active, onActive, onReply, onMention, onRecall }) {
   const v = messageView(m);
   const md = v.media;
   const timer = useRef(0);
@@ -130,6 +130,7 @@ function Bubble({ m, group, focus, onOpenPhoto, active, onActive, onReply, onMen
   const move = (e) => { const t = e.touches?.[0]; if (start.current && t && Math.hypot(t.clientX - start.current[0], t.clientY - start.current[1]) > 10) clearTimeout(timer.current); };
   const release = () => clearTimeout(timer.current);
   const copy = async () => { try { await navigator.clipboard.writeText(v.text || v.link || ''); } catch { /* trình duyệt chặn */ } onActive(null); };
+  const recalled = m.msgType === 'chat.undo' || m.msgType === 'chat.delete';
   const canMention = group && !m.isSelf;
   const li = useRef(null);
   // Hiện nút thao tác cho tin sát mép khung (vd. tin cuối) → cuộn cho thấy trọn, kẻo nút bị khung cắt mất.
@@ -146,11 +147,12 @@ function Bubble({ m, group, focus, onOpenPhoto, active, onActive, onReply, onMen
       ${v.link ? html`<a href=${v.link} target="_blank" rel="noopener noreferrer" title=${v.link}>${shortUrl(v.link)}</a>` : null}
       ${v.text ? html`<span class="msg-text">${v.text}</span>` : null}
     </div>
-    <span class="msg-actions" role="group" aria-label="Thao tác với tin">
+    ${recalled ? null : html`<span class="msg-actions" role="group" aria-label="Thao tác với tin">
       <button type="button" class="msg-act" onClick=${() => { onReply(m); onActive(null); }} aria-label="Trả lời tin này" title="Trả lời"><${Icon} name="reply" size=${16} /><span>Trả lời</span></button>
       ${canMention ? html`<button type="button" class="msg-act" onClick=${() => { onMention(m); onActive(null); }} aria-label=${`Nhắc tên ${m.senderName || 'thành viên'}`} title="Nhắc tên (@)"><span aria-hidden="true">@</span><span>Nhắc tên</span></button>` : null}
+      ${m.isSelf ? html`<button type="button" class="msg-act msg-act-danger" onClick=${() => { onActive(null); onRecall(m); }} aria-label="Thu hồi tin này của bot" title="Thu hồi"><${Icon} name="undo" size=${16} /><span>Thu hồi</span></button>` : null}
       ${v.text || v.link ? html`<button type="button" class="msg-act" onClick=${copy} aria-label="Chép nội dung" title="Chép"><${Icon} name="copy" size=${16} /><span>Chép</span></button>` : null}
-    </span>
+    </span>`}
     </div>
     <time class="msg-time" datetime=${new Date(m.ts).toISOString()}>${m.isSelf ? 'Bot · ' : ''}${fmtTime(m.ts)}</time>
   </li>`;
@@ -338,6 +340,18 @@ function Thread({ conv, onBack }) {
   const [active, setActive] = useState(null); // id tin đang mở nút thao tác (bấm giữ)
   const [mentionReq, setMentionReq] = useState(null); // { name, msg, n } — chèn @Tên vào ô soạn
   useEffect(() => { setReply(null); setActive(null); }, [conv.threadId]);
+  const [recallMsg, setRecallMsg] = useState({});
+  async function recall(m) {
+    const v = messageView(m);
+    const preview = (v.text || v.label || '').slice(0, 80);
+    if (!confirm(`Thu hồi tin này của bot? Mọi người trong ${conv.threadType === 1 ? 'nhóm' : 'cuộc trò chuyện'} sẽ không xem được nữa.\n\n“${preview}”`)) return;
+    setRecallMsg({});
+    try {
+      await api(`/api/chats/${encodeURIComponent(conv.threadId)}/recall`, { method: 'POST', body: { threadType: conv.threadType, msg: m.id } });
+      setRecallMsg({ ok: 'Đã thu hồi tin.' });
+      kick.current();
+    } catch (err) { setRecallMsg({ error: err.message }); }
+  }
   useEffect(() => {
     if (active === null) return undefined;
     const close = (e) => { if (!e.target.closest?.('.msg-actions')) setActive(null); };
@@ -494,7 +508,7 @@ function Thread({ conv, onBack }) {
       <button type="button" ref=${toggles.media} class=${`btn btn-ghost btn-sm head-tool${side === 'media' ? ' active' : ''}`} aria-pressed=${side === 'media' ? 'true' : 'false'}
         onClick=${() => toggle('media')} aria-label="Ảnh/Video · Tệp · Link" title="Ảnh/Video · Tệp · Link"><${Icon} name="image" /><span class="head-tool-label">Ảnh/Video · Tệp · Link</span></button>
     </header>
-    <${Live} error=${error} />
+    <${Live} error=${error || recallMsg.error} ok=${recallMsg.ok} />
     ${newer ? html`<div class="jump-bar"><span class="muted small">Đang xem tin cũ.</span>
       <button type="button" class="btn btn-secondary btn-sm" onClick=${() => kick.current()}>Về tin mới nhất ↓</button></div>` : null}
     ${msgs === null ? (error ? null : html`<${Spinner} />`) : html`
@@ -506,7 +520,7 @@ function Thread({ conv, onBack }) {
         </li>
         ${msgs.map((m) => html`<${Bubble} key=${m.id} m=${m} group=${group} focus=${flash === m.id} onOpenPhoto=${openPhoto}
           active=${active === m.id} onActive=${setActive} onReply=${setReply}
-          onMention=${(x) => setMentionReq({ name: x.senderName || '', msg: x.id, n: Date.now() })} />`)}
+          onMention=${(x) => setMentionReq({ name: x.senderName || '', msg: x.id, n: Date.now() })} onRecall=${recall} />`)}
         ${newer ? html`<li class="msgs-top"><button type="button" class="btn btn-ghost btn-sm" disabled=${loadingNewer} onClick=${loadNewer}>${loadingNewer ? 'Đang tải…' : 'Tải tin mới hơn'}</button></li>` : null}
       </ol>`}
     <${Compose} conv=${conv} onSent=${() => kick.current()} reply=${reply} onClearReply=${() => setReply(null)} mentionReq=${mentionReq} />

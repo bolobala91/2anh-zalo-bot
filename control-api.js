@@ -38,7 +38,7 @@ function tokenOk(header, expected) {
   return want.length > 0 && supplied.length === want.length && timingSafeEqual(supplied, want);
 }
 
-export function createControlRouter({ token, health, qr, logout, send, loginCode, groups, groupMembers = null, directory = null }) {
+export function createControlRouter({ token, health, qr, logout, send, loginCode, groups, groupMembers = null, recall = null, directory = null }) {
   const router = express.Router();
   router.use((req, res, next) => (tokenOk(req.get('authorization'), token)
     ? next() : res.status(401).json({ ok: false, error: 'unauthorized' })));
@@ -88,6 +88,16 @@ export function createControlRouter({ token, health, qr, logout, send, loginCode
     return {};
   }));
   router.get('/groups', wrap(async () => ({ groups: await groups() })));
+  // Thu hồi tin do chính bot gửi (bấm từ Phiên chat). Bot tự kiểm đúng là tin của mình.
+  if (recall) {
+    router.post('/recall', wrap(async (req) => {
+      const { threadId, threadType, msgId, cliMsgId, actor } = req.body || {};
+      if (!/^\d+$/.test(String(threadId ?? ''))) throw bad('threadId không hợp lệ');
+      if (threadType !== 0 && threadType !== 1) throw bad('threadType phải là 0 hoặc 1');
+      if (!DIGITS.test(String(msgId ?? '')) || !DIGITS.test(String(cliMsgId ?? ''))) throw bad('Tin này thiếu mã Zalo — không thu hồi được');
+      return { result: await recall({ threadId: String(threadId), threadType, msgId: String(msgId), cliMsgId: String(cliMsgId), actor: checkActor(actor) }) };
+    }));
+  }
   if (groupMembers) {
     router.get('/group-members', wrap(async (req) => {
       const groupId = String(req.query.groupId ?? '');

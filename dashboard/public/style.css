@@ -1021,3 +1021,4 @@ a.update-pill:hover { background: rgba(255, 255, 255, .3); }
   .compose > textarea, .compose-foot > .btn { grid-row: 3; }
   .compose > .live { grid-row: 4; }
 }
+.msg-act-danger:hover { color: var(--danger); border-color: var(--danger); }

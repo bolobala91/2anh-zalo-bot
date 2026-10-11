@@ -39,6 +39,7 @@ export function createSidecarClient({ baseUrl = 'http://127.0.0.1:3872', token, 
     send: async (m) => (await call('/send', { method: 'POST', body: m, limitMs: sendTimeoutMs, distinctTimeout: true })).result,
     loginCode: (m) => call('/login-code', { method: 'POST', body: m }),
     groups: async () => (await call('/groups')).groups,
+    recall: async (m) => (await call('/recall', { method: 'POST', body: m, limitMs: sendTimeoutMs })).result,
     groupMembers: async (groupId) => {
       const { total, members } = await call(`/group-members?groupId=${encodeURIComponent(groupId)}`, { limitMs: sendTimeoutMs });
       return { total, members };

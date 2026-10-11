@@ -9,7 +9,7 @@ import { loadRepoEnv, loadHermesEnv } from './scripts/setup-env.js';
 import { Zalo } from 'zca-js';
 import { tryReconnect, saveSession, clearSession, fetchProfile, zaloOptions } from './auth.js';
 import { setupBotListener } from './bot-handler.js';
-import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached, sendSystemNotice, auditDashboardAction, acquireSendQuota, fetchGroupMembers } from './hermes-bridge.js';
+import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached, sendSystemNotice, auditDashboardAction, acquireSendQuota, fetchGroupMembers, recallOwnMessage } from './hermes-bridge.js';
 import { openZaloStore } from './zalo-store.js';
 import { createRuntimeHealth } from './runtime-health.js';
 import { importLegacyHermesHistory } from './legacy-history-import.js';
@@ -87,6 +87,10 @@ app.use('/control', createControlRouter({
       msgId: quote.msgId, cliMsgId: quote.cliMsgId || quote.msgId, uidFrom: quote.isSelf ? String(api.getOwnId()) : quote.uidFrom,
     } : null;
     return sendSystemNotice({ api, threadId, threadType, text, mentions, quote: q, actorUid: actor, actorRole: 'dashboard', action: 'dashboard_send' });
+  },
+  recall: ({ threadId, threadType, msgId, cliMsgId, actor }) => {
+    if (!api) throw new Error('Zalo chưa đăng nhập');
+    return recallOwnMessage({ api, threadId, threadType, msgId, cliMsgId, actor });
   },
   groupMembers: async (groupId) => {
     if (!api) throw new Error('Zalo chưa đăng nhập');
