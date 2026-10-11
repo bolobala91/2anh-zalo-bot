@@ -16,6 +16,25 @@ Messages sent through Zalo reach the same Hermes agent running on your computer,
 Zalo  <->  zca-js sidecar (Node.js)  <->  local WebSocket  <->  Python plugins  <->  Hermes Agent
 ```
 
+## Screenshots
+
+The dashboard of the **Uyển Nhi** bot running in production on a VPS. People's names, group names and message contents are blurred.
+
+<p align="center"><img src="docs/images/screenshots/chat-perms.jpg" width="900" alt="Chats with the group permissions panel"></p>
+
+**Chats:** read every conversation and reply as the bot, with quote, @mention, recall, image paste and file sending. The **Quyền** button opens the permissions panel next to the chat.
+
+| | |
+|---|---|
+| <img src="docs/images/screenshots/permissions.jpg" alt="Bot permissions"> | <img src="docs/images/screenshots/insight.jpg" alt="Group insight"> |
+| **Per-group permissions:** turn each member feature on or off; saving takes effect immediately. | **Group insight:** busy hours, top posters, bot replies and an AI topic summary. |
+| <img src="docs/images/screenshots/skills.jpg" alt="Skills"> | <img src="docs/images/screenshots/health.jpg" alt="Server health"> |
+| **Skills:** exams, lesson plans, teaching-innovation reports and official documents, each switchable. | **Server health:** 24-hour CPU, RAM and disk charts, service states, Telegram alerts. |
+| <img src="docs/images/screenshots/maintenance.jpg" alt="Maintenance"> | <p align="center"><img src="docs/images/screenshots/mobile-permissions.jpg" width="260" alt="Dashboard on a phone"></p> |
+| **One-click updates** with automatic backup and rollback. | **Works on phones:** bottom navigation, wide chat view. |
+
+See the bot at work in the [2Anh Zalo community group](https://zalo.me/g/5fli05n11mnwu4ntdqhq).
+
 ## Highlights
 
 - QR-code login with persisted sessions and automatic reconnects.

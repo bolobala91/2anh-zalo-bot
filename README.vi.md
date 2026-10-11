@@ -18,6 +18,27 @@ Zalo  ⇄  sidecar zca-js (Node)  ⇄  WebSocket  ⇄  plugin Python  ⇄  Herme
 
 ---
 
+## Hình ảnh thực tế
+
+Ảnh chụp dashboard của bot **Uyển Nhi** đang chạy thật trên VPS. Tên người, tên nhóm và nội dung tin nhắn đã được làm mờ.
+
+<p align="center"><img src="docs/images/screenshots/chat-perms.jpg" width="900" alt="Phiên chat kèm bảng Quyền của nhóm"></p>
+
+**Phiên chat:** xem mọi cuộc trò chuyện của bot và nhắn tay dưới tên bot, có trả lời, @nhắc tên, thu hồi, dán ảnh và gửi tệp. Nút **Quyền** mở bảng phân quyền ngay bên cạnh, không phải đổi trang.
+
+| | |
+|---|---|
+| <img src="docs/images/screenshots/permissions.jpg" alt="Phân quyền Bot"> | <img src="docs/images/screenshots/insight.jpg" alt="Insight nhóm"> |
+| **Phân quyền theo nhóm:** bật/tắt từng tính năng cho thành viên (tra cứu web, tạo tệp, nhắc hẹn, kho tài liệu…). Lưu là có hiệu lực ngay. | **Insight nhóm:** nhóm sôi nổi lúc nào, ai nhắn nhiều, bot trả lời bao nhiêu, kèm tóm tắt chủ đề bằng AI. |
+| <img src="docs/images/screenshots/skills.jpg" alt="Skill"> | <img src="docs/images/screenshots/health.jpg" alt="Sức khoẻ máy chủ"> |
+| **Skill chuyên môn:** soạn đề kiểm tra, giáo án 5512, SKKN, văn bản Đoàn/Đảng/Nghị định 30. Bật/tắt từng skill. | **Sức khoẻ máy chủ:** CPU, RAM, ổ đĩa 24 giờ qua, trạng thái dịch vụ, cảnh báo qua Telegram. |
+| <img src="docs/images/screenshots/maintenance.jpg" alt="Bảo trì"> | <p align="center"><img src="docs/images/screenshots/mobile-permissions.jpg" width="260" alt="Dashboard trên điện thoại"></p> |
+| **Cập nhật một chạm:** cài bản mới, tự sao lưu trước và tự quay về bản cũ nếu lỗi. | **Dùng tốt trên điện thoại:** thanh menu dưới, khung chat rộng. |
+
+**Ai đang dùng bot:** giáo viên dùng trong nhóm lớp và tổ chuyên môn (soạn đề, giáo án, nhắc lịch), Đoàn trường dùng cho văn bản và hoạt động, câu lạc bộ dùng để hỏi đáp và tổng hợp thảo luận. Muốn xem bot làm việc thật thì vào [nhóm Zalo cộng đồng 2Anh](https://zalo.me/g/5fli05n11mnwu4ntdqhq).
+
+---
+
 ## Vì sao lại có cầu nối
 
 Zalo không có API bot cho tài khoản cá nhân, và hai thư viện Zalo viết bằng Python đều không dùng được:
