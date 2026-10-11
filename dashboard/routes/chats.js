@@ -104,8 +104,20 @@ export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10,
     }
   }
 
+  // Thành viên nhóm cho ô gợi ý @ (chỉ nhóm có trong lịch sử). UID ra trình duyệt chỉ ở đây — cần để gắn tag Zalo.
+  r.get('/chats/:threadId/members', requireAuth, async (req, res) => {
+    if (!THREAD_ID.test(req.params.threadId)) return bad(res, BAD_THREAD);
+    try {
+      if (!store.hasThread(req.params.threadId, 1)) return res.status(404).json({ ok: false, error: 'Không thấy nhóm này trong lịch sử.' });
+    } catch (err) { return failStore(res, err, READ_FAIL); }
+    try {
+      const { total, members } = await sidecar.groupMembers(req.params.threadId);
+      res.json({ ok: true, total, members: members.map((m) => ({ uid: String(m.id), name: String(m.displayName) })) });
+    } catch (err) { failSidecar(res, err); }
+  });
+
   r.post('/chats/:threadId/send', requireAuth, async (req, res) => {
-    const { text, threadType } = req.body || {};
+    const { text, threadType, replyTo, mentions } = req.body || {};
     const type = parseType(threadType);
     if (!THREAD_ID.test(req.params.threadId) || type === null) return bad(res, BAD_THREAD);
     const body = typeof text === 'string' ? text.trim() : '';
@@ -116,6 +128,33 @@ export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10,
         return res.status(404).json({ ok: false, error: 'Không thấy hội thoại này trong lịch sử — chọn lại từ danh sách.' });
       }
     } catch (err) { return failStore(res, err, READ_FAIL); }
+    // Trả lời: tra tin gốc trong kho theo rowid (đúng hội thoại) → trích dẫn; UID người gửi chỉ đi máy chủ → sidecar.
+    let quote = null;
+    if (replyTo != null) {
+      let ref;
+      try { ref = store.messageRef(req.params.threadId, type, replyTo); } catch (err) { return failStore(res, err, READ_FAIL); }
+      if (!ref) return bad(res, 'Tin được trả lời không còn hoặc quá cũ để trích dẫn — bỏ trả lời rồi gửi lại.');
+      quote = { msgId: ref.msgId, cliMsgId: ref.cliMsgId, uidFrom: ref.senderUid, content: ref.text.slice(0, 2000), ts: ref.ts, isSelf: ref.isSelf };
+    }
+    // Tag: { uid, pos, len } trên đúng nội dung gửi (đã cắt khoảng trắng). Tag theo tin ({ msg: rowid }) → UID tra ở máy chủ.
+    let tags = null;
+    if (Array.isArray(mentions) && mentions.length) {
+      if (type !== 1 || mentions.length > 30) return bad(res, 'Chỉ gắn tag được trong nhóm (tối đa 30 người).');
+      tags = [];
+      for (const m of mentions) {
+        let uid = typeof m?.uid === 'string' ? m.uid : '';
+        if (!uid && m?.msg != null) {
+          let ref;
+          try { ref = store.messageRef(req.params.threadId, type, m.msg); } catch (err) { return failStore(res, err, READ_FAIL); }
+          uid = ref && !ref.isSelf ? ref.senderUid : '';
+        }
+        const pos = Number(m?.pos); const len = Number(m?.len);
+        if (!/^\d{1,40}$/.test(uid) || !Number.isInteger(pos) || !Number.isInteger(len) || pos < 0 || len < 2 || pos + len > body.length || body[pos] !== '@') {
+          return bad(res, 'Có tên được nhắc (@) không hợp lệ — xoá rồi chọn lại từ danh sách.');
+        }
+        tags.push({ uid, pos, len });
+      }
+    }
     const key = sendKey(req.user.username, req.params.threadId, type, body);
     pruneSends(now());
     if (lastSends.has(key)) {
@@ -126,7 +165,7 @@ export function chatRoutes({ store, sidecar, threadNames, sendLimit = { max: 10,
     }
     lastSends.set(key, now());
     try {
-      await sidecar.send({ threadId: req.params.threadId, threadType: type, text: body, actor: req.user.username });
+      await sidecar.send({ threadId: req.params.threadId, threadType: type, text: body, actor: req.user.username, ...(quote ? { quote } : {}), ...(tags ? { mentions: tags } : {}) });
       lastSends.delete(key); lastSends.set(key, now()); // tính 30 s từ lúc gửi xong
       store.invalidateConversations?.();
       res.json({ ok: true });

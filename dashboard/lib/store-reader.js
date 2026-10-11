@@ -398,6 +398,21 @@ export function createStoreReader({
     todayStats,
     senderNames,
     listAudit,
+    /**
+     * Tin để trích dẫn khi trả lời từ dashboard (theo rowid, đúng hội thoại). Chỉ máy chủ dùng — UID người gửi không
+     * bao giờ ra trình duyệt. Tin chưa có msgId Zalo (bản nhập từ lịch sử cũ) → null.
+     */
+    messageRef(threadId, threadType, rowid) {
+      const acc = account();
+      if (!acc || !Number.isSafeInteger(Number(rowid))) return null;
+      const r = open().prepare(`
+        SELECT msg_id, cli_msg_id, sender_uid, sender_name, text, msg_type, timestamp_ms, is_self FROM messages
+        WHERE rowid = ? AND account_id = ? AND thread_id = ? AND thread_type = ? AND text NOT LIKE ?
+      `).get(Number(rowid), acc, String(threadId), Number(threadType), SECRET);
+      if (!r || !r.msg_id) return null;
+      return { msgId: String(r.msg_id), cliMsgId: String(r.cli_msg_id || ''), senderUid: String(r.sender_uid || ''), senderName: r.sender_name || '',
+        text: String(r.text || ''), msgType: r.msg_type || '', ts: Number(r.timestamp_ms), isSelf: Boolean(r.is_self) };
+    },
     /** Insight nhóm (spec §18.5): số liệu N ngày của một nhóm; chưa có tin nào của bot → null. */
     groupInsight(threadId, opts = {}) {
       const acc = account();

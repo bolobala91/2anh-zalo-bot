@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.9.6] — 2026-10-11
+
+### Thêm — Phiên chat
+- **Trả lời có trích dẫn**: máy tính rê chuột vào tin, điện thoại **bấm giữ** tin → nút **Trả lời**; ô soạn hiện thanh "Trả lời …" (bấm ✕ để bỏ). Tin gửi đi hiện trích dẫn như trả lời trong Zalo.
+- **Nhắc tên (@) thật trong nhóm**: gõ `@` trong ô soạn → danh sách thành viên nhóm để chọn (lọc không dấu, ↑↓ Enter); hoặc bấm giữ một tin → **Nhắc tên** người gửi. Người được nhắc nhận thông báo như tag trên Zalo.
+- Nút **Chép** nội dung tin (điện thoại tắt menu chọn chữ khi bấm giữ để không vướng).
+- Zalo từ chối trích dẫn/tag thì tự gửi lại dạng chữ thường.
+- Bảo mật: trình duyệt chỉ gửi số thứ tự tin cần trả lời/nhắc; UID người gửi tra ở máy chủ. Danh sách thành viên (để gắn tag) đệm 10 phút, tối đa 200 người.
+
 ## [2.9.5] — 2026-10-11
 
 ### Đổi — dashboard trên điện thoại

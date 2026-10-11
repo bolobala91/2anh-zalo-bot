@@ -54,7 +54,7 @@ const GROUP_MEMBERS_LIMIT = 200;
 
 // getGroupMembersInfo nhận ID THÀNH VIÊN, không nhận ID nhóm — hỏi getGroupInfo
 // lấy danh sách ID trước (dạng "uid_0").
-async function fetchGroupMembers(api, groupId) {
+export async function fetchGroupMembers(api, groupId) {
   const info = await api.getGroupInfo([groupId]);
   const group = info?.gridInfoMap?.[groupId] || {};
   const adminIds = [group.creatorId, ...(group.adminIds || [])].filter(Boolean).map(String);
@@ -772,7 +772,7 @@ export async function auditDashboardAction({ action, actor, threadId, threadType
 }
 
 export async function sendSystemNotice({
-  api, threadId, threadType, text, mentions = null,
+  api, threadId, threadType, text, mentions = null, quote = null,
   actorUid = 'system', actorRole = 'system', action = 'send_system_notice', remember = true,
 }) {
   if (!activeStore) throw new Error('Zalo store is not ready');
@@ -796,12 +796,14 @@ export async function sendSystemNotice({
   try {
     const content = { msg: String(text) };
     if (mentions?.length) content.mentions = mentions;
+    if (quote) content.quote = quote;
     let result;
     try {
       result = await api.sendMessage(content, String(threadId), threadType);
     } catch (err) {
-      // Như tin thường: Zalo từ chối tag (có mã lỗi số) thì gửi lại chữ thường.
-      if (!content.mentions || !/^-?\d+$/.test(String(err?.code ?? ''))) throw err;
+      // Như tin thường: Zalo từ chối tag / trích dẫn (có mã lỗi số, hoặc zca-js không nhận kiểu trích dẫn) thì gửi lại chữ thường.
+      const zaloRefused = /^-?\d+$/.test(String(err?.code ?? '')) || err?.name === 'ZaloApiError';
+      if (!(content.mentions || content.quote) || !zaloRefused) throw err;
       result = await api.sendMessage({ msg: content.msg }, String(threadId), threadType);
     }
     if (remember) rememberOutboundResult(result, threadId, threadType, text);

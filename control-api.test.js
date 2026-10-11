@@ -148,3 +148,15 @@ test('lời nhắc: threadType từ chuỗi truy vấn thành số; xoá đòi a
   assert.equal((await call('/reminders/remove', { method: 'POST', body: { reminderId: '7', threadId: '55', threadType: 1, actor: 'anh' } })).status, 200);
   assert.deepEqual(directory.calls.at(-1), ['remove', { reminderId: '7', threadId: '55', threadType: 1, actor: 'anh' }]);
 });
+
+test('kiểm trích dẫn và tag trước khi gửi qua Zalo', async () => {
+  const { checkQuote, checkMentions } = await import('./control-api.js');
+  const bad = (m) => Object.assign(new Error(m), { validation: true });
+  assert.equal(checkQuote(null, bad), null);
+  assert.deepEqual(checkQuote({ msgId: '7001', cliMsgId: '', uidFrom: '5550001', content: 'x', ts: 1 }, bad), { msgId: '7001', cliMsgId: '', uidFrom: '5550001', content: 'x', ts: 1, isSelf: false });
+  assert.equal(checkQuote({ msgId: '7001', uidFrom: '', content: 'x', ts: 1, isSelf: true }, bad).isSelf, true);
+  assert.throws(() => checkQuote({ msgId: 'abc', uidFrom: '1', ts: 1 }, bad), /Trích dẫn/);
+  assert.deepEqual(checkMentions([{ uid: '1', pos: 0, len: 4 }], '@Lan ơi', 1, bad), [{ uid: '1', pos: 0, len: 4 }]);
+  assert.throws(() => checkMentions([{ uid: '1', pos: 0, len: 4 }], '@Lan ơi', 0, bad), /tag/);
+  assert.throws(() => checkMentions([{ uid: '1', pos: 1, len: 3 }], '@Lan ơi', 1, bad), /tag/);
+});

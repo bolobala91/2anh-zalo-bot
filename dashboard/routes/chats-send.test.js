@@ -143,3 +143,49 @@ test('chưa đăng nhập → 401; Origin lạ → 403', async (t) => {
   const res = await call('/api/chats/100/send', { method: 'POST', body: { text: 'x', threadType: 0 }, headers: { Origin: 'https://evil.example' } });
   assert.equal(res.status, 403);
 });
+
+test('trả lời có trích dẫn: tra tin gốc ở máy chủ (UID không qua trình duyệt); tin không có msgId Zalo → 400', async (t) => {
+  const deps = makeDeps(t);
+  seedHistory(deps, { messages: [
+    chatMsg({ threadId: '200', threadType: 1, msgId: '7001', senderUid: '5550001', senderName: 'Lan', text: 'Mai họp mấy giờ?' }),
+    chatMsg({ threadId: '200', threadType: 1, msgId: '7002', senderUid: '0', text: 'Dạ 8h ạ', isSelf: true }),
+  ] });
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const list = await call('/api/chats/200/messages?type=1', { cookie });
+  assert.equal(list.status, 200);
+  assert.ok(!JSON.stringify(list.json).includes('5550001'), 'danh sách tin không lộ UID');
+  const [lan, bot] = list.json.messages;
+  const send = (body) => call('/api/chats/200/send', { method: 'POST', cookie, body: { threadType: 1, ...body } });
+  assert.equal((await send({ text: 'Dạ 8h sáng ạ', replyTo: lan.id })).status, 200);
+  assert.equal((await send({ text: 'Bổ sung: phòng 201', replyTo: bot.id })).status, 200);
+  const sends = deps.sidecar.calls.filter((c) => c[0] === 'send').map((c) => c[1]);
+  assert.deepEqual(sends[0].quote, { msgId: '7001', cliMsgId: '', uidFrom: '5550001', content: 'Mai họp mấy giờ?', ts: sends[0].quote.ts, isSelf: false });
+  assert.equal(sends[1].quote.isSelf, true);
+  assert.equal((await send({ text: 'x', replyTo: 999999 })).status, 400);
+  assert.equal((await call('/api/chats/100/send', { method: 'POST', cookie, body: { text: 'x', threadType: 1, replyTo: lan.id } })).status, 404, 'tin của hội thoại khác không trích được');
+});
+
+test('nhắc tên (@): vị trí phải đúng "@…" trong nội dung; nhắc theo tin thì máy chủ tự tra UID; chỉ trong nhóm', async (t) => {
+  const deps = makeDeps(t);
+  seedHistory(deps, { messages: [
+    chatMsg({ threadId: '200', threadType: 1, msgId: '7001', senderUid: '5550001', senderName: 'Lan', text: 'Ai trực?' }),
+    chatMsg({ threadId: '100', threadType: 0, text: 'chào' }),
+  ] });
+  deps.sidecar.groupMembers = async () => ({ total: 2, members: [{ id: '5550001', displayName: 'Lan' }, { id: '5550002', displayName: 'Minh Anh' }] });
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const mem = await call('/api/chats/200/members', { cookie });
+  assert.deepEqual(mem.json.members, [{ uid: '5550001', name: 'Lan' }, { uid: '5550002', name: 'Minh Anh' }]);
+  assert.equal((await call('/api/chats/999/members', { cookie })).status, 404);
+  const lan = (await call('/api/chats/200/messages?type=1', { cookie })).json.messages[0];
+  const text = '@Lan và @Minh Anh trực nhé';
+  const ok = await call('/api/chats/200/send', { method: 'POST', cookie, body: { text, threadType: 1, mentions: [{ msg: lan.id, pos: 0, len: 4 }, { uid: '5550002', pos: 8, len: 9 }] } });
+  assert.equal(ok.status, 200);
+  const sent = deps.sidecar.calls.filter((c) => c[0] === 'send').map((c) => c[1]).pop();
+  assert.deepEqual(sent.mentions, [{ uid: '5550001', pos: 0, len: 4 }, { uid: '5550002', pos: 8, len: 9 }]);
+  for (const mentions of [[{ uid: '5550002', pos: 1, len: 4 }], [{ uid: 'abc', pos: 0, len: 4 }], [{ uid: '5550002', pos: 20, len: 50 }]]) {
+    assert.equal((await call('/api/chats/200/send', { method: 'POST', cookie, body: { text: `${text} ${mentions[0].pos}`, threadType: 1, mentions } })).status, 400, JSON.stringify(mentions));
+  }
+  assert.equal((await call('/api/chats/100/send', { method: 'POST', cookie, body: { text: '@Lan', threadType: 0, mentions: [{ uid: '5550001', pos: 0, len: 4 }] } })).status, 400, 'tin riêng không gắn tag');
+});

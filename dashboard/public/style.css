@@ -983,3 +983,41 @@ a.update-pill:hover { background: rgba(255, 255, 255, .3); }
 
 /* Hàng tab (chips) đứng đầu thẻ: cách khối nội dung bên dưới. */
 .card > .chips + * { margin-top: 12px; }
+
+/* Phiên chat: trả lời / nhắc tên / chép từng tin; thanh "Đang trả lời"; gợi ý @ thành viên */
+.msg-row { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+.msg-self .msg-row { flex-direction: row-reverse; }
+.msg-row > .msg-bubble { min-width: 0; }
+.msg-actions { display: none; flex: none; gap: 4px; }
+.msg:focus-within .msg-actions, .msg-active .msg-actions { display: inline-flex; }
+/* Rê chuột chỉ trên máy có chuột thật — điện thoại giữ trạng thái hover sau khi chạm, sẽ làm nút chớp tắt. */
+@media (hover: hover) { .msg:hover .msg-actions { display: inline-flex; } }
+.msg-act {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 32px; min-width: 32px; justify-content: center; padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.msg-act:hover { color: var(--brand-dark); border-color: var(--brand); }
+.msg-act:focus-visible { outline: none; box-shadow: var(--focus); }
+.msg-act > span:last-child:not([aria-hidden]) { display: none; }
+.msg-active .msg-bubble { box-shadow: 0 0 0 2px var(--brand); }
+.reply-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 6px 6px 10px; border-left: 3px solid var(--brand); border-radius: 8px; background: var(--brand-soft); color: var(--brand-dark); }
+.reply-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.reply-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mention-list { list-style: none; margin: 0 0 8px; padding: 4px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--card); box-shadow: 0 6px 20px rgba(15, 23, 42, .1); }
+.mention-item { display: block; width: 100%; min-height: 40px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; text-align: left; cursor: pointer; color: var(--text); }
+.mention-item:hover, .mention-item.active { background: var(--brand-soft); color: var(--brand-dark); }
+.mention-empty { padding: 8px 10px; }
+@media (max-width: 760px) {
+  /* Điện thoại: bấm giữ tin → hàng nút có chữ, đủ to để chạm; bỏ menu chọn chữ của hệ điều hành (đã có nút Chép). */
+  .msg-row { flex-wrap: wrap; }
+  .msg-active .msg-actions { flex-basis: 100%; justify-content: flex-start; margin-top: 4px; }
+  .msg-self.msg-active .msg-actions { justify-content: flex-end; }
+  .msg-act { min-height: 40px; padding: 6px 12px; }
+  .msg-act > span:last-child:not([aria-hidden]) { display: inline; }
+  .msg-bubble { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  .compose > .reply-bar, .compose > .mention-list { grid-column: 1 / -1; margin-bottom: 0; }
+  .compose > .reply-bar { grid-row: 1; }
+  .compose > .mention-list { grid-row: 2; }
+  .compose > textarea, .compose-foot > .btn { grid-row: 3; }
+  .compose > .live { grid-row: 4; }
+}

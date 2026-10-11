@@ -9,6 +9,28 @@ import { timingSafeEqual } from 'node:crypto';
 const ZALO_UID = /^[1-9]\d{14,21}$/;
 const MAX_TEXT = 2000;
 const MAX_ACTOR = 64;
+const DIGITS = /^\d{1,40}$/;
+const MAX_MENTIONS = 30;
+
+/** Trích dẫn khi trả lời từ dashboard: chỉ tin chữ (dashboard đã tra từ kho tin). */
+export function checkQuote(q, bad) {
+  if (q == null) return null;
+  if (typeof q !== 'object') throw bad('Trích dẫn không hợp lệ');
+  const out = { msgId: String(q.msgId ?? ''), cliMsgId: String(q.cliMsgId ?? ''), uidFrom: String(q.uidFrom ?? ''), content: String(q.content ?? '').slice(0, 2000), ts: Number(q.ts), isSelf: q.isSelf === true };
+  if (!DIGITS.test(out.msgId) || (out.cliMsgId && !DIGITS.test(out.cliMsgId)) || (!out.isSelf && !DIGITS.test(out.uidFrom)) || !Number.isFinite(out.ts)) throw bad('Trích dẫn không hợp lệ');
+  return out;
+}
+
+/** Gắn tag: mỗi mục trỏ đúng một đoạn "@…" trong nội dung; chỉ ở nhóm. */
+export function checkMentions(list, text, threadType, bad) {
+  if (list == null || (Array.isArray(list) && !list.length)) return null;
+  if (!Array.isArray(list) || list.length > MAX_MENTIONS || threadType !== 1) throw bad('Gắn tag không hợp lệ');
+  return list.map((m) => {
+    const pos = Number(m?.pos); const len = Number(m?.len); const uid = String(m?.uid ?? '');
+    if (!DIGITS.test(uid) || !Number.isInteger(pos) || !Number.isInteger(len) || pos < 0 || len < 2 || len > 100 || pos + len > text.length || text[pos] !== '@') throw bad('Gắn tag không hợp lệ');
+    return { uid, pos, len };
+  });
+}
 
 function tokenOk(header, expected) {
   const supplied = Buffer.from(String(header || '').replace(/^Bearer\s+/i, ''));
@@ -16,7 +38,7 @@ function tokenOk(header, expected) {
   return want.length > 0 && supplied.length === want.length && timingSafeEqual(supplied, want);
 }
 
-export function createControlRouter({ token, health, qr, logout, send, loginCode, groups, directory = null }) {
+export function createControlRouter({ token, health, qr, logout, send, loginCode, groups, groupMembers = null, directory = null }) {
   const router = express.Router();
   router.use((req, res, next) => (tokenOk(req.get('authorization'), token)
     ? next() : res.status(401).json({ ok: false, error: 'unauthorized' })));
@@ -46,13 +68,17 @@ export function createControlRouter({ token, health, qr, logout, send, loginCode
   }));
   router.post('/logout', wrap(async () => { await logout(); return {}; }));
   router.post('/send', wrap(async (req) => {
-    const { threadId, threadType, text, actor } = req.body || {};
+    const { threadId, threadType, text, actor, quote, mentions } = req.body || {};
     const body = String(text ?? '').trim();
     if (!/^\d+$/.test(String(threadId ?? ''))) throw bad('threadId không hợp lệ');
     if (threadType !== 0 && threadType !== 1) throw bad('threadType phải là 0 hoặc 1');
     if (!body || body.length > MAX_TEXT) throw bad(`Nội dung trống hoặc quá ${MAX_TEXT} ký tự`);
     const who = checkActor(actor);
-    return { result: await send({ threadId: String(threadId), threadType, text: body, actor: who }) };
+    // Vị trí tag tính trên nội dung đã cắt khoảng trắng — dashboard phải gửi đúng bản đó, không thì lệch vị trí.
+    if (mentions?.length && String(text) !== body) throw bad('Nội dung có tag phải được cắt khoảng trắng hai đầu trước khi gửi');
+    const q = checkQuote(quote, bad);
+    const tags = checkMentions(mentions, body, threadType, bad);
+    return { result: await send({ threadId: String(threadId), threadType, text: body, actor: who, ...(q ? { quote: q } : {}), ...(tags ? { mentions: tags } : {}) }) };
   }));
   router.post('/login-code', wrap(async (req) => {
     const { zaloUid, code, actor } = req.body || {};
@@ -62,6 +88,13 @@ export function createControlRouter({ token, health, qr, logout, send, loginCode
     return {};
   }));
   router.get('/groups', wrap(async () => ({ groups: await groups() })));
+  if (groupMembers) {
+    router.get('/group-members', wrap(async (req) => {
+      const groupId = String(req.query.groupId ?? '');
+      if (!/^\d+$/.test(groupId)) throw bad('groupId không hợp lệ');
+      return groupMembers(groupId);
+    }));
+  }
 
   // Liên hệ và Lịch hẹn (spec §18.4): đọc bạn bè/lời mời/lời nhắc; ghi luôn đòi actor để audit_log có tên người làm.
   if (directory) {

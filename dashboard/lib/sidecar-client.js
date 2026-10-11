@@ -39,6 +39,10 @@ export function createSidecarClient({ baseUrl = 'http://127.0.0.1:3872', token, 
     send: async (m) => (await call('/send', { method: 'POST', body: m, limitMs: sendTimeoutMs, distinctTimeout: true })).result,
     loginCode: (m) => call('/login-code', { method: 'POST', body: m }),
     groups: async () => (await call('/groups')).groups,
+    groupMembers: async (groupId) => {
+      const { total, members } = await call(`/group-members?groupId=${encodeURIComponent(groupId)}`, { limitMs: sendTimeoutMs });
+      return { total, members };
+    },
     // Liên hệ và Lịch hẹn (spec §18.4). Danh sách bạn có thể dài — hạn chờ như lệnh gửi.
     friends: async ({ fresh = false } = {}) => (await call(`/friends${fresh ? '?fresh=1' : ''}`, { limitMs: sendTimeoutMs })).friends,
     friendRequests: async () => (await call('/friend-requests', { limitMs: sendTimeoutMs })).requests,

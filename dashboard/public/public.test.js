@@ -1003,3 +1003,14 @@ test('thanh trạng thái: nhãn bản mới / đang cập nhật', async () => 
   assert.equal(noticeText({ newer: true, latest: 'v2.9.0' }), 'Có bản mới v2.9.0');
   assert.equal(noticeText({ newer: true, latest: 'v2.9.0', updating: true }), 'Đang cập nhật bot…');
 });
+
+test('Phiên chat: dò "@" đang gõ và tính vị trí tag trên nội dung gửi', async () => {
+  const { mentionQuery, placeMentions } = await import('./views/chats.js');
+  assert.equal(mentionQuery('Chào @La'), 'La');
+  assert.equal(mentionQuery('@'), '');
+  assert.equal(mentionQuery('email a@b'), null, 'không phải đầu từ');
+  assert.equal(mentionQuery('Chào @Lan '), null, 'đã gõ xong tên');
+  const picks = [{ name: 'Lan', uid: '1' }, { name: 'Minh Anh', msg: 9 }, { name: 'Đã xoá', uid: '3' }];
+  assert.deepEqual(placeMentions('@Lan và @Minh Anh trực', picks), [{ pos: 0, len: 4, uid: '1' }, { pos: 8, len: 9, msg: 9 }]);
+  assert.deepEqual(placeMentions('@Lan @Lan', [{ name: 'Lan', uid: '1' }, { name: 'Lan', uid: '1' }]).map((m) => m.pos), [0, 5]);
+});

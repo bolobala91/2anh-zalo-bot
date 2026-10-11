@@ -9,7 +9,7 @@ import { loadRepoEnv, loadHermesEnv } from './scripts/setup-env.js';
 import { Zalo } from 'zca-js';
 import { tryReconnect, saveSession, clearSession, fetchProfile, zaloOptions } from './auth.js';
 import { setupBotListener } from './bot-handler.js';
-import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached, sendSystemNotice, auditDashboardAction, acquireSendQuota } from './hermes-bridge.js';
+import { startAutomaticBackfill, startHermesBridge, stopHermesBridge, isHermesAttached, sendSystemNotice, auditDashboardAction, acquireSendQuota, fetchGroupMembers } from './hermes-bridge.js';
 import { openZaloStore } from './zalo-store.js';
 import { createRuntimeHealth } from './runtime-health.js';
 import { importLegacyHermesHistory } from './legacy-history-import.js';
@@ -72,14 +72,31 @@ app.use(express.json());
 
 // --- Dashboard control (Bearer ZALO_BRIDGE_TOKEN, không qua CSRF /api) ---
 const groupDirectory = createGroupDirectory({ getApi: () => api });
+// Thành viên nhóm cho ô gợi ý @ trên dashboard: đệm 10 phút mỗi nhóm (tra Zalo mất vài giây).
+const memberCache = new Map();
 app.use('/control', createControlRouter({
   token: process.env.ZALO_BRIDGE_TOKEN,
   health: () => runtimeHealth.snapshot(),
   qr: { start: () => qrLogin.start(), state: () => qrLogin.state() },
   logout: () => logoutZalo(),
-  send: ({ threadId, threadType, text, actor }) => {
+  send: ({ threadId, threadType, text, actor, quote = null, mentions = null }) => {
     if (!api) throw new Error('Zalo chưa đăng nhập');
-    return sendSystemNotice({ api, threadId, threadType, text, actorUid: actor, actorRole: 'dashboard', action: 'dashboard_send' });
+    // Trích dẫn dạng tin chữ (zca-js SendMessageQuote); tin của chính bot thì người gửi là UID của bot.
+    const q = quote ? {
+      content: quote.content, msgType: 'webchat', propertyExt: undefined, ttl: 0, ts: quote.ts,
+      msgId: quote.msgId, cliMsgId: quote.cliMsgId || quote.msgId, uidFrom: quote.isSelf ? String(api.getOwnId()) : quote.uidFrom,
+    } : null;
+    return sendSystemNotice({ api, threadId, threadType, text, mentions, quote: q, actorUid: actor, actorRole: 'dashboard', action: 'dashboard_send' });
+  },
+  groupMembers: async (groupId) => {
+    if (!api) throw new Error('Zalo chưa đăng nhập');
+    const hit = memberCache.get(groupId);
+    if (hit && Date.now() - hit.at < 10 * 60_000) return hit.value;
+    const { total, members } = await fetchGroupMembers(api, groupId);
+    const value = { total, members: members.filter((m) => m.displayName) };
+    memberCache.set(groupId, { at: Date.now(), value });
+    if (memberCache.size > 100) memberCache.delete(memberCache.keys().next().value);
+    return value;
   },
   loginCode: ({ zaloUid, code, actor }) => {
     if (!api) throw new Error('Zalo chưa đăng nhập');
