@@ -118,15 +118,21 @@ export function chatRoutes({ store, sidecar, threadNames, outboxDir = null, send
   }
 
   // Thành viên nhóm cho ô gợi ý @ (chỉ nhóm có trong lịch sử). UID ra trình duyệt chỉ ở đây — cần để gắn tag Zalo.
+  // Zalo giấu danh sách thành viên nhóm cộng đồng (chỉ trả trưởng/phó) → gộp thêm mọi người từng nhắn trong nhóm
+  // theo lịch sử đã lưu; gắn tag chỉ cần UID nên vẫn tag được họ. Lấy danh sách Zalo lỗi thì vẫn trả phần lịch sử.
   r.get('/chats/:threadId/members', requireAuth, async (req, res) => {
     if (!THREAD_ID.test(req.params.threadId)) return bad(res, BAD_THREAD);
+    let senders;
     try {
       if (!store.hasThread(req.params.threadId, 1)) return res.status(404).json({ ok: false, error: 'Không thấy nhóm này trong lịch sử.' });
+      senders = store.groupSenders(req.params.threadId);
     } catch (err) { return failStore(res, err, READ_FAIL); }
-    try {
-      const { total, members } = await sidecar.groupMembers(req.params.threadId);
-      res.json({ ok: true, total, members: members.map((m) => ({ uid: String(m.id), name: String(m.displayName) })) });
-    } catch (err) { failSidecar(res, err); }
+    let zalo = { total: 0, members: [] };
+    try { zalo = await sidecar.groupMembers(req.params.threadId); } catch (err) { if (!senders.length) return failSidecar(res, err); }
+    const byUid = new Map();
+    for (const m of zalo.members) if (m.displayName) byUid.set(String(m.id), { uid: String(m.id), name: String(m.displayName) });
+    for (const s of senders) if (!byUid.has(s.uid)) byUid.set(s.uid, s);
+    res.json({ ok: true, total: Math.max(zalo.total || 0, byUid.size), members: [...byUid.values()] });
   });
 
   // Gửi ảnh/tệp dưới tên bot (dán ảnh, kéo thả, nút đính kèm ở Phiên chat): thân nhị phân + X-File-Name, ?type=0|1.

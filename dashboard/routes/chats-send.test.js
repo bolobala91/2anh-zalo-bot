@@ -166,6 +166,28 @@ test('trả lời có trích dẫn: tra tin gốc ở máy chủ (UID không qua
   assert.equal((await call('/api/chats/100/send', { method: 'POST', cookie, body: { text: 'x', threadType: 1, replyTo: lan.id } })).status, 404, 'tin của hội thoại khác không trích được');
 });
 
+test('nhóm cộng đồng: Zalo chỉ trả trưởng/phó → gộp thêm người từng nhắn (tên mới nhất); Zalo lỗi vẫn có phần lịch sử', async (t) => {
+  const deps = makeDeps(t);
+  seedHistory(deps, { messages: [
+    chatMsg({ threadId: '300', threadType: 1, senderUid: '7770002', senderName: 'Hoa cũ', ts: 1_000 }),
+    chatMsg({ threadId: '300', threadType: 1, senderUid: '7770003', senderName: 'Tuấn', ts: 2_000, text: '' , msgType: 'chat.recalled' }),
+    chatMsg({ threadId: '300', threadType: 1, senderUid: '7770002', senderName: 'Hoa', ts: 3_000 }),
+    chatMsg({ threadId: '300', threadType: 1, senderUid: '7770001', senderName: 'Cô Lan', ts: 4_000 }),
+    chatMsg({ threadId: '300', threadType: 1, senderUid: '999', senderName: 'Bot', ts: 5_000, isSelf: true }),
+  ] });
+  let fail = false;
+  deps.sidecar.groupMembers = async () => { if (fail) throw new Error('down'); return { total: 1, members: [{ id: '7770001', displayName: 'Lan (trưởng nhóm)' }] }; };
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const mem = await call('/api/chats/300/members', { cookie });
+  assert.deepEqual(mem.json.members, [{ uid: '7770001', name: 'Lan (trưởng nhóm)' }, { uid: '7770002', name: 'Hoa' }, { uid: '7770003', name: 'Tuấn' }]);
+  assert.equal(mem.json.total, 3);
+  fail = true;
+  const off = await call('/api/chats/300/members', { cookie });
+  assert.equal(off.status, 200);
+  assert.deepEqual(off.json.members.map((m) => m.uid), ['7770001', '7770002', '7770003']);
+});
+
 test('nhắc tên (@): vị trí phải đúng "@…" trong nội dung; nhắc theo tin thì máy chủ tự tra UID; chỉ trong nhóm', async (t) => {
   const deps = makeDeps(t);
   seedHistory(deps, { messages: [

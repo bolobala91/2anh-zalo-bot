@@ -2,6 +2,11 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.14.1] — 2026-10-11
+
+### Sửa
+- Phiên chat: trong nhóm cộng đồng, ô gợi ý @ trước đây chỉ hiện trưởng và phó nhóm. Lý do là Zalo giấu danh sách thành viên khi bot không phải quản trị. Nay ô gợi ý có thêm mọi người từng nhắn trong nhóm (lấy từ lịch sử đã lưu, kể cả tin đã thu hồi, dùng tên mới nhất). Khi Zalo không trả được danh sách, ô gợi ý vẫn hiện những người này.
+
 ## [2.14.0] — 2026-10-11
 
 ### Thêm

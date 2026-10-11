@@ -406,6 +406,23 @@ export function createStoreReader({
     hasThread,
     todayStats,
     senderNames,
+    /**
+     * Người từng nhắn trong nhóm (kể cả tin đã thu hồi), mới nhắn trước, kèm tên gần nhất — bù cho danh sách thành viên
+     * Zalo giấu (nhóm cộng đồng chỉ trả trưởng/phó khi bot không phải quản trị).
+     */
+    groupSenders(threadId, limit = 500) {
+      const acc = account();
+      if (!acc) return [];
+      return open().prepare(`
+        SELECT m.sender_uid AS uid, m.sender_name AS name FROM messages m
+        JOIN (SELECT sender_uid, MAX(timestamp_ms) AS ts FROM messages
+              WHERE account_id = ? AND thread_type = 1 AND thread_id = ? AND is_self = 0 AND sender_uid <> '' AND sender_name <> ''
+              GROUP BY sender_uid) last ON last.sender_uid = m.sender_uid AND last.ts = m.timestamp_ms
+        WHERE m.account_id = ? AND m.thread_type = 1 AND m.thread_id = ? AND m.is_self = 0 AND m.sender_name <> ''
+        GROUP BY m.sender_uid ORDER BY last.ts DESC LIMIT ?
+      `).all(acc, String(threadId), acc, String(threadId), Math.min(Math.max(Number(limit) || 0, 1), 2000))
+        .map((r) => ({ uid: String(r.uid), name: String(r.name) }));
+    },
     listAudit,
     /**
      * Tin để trích dẫn khi trả lời từ dashboard (theo rowid, đúng hội thoại). Chỉ máy chủ dùng — UID người gửi không
