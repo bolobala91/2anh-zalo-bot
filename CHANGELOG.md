@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.9.5] — 2026-10-11
+
+### Đổi — dashboard trên điện thoại
+- **Thanh điều hướng chuyển xuống đáy màn hình** (trong tầm ngón cái), chừa vùng an toàn của máy có thanh home; nội dung không bị che.
+- **"Thêm" mở thành tấm trượt từ dưới lên**, các mục xếp 2 cột cho dễ bấm, nền phía sau mờ đi; bấm ra ngoài là đóng.
+- **Phiên chat**: mở một hội thoại thì khung tin chiếm trọn màn hình (ẩn tiêu đề trang, bỏ viền thẻ); ô soạn và nút **Gửi** nằm cùng một hàng như app nhắn tin; bong bóng tin rộng hơn.
+- Thanh trạng thái gọn một dòng (nút **Ủng hộ** ngắn gọn bên phải); lề trang và thẻ gọn hơn để nội dung rộng hơn.
+- Hàng tab đầu thẻ cách nội dung bên dưới; sửa biểu tượng khoá bị khai báo trùng.
+
 ## [2.9.4] — 2026-10-11
 
 ### Sửa

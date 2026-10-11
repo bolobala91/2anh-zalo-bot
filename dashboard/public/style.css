@@ -916,3 +916,70 @@ button.flow-node:hover { border-color: var(--brand); }
 }
 a.update-pill:hover { background: rgba(255, 255, 255, .3); }
 .strip-warn .update-pill, .strip-idle .update-pill { border-color: currentColor; background: transparent; }
+
+/* ---------- Điện thoại: thanh điều hướng dưới, khung chat toàn màn hình, gọn chỗ (2026-10) ---------- */
+@media (max-width: 760px) {
+  :root { --mnav-h: 62px; --safe-b: env(safe-area-inset-bottom, 0px); }
+  /* Thanh điều hướng cố định dưới đáy, trong tầm ngón cái; chừa vùng an toàn của máy có "tai thỏ"/thanh home. */
+  .sidebar {
+    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 40;
+    padding: 4px 6px calc(4px + var(--safe-b)); border-bottom: 0; border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, .08);
+  }
+  .layout { grid-template-rows: 1fr; }
+  .main-col { padding-bottom: calc(var(--mnav-h) + var(--safe-b)); }
+  .mnav-item { min-height: 52px; font-size: 12px; }
+  /* "Thêm" mở thành tấm trượt từ dưới lên, các mục xếp 2 cột cho dễ bấm. */
+  .nav-more-menu {
+    position: fixed; top: auto; left: 8px; right: 8px; bottom: calc(var(--mnav-h) + var(--safe-b) + 6px);
+    max-height: min(70vh, calc(100dvh - var(--mnav-h) - 80px)); min-width: 0; padding: 10px;
+    border-radius: 16px; box-shadow: 0 -10px 40px rgba(15, 23, 42, .22);
+  }
+  .nav-more-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .nav-more-group > .nav-label { grid-column: 1 / -1; }
+  .nav-more-menu .nav-item { min-height: 48px; white-space: normal; line-height: 1.25; font-size: 14px; }
+  /* Nền mờ phía sau tấm "Thêm" (bóng đổ, không chặn chạm: bấm ra ngoài vẫn đóng như cũ). */
+  .nav-more[open] > .nav-more-menu { box-shadow: 0 -10px 40px rgba(15, 23, 42, .22), 0 0 0 100vmax rgba(15, 23, 42, .38); }
+
+  /* Thanh trạng thái: một dòng gọn, nút ngắn bên phải. */
+  .strip { flex-wrap: nowrap; gap: 8px; padding: 8px 12px; font-size: 13.5px; line-height: 1.35; }
+  .strip-text { flex: 1 1 auto; min-width: 0; }
+  .strip-actions { flex: none; flex-wrap: nowrap; gap: 6px; }
+  .strip .btn-light { padding-inline: 10px; }
+  .donate-pill, .update-pill { min-height: 40px; padding: 6px 12px; font-size: 13px; }
+  .donate-more { display: none; }
+  .update-pill .update-more { display: none; }
+
+  /* Gọn lề: nhiều chỗ hơn cho nội dung. */
+  .content { padding: 14px 12px 20px; }
+  .card { padding: 16px 14px; border-radius: 14px; }
+  .card-sub { padding: 12px; }
+  .page-head { margin-bottom: 14px; }
+  .page-head p { font-size: 14px; }
+  .crumbs ol { margin-bottom: 2px; }
+  .save-bar { margin: 12px -14px -16px; padding-inline: 14px; }
+
+  /* Phiên chat: danh sách tràn ngang; mở một hội thoại thì khung tin chiếm trọn màn hình (ẩn tiêu đề trang). */
+  .chat > .card { border-radius: 12px; }
+  .content:has(.chat.has-thread) { padding: 0; }
+  .content:has(.chat.has-thread) > .crumbs, .content:has(.chat.has-thread) > .page-head { display: none; }
+  .chat.has-thread .chat-thread {
+    height: calc(100dvh - var(--mnav-h) - var(--safe-b) - 54px); min-height: 360px;
+    padding: 8px 10px 10px; border: 0; border-radius: 0; box-shadow: none;
+  }
+  .chat-list { max-height: none; }
+  .thread-head { padding-bottom: 8px; }
+  .thread-head > h2 { font-size: 16px; }
+  .msgs { padding: 10px 0; }
+  .msg { max-width: 88%; }
+  /* Ô soạn: ô chữ + nút Gửi trên một hàng như app nhắn tin. */
+  .compose { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; padding-top: 8px; }
+  .compose > textarea { grid-column: 1; grid-row: 1; min-height: 44px; max-height: 30vh; margin: 0; resize: none; }
+  .compose-foot { display: contents; }
+  .compose-foot > small { display: none; }
+  .compose-foot > .btn { grid-column: 2; grid-row: 1; }
+  .compose > .live { grid-column: 1 / -1; }
+}
+
+/* Hàng tab (chips) đứng đầu thẻ: cách khối nội dung bên dưới. */
+.card > .chips + * { margin-top: 12px; }

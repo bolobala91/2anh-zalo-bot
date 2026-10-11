@@ -193,7 +193,7 @@ function Compose({ conv, onSent }) {
   }
   return html`<form class="compose" onSubmit=${send} novalidate>
     <label for="chat-compose" class="sr-only">Tin nhắn gửi dưới tên bot</label>
-    <textarea id="chat-compose" rows="2" maxlength=${MAX_TEXT} value=${text} readOnly=${busy} placeholder="Nhắn dưới tên bot… (Ctrl+Enter để gửi)"
+    <textarea id="chat-compose" rows="2" maxlength=${MAX_TEXT} value=${text} readOnly=${busy} placeholder=${narrow() ? 'Nhắn dưới tên bot…' : 'Nhắn dưới tên bot… (Ctrl+Enter để gửi)'}
       aria-describedby="chat-compose-help" onInput=${(e) => setText(e.currentTarget.value)}
       onKeyDown=${(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(e); }}></textarea>
     <div class="compose-foot">
