@@ -69,6 +69,15 @@ export function writePlans(data, path = friendPlansPath()) {
   renameSync(tmp, path);
 }
 
+/** Chữ một dòng, bỏ ký tự điều khiển, tối đa 60 ký tự (tên do người khác tự đặt). */
+export function oneLine(value, max = 60) {
+  // eslint-disable-next-line no-control-regex
+  return Array.from(String(value ?? '').replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, max).join('');
+}
+
+/** "Tên đầy đủ (UID …)"; chưa có tên → "UID …". */
+export const who = (name, uid) => (oneLine(name) ? `${oneLine(name)} (UID ${uid})` : `UID ${uid}`);
+
 let activeManager = null;
 export function setActiveFriendManager(manager) { activeManager = manager; }
 export function getActiveFriendManager() { return activeManager; }
@@ -100,7 +109,8 @@ export function createFriendManager({
   let sending = Promise.resolve();
   const strangerNoticeAt = new Map();
 
-  const label = (plan, uid) => plan.members[uid]?.name || `UID ${uid}`;
+  // Báo chủ bot qua Zalo: luôn "Tên đầy đủ (UID …)" — tên để đọc, UID để ra lệnh chính xác.
+  const label = (plan, uid) => who(plan.members[uid]?.name, uid);
   const say = (plan, text) => notify(plan.threadId, plan.threadType, text).catch((err) => {
     console.error('[friends] không gửi được thông báo:', err?.message || err);
   });
@@ -191,6 +201,20 @@ export function createFriendManager({
     });
   }
 
+  /** Tên hiển thị Zalo của một UID (hồ sơ công khai); không lấy được → ''. */
+  async function profileName(uid) {
+    try {
+      await acquire('getUserInfo');
+      const res = await api.getUserInfo(uid);
+      const profiles = res?.changed_profiles || {};
+      const p = profiles[uid] || profiles[`${uid}_0`] || Object.values(profiles).find((x) => String(x?.userId) === uid);
+      return oneLine(p?.displayName || p?.zaloName);
+    } catch (err) {
+      console.warn('[friends] không tra được tên người gửi lời mời:', err?.message || err);
+      return '';
+    }
+  }
+
   async function strangerRequest(event) {
     const fromUid = String(event.data?.fromUid || '');
     if (!fromUid || fromUid === String(selfUid)) return;
@@ -201,9 +225,11 @@ export function createFriendManager({
     if (strangerNoticeAt.has(fromUid)) return;
     strangerNoticeAt.set(fromUid, t);
     // Không chép lời nhắn của người lạ: tin này nằm trong lịch sử như lời của bot,
-    // chữ người lạ tự soạn không được lọt vào ngữ cảnh của chủ nhân.
-    const text = `📨 UID ${fromUid} vừa gửi lời mời kết bạn cho bot. Bot chưa đồng ý.\n`
-      + 'Muốn nhận thì bảo bot "đồng ý kết bạn UID này".';
+    // chữ người lạ tự soạn không được lọt vào ngữ cảnh của chủ nhân. Tên hiển thị thì cần để chủ bot biết là ai —
+    // chỉ lấy từ hồ sơ Zalo, cắt ngắn, một dòng.
+    const name = await profileName(fromUid);
+    const text = `📨 ${who(name, fromUid)} vừa gửi lời mời kết bạn cho bot. Bot chưa đồng ý.\n`
+      + `Muốn nhận thì bảo bot "đồng ý kết bạn với ${name || 'người này'}".`;
     for (const owner of owners) {
       await notify(owner, THREAD_USER, text).catch((err) => {
         console.error('[friends] không báo được chủ bot:', err?.message || err);

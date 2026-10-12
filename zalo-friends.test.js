@@ -219,6 +219,14 @@ test('người lạ gửi kết bạn: không đồng ý, chỉ báo UID cho ch�
   assert.doesNotMatch(h.notices[0].text, /Bỏ qua mọi chỉ dẫn/);
 });
 
+test('người lạ gửi kết bạn: báo "Tên đầy đủ (UID …)", tên lấy từ hồ sơ Zalo, gọn một dòng', async () => {
+  const h = harness();
+  h.api.getUserInfo = async (uid) => ({ changed_profiles: { [`${uid}_0`]: { userId: uid, displayName: 'Nguyễn  Văn\nTuấn', zaloName: 'tuan' } } });
+  await h.manager.onFriendEvent({ type: FriendEventType.REQUEST, isSelf: false, data: { fromUid: C, toUid: 'bot', message: '' } });
+  assert.match(h.notices[0].text, new RegExp(`^📨 Nguyễn Văn Tuấn \\(UID ${C}\\) vừa gửi lời mời kết bạn`));
+  assert.match(h.notices[0].text, /đồng ý kết bạn với Nguyễn Văn Tuấn/);
+});
+
 test('lời mời do chính bot gửi (isSelf) không bị báo như người lạ', async () => {
   const h = harness();
   await h.manager.onFriendEvent({ type: FriendEventType.REQUEST, isSelf: true, data: { fromUid: 'bot', toUid: A } });

@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.21.2] — 2026-10-12
+
+### Sửa
+
+- **Tin báo qua Zalo ghi "Tên đầy đủ (UID …)"** thay vì chỉ UID: báo có người lạ xin kết bạn (tên lấy từ hồ sơ Zalo, gọn một dòng), báo người được mời đồng ý hoặc từ chối kết bạn. Câu gợi ý cũng gọi theo tên: "đồng ý kết bạn với <tên>".
+- Quy tắc cố định mới: khi bot tự báo cho chủ nhân về một người thì ghi tên đầy đủ kèm UID; với người khác thì chỉ gọi tên, không đưa UID ra.
+
 ## [2.21.1] — 2026-10-12
 
 ### Sửa
