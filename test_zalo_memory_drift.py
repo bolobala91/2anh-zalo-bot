@@ -63,6 +63,13 @@ class DriftTest(unittest.TestCase):
         self.assertIn("hướng dẫn chung của hệ thống vẫn áp dụng", note, "gỡ một quy tắc khỏi trí nhớ không có nghĩa là bỏ quy tắc")
         self.assertIn("\n- Mục cũ sẽ xoá", note)
         self.assertNotIn("Giá VIP", note)
+        long_rule = "Quy tắc dài " + "x" * 300
+        p2 = prompt(["a", long_rule], ["b"])
+        self.write("MEMORY.md", ["a"])
+        self.write("USER.md", ["b"])
+        self.assertIn("- Quy tắc dài " + "x" * 88 + "…", md.drift_note(p2, self.home), "mục đã gỡ chỉ ghi phần đầu")
+        self.write("MEMORY.md", ["Giá VIP 1tr", "Link nhóm: https://zalo.me/g/5fli05n11mnwu4ntdqhq"])
+        self.write("USER.md", ["Sếp dạy Hoá"])
         self.assertNotIn("Hồ sơ chủ nhân", note)
         self.write("MEMORY.md", ["Giá VIP 1tr", "Mục cũ sẽ xoá"])
         self.assertEqual(md.drift_note(p, self.home), "", "khớp lời nhắc → không đính gì")

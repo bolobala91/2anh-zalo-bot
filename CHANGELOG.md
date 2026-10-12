@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.20.2] — 2026-10-12
+
+### Sửa
+
+- Báo bộ nhớ vừa cập nhật: mục đã gỡ chỉ ghi phần đầu (khoảng 100 ký tự), không chép nguyên văn. Hermes lưu câu báo vào lịch sử ở mỗi lượt, nên trước đây cuộc trò chuyện dài bị phình to sau mỗi lần dọn bộ nhớ.
+
 ## [2.20.1] — 2026-10-12
 
 ### Sửa

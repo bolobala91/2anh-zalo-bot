@@ -27,6 +27,8 @@ TARGETS = (("memory", "MEMORY.md", "MEMORY (your personal notes)", "Ghi chú c�
 # hoặc trước dòng ngày giờ Hermes đặt ngay sau khối cuối ("Conversation started: …").
 _BLOCK_END = re.compile(r"\n\n(?=═{10}|#|<|Conversation started:|\Z)")
 MAX_ENTRY_CHARS = 600
+# Mục đã gỡ chỉ cần đủ để nhận ra — Hermes lưu câu báo vào lịch sử mỗi lượt, chép nguyên văn thì phiên dài phình to.
+REMOVED_HEAD_CHARS = 100
 _cache: Dict[str, Tuple[tuple, str]] = {}
 
 
@@ -74,6 +76,11 @@ def _blocked(entry: str) -> bool:
         return True
 
 
+def _head(entry: str) -> str:
+    one_line = " ".join(entry.split())
+    return one_line if len(one_line) <= REMOVED_HEAD_CHARS else one_line[:REMOVED_HEAD_CHARS].rstrip() + "…"
+
+
 def drift_note(prompt: str, home: Path) -> str:
     """Câu báo phần chênh giữa bộ nhớ hiện tại và bộ nhớ đóng băng trong ``prompt``; rỗng nếu không chênh."""
     parts: List[str] = []
@@ -87,7 +94,7 @@ def drift_note(prompt: str, home: Path) -> str:
         if removed:
             parts.append(f"{label} — mục đã gỡ khỏi trí nhớ (thông tin trong đó không còn đúng/không cần nữa; nếu là "
                          f"quy tắc thì hướng dẫn chung của hệ thống vẫn áp dụng như cũ):\n"
-                         + "\n".join(f"- {e[:MAX_ENTRY_CHARS]}" for e in removed))
+                         + "\n".join(f"- {_head(e)}" for e in removed))
     if not parts:
         return ""
     return ("[Bộ nhớ của trợ lý vừa được cập nhật sau khi cuộc trò chuyện này bắt đầu. Phần dưới đây mới hơn "
