@@ -37,6 +37,24 @@ def as_member(text="", **extra):
     return mock.patch.object(tools, "_turn", return_value=turn)
 
 
+class YtdlpBlockedTest(unittest.TestCase):
+    """YouTube chặn IP máy chủ: yt-dlp -J in "null" — trước đây sập AttributeError, bot không biết báo gì."""
+
+    BLOCKED = "ERROR: [youtube] xifOjcR9Q3E: Sign in to confirm you’re not a bot. Use --cookies-from-browser"
+
+    def _run(self, fn):
+        async def fake(args, timeout):
+            return 1, "null\n", self.BLOCKED
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(media, "_run_ytdlp", fake):
+            with self.assertRaises(media.MediaError) as ctx:
+                run(fn(d))
+        return str(ctx.exception)
+
+    def test_download_reports_blocked_server_instead_of_crashing(self):
+        msg = self._run(lambda d: media.download_video(YT, d, max_minutes=None))
+        self.assertIn("YouTube đang chặn máy chủ của bot", msg)
+
+
 class DownloadIntentTest(unittest.TestCase):
     def test_matches_download_requests(self):
         import unicodedata

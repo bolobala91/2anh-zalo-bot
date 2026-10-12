@@ -261,6 +261,23 @@ def _ytdlp_error(stderr: str) -> str:
     return re.sub(r"^ERROR:\s*(\[[^\]]+\]\s*)?", "", lines[-1])[:300]
 
 
+_BOT_BLOCKED = re.compile(r"confirm you.re not a bot|HTTP Error 429", re.I)
+
+
+def _video_info(out: str, err: str) -> Dict[str, Any]:
+    """Kết quả ``yt-dlp -J``. Lỗi thì yt-dlp có thể in "null" — không phải dict thì coi là không đọc được."""
+    try:
+        info = json.loads(out)
+    except ValueError:
+        info = None
+    if isinstance(info, dict):
+        return info
+    if _BOT_BLOCKED.search(err or ""):
+        raise MediaError("YouTube đang chặn máy chủ của bot (bắt xác minh không phải robot) nên chưa tải được — "
+                         "báo người dùng thử lại sau hoặc nhờ chủ bot tải giúp, đừng tự thử cách khác")
+    raise MediaError(f"không đọc được video: {_ytdlp_error(err)}")
+
+
 def vtt_to_text(vtt: str) -> str:
     """Phụ đề VTT → văn bản kèm mốc [phút:giây], bỏ dòng lặp của phụ đề tự động."""
     out: List[str] = []
@@ -351,10 +368,7 @@ async def speech_transcript(url: str, *, max_minutes: int) -> str:
     handed_off = False
     try:
         rc, out, err = await _run_ytdlp(["-J", "-f", "ba/b", url], INFO_TIMEOUT_S)
-        try:
-            info = json.loads(out)
-        except ValueError:
-            raise MediaError(f"không đọc được video: {_ytdlp_error(err)}")
+        info = _video_info(out, err)
         check_downloadable(info, max_minutes)
         probe = Path(workdir, "probe.info.json")
         probe.write_text(json.dumps(info), encoding="utf-8")
@@ -502,10 +516,7 @@ def check_downloadable(info: Dict[str, Any], max_minutes: Optional[int]) -> None
 async def download_video(url: str, workdir: str, *, max_minutes: Optional[int]) -> str:
     """Tải video Full HD vào ``workdir``; trả về đường dẫn tệp."""
     rc, out, err = await _run_ytdlp(["-J", *_FORMAT_ARGS, url], INFO_TIMEOUT_S)
-    try:
-        info = json.loads(out)
-    except ValueError:
-        raise MediaError(f"không đọc được video: {_ytdlp_error(err)}")
+    info = _video_info(out, err)
     check_downloadable(info, max_minutes)
 
     probe = Path(workdir, "probe.info.json")

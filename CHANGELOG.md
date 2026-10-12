@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.19.3] — 2026-10-12
+
+### Sửa
+
+- **Tải video khi YouTube chặn máy chủ:** trước đây công cụ tải video sập với lỗi khó hiểu (`NoneType`), nên bot loay hoay tự thử bằng terminal rồi bỏ dở. Nay bot nhận được lời báo rõ là YouTube đang chặn máy chủ, để trả lời người dùng cho đàng hoàng.
+
 ## [2.19.2] — 2026-10-12
 
 ### Sửa
