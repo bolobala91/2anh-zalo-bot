@@ -139,6 +139,7 @@ function OrganizeDialog({ target, label, tags, onSaved, onClose }) {
     ${state.phase === 'review' ? html`<div class="stack">
       ${same ? html`<p>Bộ nhớ đã gọn — AI không đề xuất thay đổi nào.</p>` : html`
         <p class="muted small">${r.before.length} mục → <strong>${r.after.length} thẻ</strong>. Xem lại rồi bấm Áp dụng; chưa bấm thì chưa có gì thay đổi.</p>
+        ${r.note ? html`<p class="notice notice-warn">${r.note}</p>` : null}
         ${r.overLimit ? html`<p class="notice notice-warn">Bản sắp xếp dài hơn dung lượng cho phép (${r.limit} ký tự) — xoá bớt mục rồi thử lại.</p>` : null}
         <div class="organize-cols">
           <div><h4>Hiện tại</h4><${EntryList} entries=${r.before} tags=${tags} /></div>

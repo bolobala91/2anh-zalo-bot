@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.21.1] — 2026-10-12
+
+### Sửa
+
+- Sắp xếp bộ nhớ bằng AI: mục nhiều dòng (vd. quy ước soạn thông báo có gạch đầu dòng) giữ nguyên xuống dòng, không bị dồn thành một dòng.
+- Bộ nhớ gần đầy thì đề xuất "Sắp xếp lại bằng AI" chuyển sang chỉ gắn thẻ, chưa tách, và báo rõ lý do. Trước đây đề xuất bị chặn vì vượt dung lượng.
+
 ## [2.21.0] — 2026-10-12
 
 ### Thêm
