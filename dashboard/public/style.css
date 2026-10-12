@@ -1172,8 +1172,11 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .folder-tag { display: inline-flex; align-items: center; gap: 3px; color: var(--brand-dark); font-weight: 600; }
 .folder-members { list-style: none; margin: 8px 0; padding: 0; max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
 .folder-members li + li { border-top: 1px solid var(--border); }
-.folder-members label { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; min-height: 44px; }
+.folder-members label { display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 9px 12px; cursor: pointer; min-height: 44px; text-align: left; }
+.folder-members input[type="checkbox"] { flex: none; width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; accent-color: var(--brand); }
+.folder-members label > span { flex: 1; min-width: 0; }
 .folder-members label:hover { background: var(--bg); }
 .folder-edit .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .folder-edit .thread-head h2 { display: inline-flex; align-items: center; gap: 8px; }
 .folder-settings-head { margin: 16px 0 4px; font-size: 15px; }
+.folder-edit details > summary + p { margin-top: 10px; }

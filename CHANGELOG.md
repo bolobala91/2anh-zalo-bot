@@ -2,6 +2,11 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.18.1] — 2026-10-12
+
+### Sửa
+- Thư mục nhóm: ô đánh dấu ở danh sách chọn nhóm có cỡ bình thường và nằm thẳng hàng với tên nhóm. Trước đây ô bị phóng to và lệch giữa hàng. Dòng hướng dẫn phía trên danh sách không còn bị đường kẻ đè lên.
+
 ## [2.18.0] — 2026-10-12
 
 ### Thêm
