@@ -23,8 +23,9 @@ logger = logging.getLogger(__name__)
 DELIM = "\n§\n"
 TARGETS = (("memory", "MEMORY.md", "MEMORY (your personal notes)", "Ghi chú của trợ lý"),
            ("user", "USER.md", "USER PROFILE (who the user is)", "Hồ sơ chủ nhân"))
-# Khối bộ nhớ trong lời nhắc: dòng tiêu đề, dòng ═══, nội dung — hết ở dòng trống trước khối/tiêu đề kế tiếp.
-_BLOCK_END = re.compile(r"\n\n(?=═{10}|#|<|\Z)")
+# Khối bộ nhớ trong lời nhắc: dòng tiêu đề, dòng ═══, nội dung — hết ở dòng trống trước khối/tiêu đề kế tiếp,
+# hoặc trước dòng ngày giờ Hermes đặt ngay sau khối cuối ("Conversation started: …").
+_BLOCK_END = re.compile(r"\n\n(?=═{10}|#|<|Conversation started:|\Z)")
 MAX_ENTRY_CHARS = 600
 _cache: Dict[str, Tuple[tuple, str]] = {}
 

@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.19.2] — 2026-10-12
+
+### Sửa
+
+- Báo bộ nhớ vừa cập nhật (2.19.1): đọc đúng khối Hồ sơ chủ nhân khi nó là khối cuối lời nhắc. Trước đó dòng "Conversation started" phía sau dính vào mục cuối, khiến mục đó bị báo nhầm là vừa thêm và vừa xoá.
+
 ## [2.19.1] — 2026-10-12
 
 ### Sửa

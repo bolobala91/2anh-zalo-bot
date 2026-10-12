@@ -49,6 +49,9 @@ class DriftTest(unittest.TestCase):
         self.assertEqual(md.frozen_entries(p, "MEMORY (your personal notes)"), ["Giá VIP 1tr", "Đặt tên CLB: một tên"])
         self.assertEqual(md.frozen_entries(p, "USER PROFILE (who the user is)"), ["Sếp dạy Hoá"])
         self.assertEqual(md.frozen_entries("không có khối", "MEMORY (your personal notes)"), [])
+        # Khối cuối lời nhắc: Hermes đặt dòng ngày giờ ngay sau, không có tiêu đề ngăn cách.
+        tail = block("USER PROFILE (who the user is)", ["Sếp dạy Hoá", "Link nhóm"]) + "\n\nConversation started: Monday"
+        self.assertEqual(md.frozen_entries(tail, "USER PROFILE (who the user is)"), ["Sếp dạy Hoá", "Link nhóm"])
 
     def test_note_lists_added_and_removed_entries_only(self):
         p = prompt(["Giá VIP 1tr", "Mục cũ sẽ xoá"], ["Sếp dạy Hoá"])
