@@ -85,7 +85,9 @@ def drift_note(prompt: str, home: Path) -> str:
         if added:
             parts.append(f"{label} — mục mới:\n" + "\n".join(f"- {e[:MAX_ENTRY_CHARS]}" for e in added))
         if removed:
-            parts.append(f"{label} — mục đã xoá, đừng dùng nữa:\n" + "\n".join(f"- {e[:MAX_ENTRY_CHARS]}" for e in removed))
+            parts.append(f"{label} — mục đã gỡ khỏi trí nhớ (thông tin trong đó không còn đúng/không cần nữa; nếu là "
+                         f"quy tắc thì hướng dẫn chung của hệ thống vẫn áp dụng như cũ):\n"
+                         + "\n".join(f"- {e[:MAX_ENTRY_CHARS]}" for e in removed))
     if not parts:
         return ""
     return ("[Bộ nhớ của trợ lý vừa được cập nhật sau khi cuộc trò chuyện này bắt đầu. Phần dưới đây mới hơn "

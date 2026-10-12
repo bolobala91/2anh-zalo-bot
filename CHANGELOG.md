@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.20.1] — 2026-10-12
+
+### Sửa
+
+- Báo bộ nhớ vừa cập nhật: mục bị gỡ khỏi trí nhớ giờ được ghi rõ là *đã gỡ khỏi trí nhớ — quy tắc chung vẫn áp dụng*. Trước đây câu "đừng dùng nữa" có thể khiến bot hiểu nhầm là bỏ luôn quy tắc, khi chủ bot dọn những mục quy tắc đã được chuyển thành quy tắc cố định.
+- Quy tắc cố định mới: trả lời đúng một thứ tiếng, không chèn chữ Hán hay ký tự ngôn ngữ khác vào giữa câu.
+- Cấu hình › Phong cách trả lời: chấm màu không còn bị méo.
+
 ## [2.20.0] — 2026-10-12
 
 ### Thêm

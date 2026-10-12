@@ -1187,6 +1187,6 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .rs-label { font-weight: 600; font-size: 14px; }
 .rs-colors { display: flex; flex-wrap: wrap; gap: 8px; }
 .field .rs-color { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; font-weight: 600; cursor: pointer; }
-.rs-color::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+.rs-color::before { content: ""; flex: none; width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
 .rs-red { color: #db342e; } .rs-green { color: #15a85f; } .rs-orange { color: #f27806; } .rs-yellow { color: #b88600; }
 .rs-color input { margin: 0; }
