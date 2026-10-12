@@ -5,6 +5,8 @@ AI chỉ được XIN ảnh: một câu mô tả (ảnh AI) hoặc một cụm t
 - Ảnh AI: gọi ``<ZALO_STUDIO_IMAGE_URL>/images/generations`` (mặc định 9router như đường Vox của 2Anh Studio),
   khoá ``ANH_AI_KEY`` của chủ bot — khoá không bao giờ vào hộp cát. Nhận ``b64_json`` (hoặc ``url`` → tải an toàn).
 - Ảnh web: tìm qua API Openverse (ảnh giấy phép mở, có tác giả/giấy phép để ghi nguồn), rồi tải ``url`` kết quả.
+- Icon: tìm trên Iconify (bộ icon mã nguồn mở), tải SVG, chặn SVG có mã/liên kết/nhúng ngoài, rồi tự vẽ ra PNG nền
+  trong suốt bằng PyMuPDF — slide chỉ nhận PNG/JPEG do plugin đặt, nên SVG lạ không bao giờ vào bộ dựng.
 - Mọi lần tải ra Internet đi qua ``fetch``: chỉ https cổng 443, phân giải tên rồi kiểm MỌI địa chỉ là địa chỉ công
   cộng (chặn 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10, ::1, fc00::/7, fe80::/10, fec0::/10, đa
   hướng…), kết nối
@@ -20,6 +22,7 @@ import asyncio
 import base64
 import ipaddress
 import json
+import re
 import socket
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +38,11 @@ GENERATE_TIMEOUT = 150
 MAX_REDIRECTS = 3
 USER_AGENT = "2anh-zalo-studio/1.0 (+https://github.com/luonghaianh1208/2anh-zalo-bot)"
 OPENVERSE_HOST = "api.openverse.org"
+ICONIFY_HOST = "api.iconify.design"
+MAX_ICONS = 8
+MAX_ICON_SVG_BYTES = 200_000
+ICON_PX = 512
+ICON_COLOR = "#134e4a"
 DEFAULT_IMAGE_URL = "http://127.0.0.1:20128/v1"
 DEFAULT_IMAGE_MODEL = "ag/gemini-3.1-flash-image"
 
@@ -316,6 +324,69 @@ async def search_web(query: str, orientation: str = "landscape", *, client: Any 
         picture.source_url = str(item.get("foreign_landing_url") or "")[:300]
         return picture
     raise last or ImageError(f"không tìm được ảnh cho \"{q}\"")
+
+
+_ICON_NAME = re.compile(r"^[a-z0-9-]{1,40}:[a-z0-9-]{1,80}$")
+# SVG của icon chỉ là đường vẽ. Có mã chạy, nhúng/tham chiếu ngoài hay CSS ngoài thì bỏ hẳn, không cố "làm sạch".
+_ICON_FORBIDDEN = re.compile(rb"<\s*(script|image|foreignObject|use|iframe|object|embed|style)\b|href\s*=|@import|url\s*\(|"
+                             rb"javascript:|<!ENTITY|<!DOCTYPE|\son[a-z]+\s*=", re.I)
+
+
+def render_icon_svg(svg: bytes, px: int = ICON_PX) -> bytes:
+    """SVG icon → PNG nền trong suốt, cạnh dài ``px``. Từ chối SVG không phải icon thuần."""
+    if len(svg) > MAX_ICON_SVG_BYTES or not svg.lstrip().startswith(b"<svg") or _ICON_FORBIDDEN.search(svg):
+        raise ImageError("icon không phải SVG thuần đường vẽ")
+    try:
+        try:
+            import pymupdf as fitz
+        except ImportError:
+            import fitz  # type: ignore[no-redef]
+        doc = fitz.open(stream=svg, filetype="svg")
+        try:
+            rect = doc[0].rect
+            zoom = px / max(rect.width, rect.height, 1)
+            return doc[0].get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=True).tobytes("png")
+        finally:
+            doc.close()
+    except ImageError:
+        raise
+    except Exception:
+        raise ImageError("không vẽ được icon") from None
+
+
+async def search_icon(query: str, *, client: Any = None, resolver: Resolver = system_resolver) -> Picture:
+    """Tìm một icon trên Iconify theo từ khoá tiếng Anh → PNG (màu xanh đậm, nền trong suốt) kèm bộ icon + giấy phép."""
+    from urllib.parse import quote, urlencode
+
+    q = " ".join(str(query or "").split())[:60]
+    if not q:
+        raise ImageError("từ khoá tìm icon rỗng")
+    raw, _kind = await fetch(f"https://{ICONIFY_HOST}/search?{urlencode({'query': q, 'limit': 32})}",
+                             max_bytes=MAX_JSON_BYTES, accept=("application/json",), client=client, resolver=resolver)
+    try:
+        data = json.loads(raw.decode("utf-8"))
+        names = [n for n in data.get("icons") or [] if isinstance(n, str) and _ICON_NAME.match(n)]
+        collections = data.get("collections") or {}
+    except (ValueError, AttributeError):
+        raise ImageError("trang tìm icon trả dữ liệu hỏng") from None
+    last: Optional[ImageError] = None
+    for name in names[:4]:
+        prefix, icon = name.split(":", 1)
+        try:
+            svg, _kind = await fetch(f"https://{ICONIFY_HOST}/{quote(prefix)}/{quote(icon)}.svg?"
+                                     f"{urlencode({'height': ICON_PX, 'color': ICON_COLOR})}",
+                                     max_bytes=MAX_ICON_SVG_BYTES, accept=("image/svg",), client=client, resolver=resolver)
+            picture = _image(await asyncio.to_thread(render_icon_svg, svg))
+        except ImageError as exc:
+            last = exc
+            continue
+        info = collections.get(prefix) if isinstance(collections.get(prefix), dict) else {}
+        picture.author = str(((info.get("author") or {}).get("name")) or "")[:120]
+        picture.license = str(((info.get("license") or {}).get("title")) or "")[:60]
+        picture.provider = f"Iconify/{info.get('name') or prefix}"[:60]
+        picture.source_url = f"https://icon-sets.iconify.design/{prefix}/{icon}/"
+        return picture
+    raise last or ImageError(f"không tìm được icon cho \"{q}\"")
 
 
 def save(picture: Picture, folder: Path, name: str, *, root: Path) -> Path:

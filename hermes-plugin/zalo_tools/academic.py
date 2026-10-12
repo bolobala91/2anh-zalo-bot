@@ -304,3 +304,87 @@ def journal(query: str) -> Dict[str, Any]:
         out.sort(key=lambda j: not j["exact_title"])
     in_doaj = any(j["exact_title"] for j in out) if not is_issn else bool(out)
     return {"query": query, "in_doaj": in_doaj, "journals": out}
+
+
+ARXIV = "https://export.arxiv.org/api/query"
+EUROPEPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+_ATOM = {"a": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+
+
+OPENALEX_ARXIV_SOURCE = "S4306400194"
+
+
+def arxiv(query: str, limit: int = 5, abstracts: bool = True, openalex_key: str = "") -> List[Dict[str, Any]]:
+    """arXiv: bản thảo (preprint) vật lý, toán, tin học, thống kê, tài chính định lượng — chưa chắc đã bình duyệt.
+
+    API của arXiv giới hạn lượt rất gắt (đo 12/10/2026: trả 429 "Rate exceeded" ngay lượt đầu, cả máy nhà lẫn VPS).
+    Bị chặn hay không nối được thì tra bản sao chỉ mục của arXiv trên OpenAlex — cùng bài, có PDF arXiv."""
+    limit = max(1, min(int(limit or 5), MAX_RESULTS))
+    params = urllib.parse.urlencode({"search_query": f"all:{query}", "start": 0, "max_results": limit,
+                                     "sortBy": "relevance"})
+    try:
+        root = ET.fromstring(_get(f"{ARXIV}?{params}", "application/atom+xml"))
+    except (AcademicError, ET.ParseError):
+        return _arxiv_via_openalex(query, limit, abstracts, openalex_key)
+    out = []
+    for e in root.findall("a:entry", _ATOM):
+        text = lambda tag: " ".join((e.findtext(tag, "", _ATOM) or "").split())
+        abs_url = text("a:id")
+        pdf = next((l.get("href") for l in e.findall("a:link", _ATOM) if l.get("title") == "pdf"), None)
+        item = {
+            "doi": text("arxiv:doi") or None,
+            "title": text("a:title"),
+            "authors": [" ".join((a.findtext("a:name", "", _ATOM) or "").split()) for a in e.findall("a:author", _ATOM)][:6],
+            "year": text("a:published")[:4] or None,
+            "pdf": pdf,
+            "url": abs_url or None,
+            "preprint": True,
+        }
+        if abstracts:
+            item["abstract"] = text("a:summary")[:ABSTRACT_MAX_CHARS]
+        out.append(item)
+    return out
+
+
+def _arxiv_via_openalex(query: str, limit: int, abstracts: bool, api_key: str) -> List[Dict[str, Any]]:
+    data = _openalex_get("works", {"search": query, "per-page": limit,
+                                   "filter": f"primary_location.source.id:{OPENALEX_ARXIV_SOURCE}"}, api_key)
+    out = []
+    for it in data.get("results", []):
+        item = {**_openalex_work(it), "preprint": True, "via": "OpenAlex (arXiv đang giới hạn lượt gọi)"}
+        if abstracts:
+            item["abstract"] = _openalex_abstract(it.get("abstract_inverted_index"))
+        out.append(item)
+    return out
+
+
+def europepmc(query: str, limit: int = 5, abstracts: bool = True) -> List[Dict[str, Any]]:
+    """Europe PMC: y sinh, khoa học sự sống (gồm PubMed, PMC, bản thảo, bằng sáng chế) — có cờ toàn văn mở."""
+    limit = max(1, min(int(limit or 5), MAX_RESULTS))
+    params = urllib.parse.urlencode({"query": query, "format": "json", "pageSize": limit,
+                                     "resultType": "core" if abstracts else "lite"})
+    try:
+        data = json.loads(_get(f"{EUROPEPMC}?{params}"))
+    except ValueError:
+        raise AcademicError("Europe PMC trả dữ liệu hỏng, thử lại sau")
+    out = []
+    for it in (data.get("resultList") or {}).get("result", []):
+        pmcid, pmid = it.get("pmcid"), it.get("pmid")
+        url = (f"https://europepmc.org/article/PMC/{pmcid}" if pmcid
+               else f"https://europepmc.org/article/MED/{pmid}" if pmid
+               else f"https://doi.org/{it['doi']}" if it.get("doi") else None)
+        item = {
+            "doi": it.get("doi"),
+            "title": it.get("title"),
+            "authors": [s.strip() for s in str(it.get("authorString") or "").split(",") if s.strip()][:6],
+            "journal": it.get("journalTitle") or (((it.get("journalInfo") or {}).get("journal") or {}).get("title")),
+            "year": it.get("pubYear"),
+            "cited_by": it.get("citedByCount"),
+            "open_access": it.get("isOpenAccess") == "Y",
+            "pmcid": pmcid,
+            "url": url,
+        }
+        if abstracts:
+            item["abstract"] = " ".join(str(it.get("abstractText") or "").replace("<", " <").split())[:ABSTRACT_MAX_CHARS]
+        out.append(item)
+    return out

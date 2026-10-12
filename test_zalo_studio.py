@@ -2159,3 +2159,71 @@ class RestartSafetyTest(unittest.TestCase):
         self.assertEqual(seen, [(70, 0), (70, 1)])
         jobs.Builder(job, FakeLlm(), places, self.tmp / "job",
                      on_spend=lambda *a: 1 / 0).usage.add(Result())     # lỗi ghi sổ không làm hỏng việc
+
+
+ICON_SVG = (b'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
+            b'<path fill="#134e4a" d="M2 2h20v20H2z"/></svg>')
+
+
+class IconTest(unittest.IsolatedAsyncioTestCase):
+    """Icon Iconify cho slide: SVG thuần đường vẽ mới được vẽ ra PNG; dàn ý có trần icon; icon không tính lượt ảnh."""
+
+    def test_render_plain_icon_and_refuse_anything_active_or_external(self):
+        png_bytes = images.render_icon_svg(ICON_SVG, 64)
+        self.assertTrue(png_bytes.startswith(b"\x89PNG"))
+        for bad in (b'<svg><script>alert(1)</script></svg>', b'<svg><SCRIPT >x</SCRIPT></svg>',
+                    b'<svg><image href="https://x/y.png"/></svg>', b'<svg><use xlink:href="#a"/></svg>',
+                    b'<svg><foreignObject/></svg>', b'<svg><style>@import url(x)</style></svg>',
+                    b'<svg onload="x"><path d="M0 0"/></svg>', b'<!DOCTYPE svg [<!ENTITY a "b">]><svg/>',
+                    b'<html><svg/></html>', b'<svg>' + b' ' * images.MAX_ICON_SVG_BYTES + b'</svg>'):
+            with self.assertRaises(images.ImageError, msg=bad[:40]):
+                images.render_icon_svg(bad)
+
+    def test_outline_accepts_icons_within_cap(self):
+        out = author.outline_images([{"id": "i1", "icon": " atom  model "}, {"id": "w1", "web": "cell"}],
+                                    max_ai=1, max_web=1, max_icon=2)
+        self.assertEqual(out[0], {"id": "i1", "icon": "atom model"})
+        with self.assertRaises(validate.SourceError):
+            author.outline_images([{"id": f"i{n}", "icon": "x"} for n in range(3)], max_ai=1, max_web=1, max_icon=2)
+        with self.assertRaises(validate.SourceError):
+            author.outline_images([{"id": "i1", "icon": "x"}], max_ai=1, max_web=1)  # mặc định 0 icon
+
+    async def test_search_icon_fetches_fixed_host_skips_bad_names_and_records_license(self):
+        asked = []
+
+        async def fake_fetch(url, **kw):
+            asked.append((url, kw["accept"]))
+            if "/search?" in url:
+                return json.dumps({"icons": ["../evil:x", "mdi:atom"], "collections": {"mdi": {
+                    "name": "Material Design Icons", "author": {"name": "Pictogrammers"},
+                    "license": {"title": "Apache 2.0"}}}}).encode(), "application/json"
+            return ICON_SVG, "image/svg+xml"
+
+        with patch.object(images, "fetch", side_effect=fake_fetch):
+            pic = await images.search_icon("atom")
+        self.assertEqual(pic.ext, "png")
+        self.assertEqual((pic.license, pic.provider), ("Apache 2.0", "Iconify/Material Design Icons"))
+        self.assertEqual(len(asked), 2, "tên icon lạ bị bỏ, không gọi")
+        self.assertTrue(all(u.startswith(f"https://{images.ICONIFY_HOST}/") for u, _a in asked))
+        self.assertTrue(asked[1][0].startswith(f"https://{images.ICONIFY_HOST}/mdi/atom.svg?"))
+        self.assertEqual(asked[1][1], ("image/svg",))
+
+    async def test_icons_do_not_count_as_spent_images(self):
+        BuilderTest.setUp(self)
+        job = make_job("slide", loai="bai-giang")
+        builder = jobs.Builder(job, FakeLlm(), self.where, self.job_dir)
+
+        async def fake_icon(query, **kw):
+            return images.Picture(PNG, "png", license="CC BY 4.0", provider="Iconify/Some Set")
+
+        folder = self.job_dir / "imgs"
+        folder.mkdir(parents=True)
+        with patch.object(jobs.images, "search_icon", side_effect=fake_icon):
+            got = await builder.deck_images([{"id": "i1", "icon": "atom"}], folder)
+        self.assertEqual(builder.images_used, 0)
+        self.assertEqual(got["i1"]["path"], "../images/i1.png")
+        self.assertIn("Icon: Some Set · CC BY 4.0", got["i1"]["note"])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

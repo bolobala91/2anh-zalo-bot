@@ -28,14 +28,14 @@ logger = logging.getLogger(__name__)
 FEATURES = ("web", "files", "voice", "reminders", "groupCron", "kb", "people", "academic", "video", "history")
 
 FEATURE_TOOLS: Dict[str, tuple] = {
-    "web": ("zalo_web_search", "zalo_web_read"),
+    "web": ("zalo_web_search", "zalo_web_read", "zalo_weather", "zalo_exchange_rate"),
     "files": ("zalo_send_file", "zalo_make_file", "zalo_pdf"),
     "voice": ("zalo_send_voice",),
     "reminders": ("zalo_create_reminder", "zalo_list_reminders", "zalo_remove_reminder"),
     "groupCron": ("zalo_group_cron",),
     "kb": ("zalo_kb_list", "zalo_kb_read"),
     "people": ("zalo_remember_person", "zalo_recall_person"),
-    "academic": ("zalo_academic_search",),
+    "academic": ("zalo_academic_search", "zalo_dictionary", "zalo_species"),
     "video": ("zalo_video_info", "zalo_video_download"),
     "history": ("zalo_thread_history",),
 }

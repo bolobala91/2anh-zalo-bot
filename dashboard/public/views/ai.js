@@ -6,6 +6,7 @@ import { Dialog, html, Icon, Live, PageHead, Spinner } from '../ui.js';
 import { fold } from '../fold.js';
 import { RestartBanner } from './restart-banner.js';
 import { modelOptions } from './agent.js';
+import { FreeApis } from './free-apis.js';
 
 const fmtMs = (ms) => (ms < 1000 ? `${ms} ms` : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(ms / 1000)} giây`);
 
@@ -165,8 +166,9 @@ function Keys({ onRestart }) {
 }
 
 const TAB_KEY = 'zd-ai-tab';
+const TABS = ['models', 'keys', 'free'];
 export function Ai() {
-  const [tab, setTab] = useState(() => { try { return localStorage.getItem(TAB_KEY) === 'keys' ? 'keys' : 'models'; } catch { return 'models'; } });
+  const [tab, setTab] = useState(() => { try { const t = localStorage.getItem(TAB_KEY); return TABS.includes(t) ? t : 'models'; } catch { return 'models'; } });
   const [rev, setRev] = useState(0);
   const pick = (t) => { setTab(t); try { localStorage.setItem(TAB_KEY, t); } catch { /* tiện ích */ } };
   return html`<${PageHead} title="Khoá API & Model" sub="Bot đang dùng model AI nào cho từng việc, và các khoá dịch vụ đã cài. Chỉ Quản trị." />
@@ -175,7 +177,10 @@ export function Ai() {
       <div class="chips" role="group" aria-label="Mục">
         <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${tab === 'models' ? 'true' : 'false'} onClick=${() => pick('models')}>Model AI</button>
         <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${tab === 'keys' ? 'true' : 'false'} onClick=${() => pick('keys')}>Khoá API</button>
+        <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${tab === 'free' ? 'true' : 'false'} onClick=${() => pick('free')}>API miễn phí</button>
       </div>
-      ${tab === 'models' ? html`<${Models} onRestart=${() => setRev((r) => r + 1)} />` : html`<${Keys} onRestart=${() => setRev((r) => r + 1)} />`}
+      ${tab === 'models' ? html`<${Models} onRestart=${() => setRev((r) => r + 1)} />`
+        : tab === 'free' ? html`<${FreeApis} />`
+        : html`<${Keys} onRestart=${() => setRev((r) => r + 1)} />`}
     </section>`;
 }

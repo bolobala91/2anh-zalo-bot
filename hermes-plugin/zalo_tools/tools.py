@@ -2162,6 +2162,10 @@ async def zalo_academic_search(args: Dict[str, Any], **_kw) -> str:
             results = await asyncio.to_thread(academic.openalex, query, limit, openalex_key, abstracts)
         elif source == "core":
             results = await asyncio.to_thread(academic.core, query, limit, core_key, abstracts)
+        elif source == "arxiv":
+            results = await asyncio.to_thread(academic.arxiv, query, limit, abstracts, openalex_key)
+        elif source == "europepmc":
+            results = await asyncio.to_thread(academic.europepmc, query, limit, abstracts)
         else:
             results = await asyncio.to_thread(academic.pubmed, query, limit, abstracts)
     except academic.AcademicError as exc:
@@ -2169,6 +2173,39 @@ async def zalo_academic_search(args: Dict[str, Any], **_kw) -> str:
     if not results:
         return _ok({"results": [], "note": "không có bài nào — thử từ khoá tiếng Anh khác, ngắn hơn"})
     return _ok({"source": source, "results": results})
+
+
+async def _open_data(fn, *args) -> str:
+    from . import open_data
+    try:
+        return _ok(await asyncio.to_thread(fn, *args))
+    except open_data.OpenDataError as exc:
+        return _err(str(exc))
+
+
+async def zalo_weather(args: Dict[str, Any], **_kw) -> str:
+    """Thời tiết hiện tại và dự báo (Open-Meteo, không khoá). Chỉ đọc."""
+    from . import open_data
+    return await _open_data(open_data.weather, args.get("place") or "", args.get("days") or 3)
+
+
+async def zalo_exchange_rate(args: Dict[str, Any], **_kw) -> str:
+    """Quy đổi tiền tệ (Frankfurter, Currency-api; không khoá). Chỉ đọc."""
+    from . import open_data
+    return await _open_data(open_data.exchange_rate, args.get("base") or "", args.get("target") or "",
+                            args.get("amount") if args.get("amount") is not None else 1)
+
+
+async def zalo_dictionary(args: Dict[str, Any], **_kw) -> str:
+    """Tra từ điển (Free Dictionary, Wiktionary; không khoá). Chỉ đọc."""
+    from . import open_data
+    return await _open_data(open_data.dictionary, args.get("word") or "", args.get("lang") or "en")
+
+
+async def zalo_species(args: Dict[str, Any], **_kw) -> str:
+    """Tra loài sinh vật (iNaturalist, GBIF; không khoá). Chỉ đọc."""
+    from . import open_data
+    return await _open_data(open_data.species, args.get("name") or "")
 
 
 async def zalo_video_info(args: Dict[str, Any], **_kw) -> str:
@@ -3548,7 +3585,7 @@ TOOLS = [
         "Tra bài báo khoa học đã bình duyệt. Câu hỏi về y tế, sức khoẻ, thuốc, bệnh, dinh dưỡng, "
         "sinh học → dùng công cụ này TRƯỚC web search (source=pubmed). Hoá học, môi trường, giáo dục, "
         "kỹ thuật, mọi ngành → source=openalex (phủ rộng, có số trích dẫn và link PDF mở); cần bài có "
-        "sẵn PDF toàn văn → source=core; crossref để tra theo thông tin thư mục. Dịch câu hỏi sang "
+        "sẵn PDF toàn văn → source=core; crossref để tra theo thông tin thư mục; vật lý, toán, tin học, thống kê (bản thảo mới nhất, chưa chắc bình duyệt — nói rõ khi trích) → source=arxiv; y sinh cần cả bản thảo, bằng sáng chế, cờ toàn văn mở → source=europepmc. Dịch câu hỏi sang "
         "2–4 từ khoá tiếng Anh. action=find_pdf tìm bản PDF miễn phí hợp pháp của một DOI; "
         "action=fulltext đọc toàn văn bài trên PubMed Central (DOI hoặc PMCID); action=journal tra "
         "tạp chí trên DOAJ theo ISSN hoặc tên (không có trong DOAJ không có nghĩa là tạp chí kém — "
@@ -3560,16 +3597,65 @@ TOOLS = [
                        "description": "Mặc định search."},
             "query": {"type": "string", "description": "search: từ khoá tiếng Anh, vd. 'biochar cadmium soil'. "
                                                       "journal: ISSN hoặc tên tạp chí. fulltext: PMCID."},
-            "source": {"type": "string", "enum": ["pubmed", "openalex", "core", "crossref"],
+            "source": {"type": "string", "enum": ["pubmed", "openalex", "core", "crossref", "arxiv", "europepmc"],
                        "description": "Mặc định pubmed."},
             "limit": {"type": "integer", "description": "Số bài, 1–10. Mặc định 5."},
-            "abstracts": {"type": "boolean", "description": "PubMed/OpenAlex/CORE: kèm tóm tắt. Mặc định có."},
+            "abstracts": {"type": "boolean", "description": "Kèm tóm tắt (trừ crossref). Mặc định có."},
             "doi": {"type": "string", "description": "Cho action=cite/find_pdf/fulltext, vd. 10.1038/s41586-020-2649-2."},
             "style": {"type": "string", "enum": ["apa", "ieee", "vancouver", "harvard", "chicago", "mla"],
                       "description": "Cho action=cite. Mặc định apa."},
         },
         [],
     ), zalo_academic_search, TOOLSET_PUBLIC),
+
+    ("zalo_weather", "🌤️", _schema(
+        "zalo_weather",
+        "Thời tiết hiện tại và dự báo tới 7 ngày cho một địa danh (giờ Việt Nam): trời, nhiệt độ, cảm giác như, "
+        "độ ẩm, khả năng mưa, lượng mưa, gió, chỉ số UV. Dùng công cụ này TRƯỚC web search khi được hỏi thời tiết. "
+        "Trả lời ngắn bằng tiếng Việt, ghi nguồn Open-Meteo.",
+        {
+            "place": {"type": "string", "description": "Tên tỉnh/thành/địa danh, vd. 'Hải Phòng', 'Đà Lạt', 'Tokyo'."},
+            "days": {"type": "integer", "description": "Số ngày dự báo, 1–7. Mặc định 3."},
+        },
+        ["place"],
+    ), zalo_weather, TOOLSET_PUBLIC),
+
+    ("zalo_exchange_rate", "💱", _schema(
+        "zalo_exchange_rate",
+        "Tỷ giá và quy đổi tiền tệ mới nhất (có VND), mã ISO 3 chữ: USD, VND, EUR, JPY, CNY, KRW, GBP, THB… "
+        "Dùng TRƯỚC web search khi được hỏi tỷ giá hay quy đổi tiền. Là tỷ giá tham chiếu, không phải giá mua/bán "
+        "của ngân hàng hay chợ đen — nói rõ điều này. Không có giá vàng.",
+        {
+            "base": {"type": "string", "description": "Đồng tiền gốc, vd. USD."},
+            "target": {"type": "string", "description": "Đồng tiền đích, vd. VND."},
+            "amount": {"type": "number", "description": "Số tiền cần đổi. Mặc định 1."},
+        },
+        ["base", "target"],
+    ), zalo_exchange_rate, TOOLSET_PUBLIC),
+
+    ("zalo_dictionary", "📖", _schema(
+        "zalo_dictionary",
+        "Tra từ điển: tiếng Anh (mặc định) có phiên âm, nghĩa theo từ loại, ví dụ, đồng nghĩa/trái nghĩa, link "
+        "audio phát âm; thứ tiếng khác (lang=vi, fr, ja, zh…) tra qua Wiktionary. Dùng khi học sinh hỏi nghĩa, "
+        "cách đọc, cách dùng một từ. Giải thích lại bằng tiếng Việt.",
+        {
+            "word": {"type": "string", "description": "Từ hoặc cụm từ ngắn, vd. 'resilient'."},
+            "lang": {"type": "string", "description": "Mã ngôn ngữ của từ: en (mặc định), vi, fr, ja, zh, ko…"},
+        },
+        ["word"],
+    ), zalo_dictionary, TOOLSET_PUBLIC),
+
+    ("zalo_species", "🌿", _schema(
+        "zalo_species",
+        "Tra một loài sinh vật (cây, con vật, nấm…): tên khoa học, tên thường gọi, ảnh, số quan sát, phân loại "
+        "giới → ngành → lớp → bộ → họ → chi, link Wikipedia. Nguồn iNaturalist + GBIF. QUAN TRỌNG: nguồn này "
+        "gần như không hiểu tên tiếng Việt — tự đổi sang tên khoa học (vd. hoa sen → Nelumbo nucifera, cá chép → "
+        "Cyprinus carpio) hoặc tên tiếng Anh rồi mới gọi; xem `other_matches` để chắc đúng loài.",
+        {
+            "name": {"type": "string", "description": "Tên khoa học hoặc tên tiếng Anh, vd. 'Nelumbo nucifera'."},
+        },
+        ["name"],
+    ), zalo_species, TOOLSET_PUBLIC),
 
     ("zalo_video_info", "🎬", _schema(
         "zalo_video_info",

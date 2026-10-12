@@ -61,9 +61,11 @@ GAME_SHAPES = {
 SLIDE_OUTLINE = ('ĐẦU RA: một object JSON: {{"title": "…", "pages": [{{"role": "cover|toc|section|content|ending", '
                  '"message": "thông điệp chính của trang", "content": "chữ sẽ xuất hiện trên trang"}}], '
                  '"images": [{{"id": "a1", "ai": "mô tả ảnh minh hoạ bằng tiếng Anh, không chữ trong ảnh"}}, '
-                 '{{"id": "w1", "web": "english search keywords"}}]}}. '
+                 '{{"id": "w1", "web": "english search keywords"}}, {{"id": "i1", "icon": "atom"}}]}}. '
                  "Từ 4 đến {max_pages} trang, trang đầu `cover`, trang cuối `ending`. `images` tuỳ chọn: tối đa "
-                 "{max_ai} ảnh vẽ AI (`ai`) và {max_web} ảnh tìm trên web (`web`, ảnh giấy phép mở); `id` là chữ thường/số "
+                 "{max_ai} ảnh vẽ AI (`ai`), {max_web} ảnh tìm trên web (`web`, ảnh giấy phép mở) và {max_icon} icon "
+                 "(`icon`: 1–3 từ tiếng Anh, vd. atom, book, lightbulb — icon phẳng một màu, nền trong suốt, hợp làm "
+                 "biểu tượng cho từng ý, thẻ, mục lục); `id` là chữ thường/số "
                  "≤ 16 ký tự. Chỉ XIN ảnh bằng mô tả hay từ khoá — không đưa đường dẫn, địa chỉ web hay tên tệp.")
 SLIDE_PAGE = """ĐẦU RA: đúng một thẻ <svg>…</svg> cho trang {index}/{total} (vai trò `{role}`), không gì khác.
 - Thẻ gốc: xmlns="http://www.w3.org/2000/svg", viewBox="0 0 1280 720", width="1280", height="720", data-pptx-page-role="{role}".
@@ -178,14 +180,14 @@ def parse_json_object(text: str) -> Dict[str, Any]:
 IMAGE_ID = re.compile(r"^[a-z0-9]{1,16}$")
 
 
-def outline_images(raw: Any, *, max_ai: int, max_web: int) -> List[Dict[str, str]]:
-    """Ảnh mô hình XIN trong dàn ý: ``[{id, ai|web}]`` → danh sách đã kiểm (mã duy nhất, có trần, chỉ chữ)."""
+def outline_images(raw: Any, *, max_ai: int, max_web: int, max_icon: int = 0) -> List[Dict[str, str]]:
+    """Ảnh mô hình XIN trong dàn ý: ``[{id, ai|web|icon}]`` → danh sách đã kiểm (mã duy nhất, có trần, chỉ chữ)."""
     from .validate import SourceError
     if raw in (None, []):
         return []
     if not isinstance(raw, list):
         raise SourceError("`images` phải là một danh sách")
-    out, seen, ai, web = [], set(), 0, 0
+    out, seen, ai, web, icon = [], set(), 0, 0, 0
     for item in raw:
         if not isinstance(item, dict) or not IMAGE_ID.match(str(item.get("id") or "")) or item["id"] in seen:
             raise SourceError("mỗi ảnh cần `id` riêng, chữ thường/số ≤ 16 ký tự")
@@ -196,17 +198,22 @@ def outline_images(raw: Any, *, max_ai: int, max_web: int) -> List[Dict[str, str
         elif isinstance(item.get("web"), str) and item["web"].strip():
             web += 1
             out.append({"id": item["id"], "web": " ".join(item["web"].split())[:120]})
+        elif isinstance(item.get("icon"), str) and item["icon"].strip():
+            icon += 1
+            out.append({"id": item["id"], "icon": " ".join(item["icon"].split())[:60]})
         else:
-            raise SourceError(f"ảnh {item['id']} cần `ai` (mô tả) hoặc `web` (từ khoá)")
-    if ai > max_ai or web > max_web:
-        raise SourceError(f"tối đa {max_ai} ảnh AI và {max_web} ảnh web")
+            raise SourceError(f"ảnh {item['id']} cần `ai` (mô tả), `web` (từ khoá) hoặc `icon` (từ khoá)")
+    if ai > max_ai or web > max_web or icon > max_icon:
+        raise SourceError(f"tối đa {max_ai} ảnh AI, {max_web} ảnh web và {max_icon} icon")
     return out
 
 
 async def write_outline(llm: Any, *, guides: Sequence[Tuple[str, str]], brief: str, options: Dict[str, str],
-                        usage: Usage, max_pages: int, max_ai: int = 4, max_web: int = 6) -> Dict[str, Any]:
+                        usage: Usage, max_pages: int, max_ai: int = 4, max_web: int = 6,
+                        max_icon: int = 0) -> Dict[str, Any]:
     from .validate import SourceError
-    system = system_prompt(SLIDE_OUTLINE.format(max_pages=max_pages, max_ai=max_ai, max_web=max_web), guides)
+    system = system_prompt(SLIDE_OUTLINE.format(max_pages=max_pages, max_ai=max_ai, max_web=max_web,
+                                                max_icon=max_icon), guides)
     data = parse_json_object(await _call(llm, system, _brief_block(brief, options), usage, max_tokens=6_000,
                                          purpose="zalo-studio:slide-outline"))
     pages = data.get("pages")
@@ -221,7 +228,7 @@ async def write_outline(llm: Any, *, guides: Sequence[Tuple[str, str]], brief: s
         clean.append({"role": role, "message": str(page.get("message") or "")[:300],
                       "content": str(page.get("content") or "")[:2_000]})
     return {"title": str(data.get("title") or "Bài trình chiếu")[:120], "pages": clean,
-            "images": outline_images(data.get("images"), max_ai=max_ai, max_web=max_web)}
+            "images": outline_images(data.get("images"), max_ai=max_ai, max_web=max_web, max_icon=max_icon)}
 
 
 async def write_page(llm: Any, *, guides: Sequence[Tuple[str, str]], brief: str, options: Dict[str, str],

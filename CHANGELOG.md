@@ -2,6 +2,31 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.17.0] — 2026-10-12
+
+### Thêm
+
+**4 công cụ mới cho bot**, dùng API miễn phí, không cần khoá:
+- **Thời tiết** (`zalo_weather`): thời tiết hiện tại và dự báo 7 ngày theo giờ Việt Nam, nguồn Open-Meteo.
+- **Tỷ giá** (`zalo_exchange_rate`): quy đổi tiền tệ, có VND. Dùng Frankfurter cho các đồng tiền lớn (nguồn ECB) và Currency-api cho VND cùng hơn 150 đồng khác, có máy chủ dự phòng.
+- **Từ điển** (`zalo_dictionary`): từ tiếng Anh có phiên âm, nghĩa, ví dụ, đồng nghĩa (Free Dictionary); các thứ tiếng khác, kể cả tiếng Việt, tra qua Wiktionary.
+- **Tra loài sinh vật** (`zalo_species`): tên thường gọi, ảnh, phân loại từ giới đến chi (iNaturalist và GBIF).
+
+Thời tiết và tỷ giá đi theo công tắc "Tra cứu web"; từ điển và tra loài đi theo công tắc "Tra cứu học thuật".
+
+**Tra cứu học thuật** có thêm hai nguồn:
+- **arXiv**: bản thảo vật lý, toán, tin học. arXiv giới hạn lượt gọi rất gắt; khi bị chặn, bot tự tra bản chỉ mục arXiv trên OpenAlex.
+- **Europe PMC**: y sinh, kèm cờ toàn văn mở.
+
+**2Anh Studio có icon cho slide**, lấy từ Iconify (hơn 200 bộ icon mã nguồn mở):
+- SVG được lọc chặt (bỏ mọi mã chạy, liên kết, nhúng ngoài), rồi chuyển sang PNG nền trong suốt bằng PyMuPDF.
+- Icon không tính vào lượt ảnh của người dùng.
+- Bộ icon giấy phép CC BY được ghi nguồn nhỏ ở chân trang.
+
+**Dashboard › Khoá API & Model** có tab mới **API miễn phí**:
+- Liệt kê 16 dịch vụ không cần khoá mà bot đang dùng (PubMed, Europe PMC, arXiv, OpenAlex, Crossref, DOAJ, Open-Meteo, Frankfurter, Currency-api, Free Dictionary, Wiktionary, iNaturalist, GBIF, Openverse, Iconify…).
+- Mỗi dịch vụ có việc bot dùng nó để làm, công tắc phân quyền tương ứng, lưu ý giấy phép (ví dụ Open-Meteo chỉ miễn phí cho mục đích phi thương mại), và **nút mở trang web của dịch vụ**.
+
 ## [2.16.1] — 2026-10-12
 
 ### Sửa

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Chạy 12 test suite Python của repo (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_model_command.py, test_zalo_permissions.py, test_zalo_studio.py, test_zalo_insight.py, test_zalo_memory.py, test_zalo_keypool.py, test_dashboard_hermes_admin.py, scripts/test_lay_token_facebook.py,
+// Chạy 12 test suite Python của repo (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_open_data.py, test_zalo_model_command.py, test_zalo_permissions.py, test_zalo_studio.py, test_zalo_insight.py, test_zalo_memory.py, test_zalo_keypool.py, test_dashboard_hermes_admin.py, scripts/test_lay_token_facebook.py,
 // tts/test_vieneu_provider.py) mà `node --test` không bao giờ đụng tới.
 //
 // Dò Python theo thứ tự: biến PYTHON (nếu đặt, dùng đúng nó, không âm thầm rơi xuống lựa chọn
@@ -54,7 +54,7 @@ const python = findPython();
 if (!python) {
   console.warn(
     '[test:py] CẢNH BÁO: không tìm thấy Python khả dụng — BỎ QUA 11 test suite Python\n'
-    + '[test:py]   (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_model_command.py, test_zalo_permissions.py, test_zalo_studio.py, test_zalo_insight.py, test_zalo_memory.py, test_zalo_keypool.py, test_dashboard_hermes_admin.py, scripts/test_lay_token_facebook.py, tts/test_vieneu_provider.py).\n'
+    + '[test:py]   (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_open_data.py, test_zalo_model_command.py, test_zalo_permissions.py, test_zalo_studio.py, test_zalo_insight.py, test_zalo_memory.py, test_zalo_keypool.py, test_dashboard_hermes_admin.py, scripts/test_lay_token_facebook.py, tts/test_vieneu_provider.py).\n'
     + '[test:py]   Lớp phân quyền/bảo mật của hermes-plugin/zalo/adapter.py CHƯA được kiểm chứng trong lần chạy này.\n'
     + '[test:py]   Cài Python (hoặc đặt biến PYTHON) rồi chạy lại `npm run test:py` để test thật sự chạy.',
   );
@@ -70,6 +70,7 @@ const suites = [
   { label: 'test_zalo_media.py', module: 'test_zalo_media', cwd: REPO_ROOT, requires: 'import gateway, lxml, httpx' },
   { label: 'test_zalo_pdf.py', module: 'test_zalo_pdf', cwd: REPO_ROOT, requires: 'import gateway, pymupdf, pdf2docx' },
   { label: 'test_zalo_academic.py', module: 'test_zalo_academic', cwd: REPO_ROOT, requires: 'import gateway' },
+  { label: 'test_zalo_open_data.py', module: 'test_zalo_open_data', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_model_command.py', module: 'test_zalo_model_command', cwd: REPO_ROOT, requires: 'import gateway, yaml' },
   { label: 'test_zalo_permissions.py', module: 'test_zalo_permissions', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_studio.py', module: 'test_zalo_studio', cwd: REPO_ROOT, requires: 'import gateway' },

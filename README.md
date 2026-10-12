@@ -110,7 +110,7 @@ Trước đây *có* một bộ não Node dự phòng gọi thẳng LLM. Đã b�
 | Kết bạn (chỉ khi bật `ZALO_FRIEND_TOOLS`) | `zalo_send_friend_request` `zalo_accept_friend_request` `zalo_friend_group` |
 | Hồ sơ bot | `zalo_set_bio` `zalo_set_active_status` |
 | Kho tài liệu | `zalo_kb_list` `zalo_kb_read` |
-| Tra cứu Internet | `zalo_web_search` `zalo_web_read` (cả Google Docs/Sheets/Slides công khai) `zalo_academic_search` (PubMed, OpenAlex, CORE, Crossref; tìm PDF mở theo DOI, toàn văn PubMed Central, tra tạp chí DOAJ, trích dẫn) |
+| Tra cứu Internet | `zalo_web_search` `zalo_web_read` (cả Google Docs/Sheets/Slides công khai) `zalo_academic_search` (PubMed, Europe PMC, arXiv, OpenAlex, CORE, Crossref; tìm PDF mở theo DOI, toàn văn PubMed Central, tra tạp chí DOAJ, trích dẫn) `zalo_weather` (thời tiết, Open-Meteo) `zalo_exchange_rate` (tỷ giá có VND, Frankfurter + Currency-api) `zalo_dictionary` (từ điển, Free Dictionary + Wiktionary) `zalo_species` (tra loài, iNaturalist + GBIF) — đều không cần khoá; danh sách kèm trang web ở dashboard › Khoá API & Model › **API miễn phí** |
 | Video | `zalo_video_info` (tiêu đề, mô tả, lời thoại) `zalo_video_download` (Full HD, chỉ khi được yêu cầu tải) |
 | Sổ người quen | `zalo_remember_person` `zalo_recall_person` `zalo_list_people` `zalo_forget_person` |
 | Hẹn giờ cho nhóm | `zalo_group_cron` `zalo_group_history` |

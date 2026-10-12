@@ -244,6 +244,9 @@ class Builder:
 
     # -- ảnh: chỉ plugin vẽ/tải, ở tiến trình cha (studio/images.py) --------------
     async def picture(self, request: Dict[str, str], *, size: str, orientation: str) -> images.Picture:
+        if "icon" in request:
+            # Icon Iconify miễn phí, không tốn lượt vẽ/tìm ảnh: không tính vào images_used, không chặn hoàn lượt.
+            return await images.search_icon(request["icon"])
         if "ai" in request:
             picture = await images.generate(request["ai"], size)
         else:
@@ -263,10 +266,17 @@ class Builder:
                 self.notes.append(f"không lấy được ảnh {request['id']} ({exc})")
                 continue
             path = images.save(picture, folder, request["id"], root=self.job_dir)
-            credit = ("ảnh vẽ bằng AI" if "ai" in request
-                      else f"ảnh web — ghi nhỏ dưới ảnh: 'Ảnh: {picture.author} · {picture.license}'")
+            if "icon" in request:
+                credit = "icon PNG vuông nền trong suốt, một màu — đặt nhỏ (khoảng 64–160 px) cạnh tiêu đề/ý"
+                # Bộ icon CC BY bắt buộc ghi nguồn; MIT/Apache/ISC/OFL thì không cần ghi trên trang.
+                if "CC BY" in picture.license.upper():
+                    credit += f"; ghi rất nhỏ ở chân trang: 'Icon: {picture.provider.split('/', 1)[-1]} · {picture.license}'"
+            elif "ai" in request:
+                credit = "ảnh vẽ bằng AI"
+            else:
+                credit = f"ảnh web — ghi nhỏ dưới ảnh: 'Ảnh: {picture.author} · {picture.license}'"
             got[request["id"]] = {"path": f"../images/{path.name}",
-                                  "note": f"{(request.get('ai') or request.get('web'))[:80]}; {credit}"}
+                                  "note": f"{(request.get('ai') or request.get('web') or request.get('icon'))[:80]}; {credit}"}
         return got
 
     async def with_repair(self, attempt: Callable[[str], Awaitable[List[Path]]], first: str) -> List[Path]:
@@ -485,7 +495,8 @@ class Builder:
         try:
             outline = await author.write_outline(self.llm, guides=self.guides, brief=self.job.brief,
                                                  options=self.job.options, usage=self.usage, max_pages=MAX_SLIDE_PAGES,
-                                                 max_ai=SLIDE_MAX_AI_IMAGES, max_web=SLIDE_MAX_WEB_IMAGES)
+                                                 max_ai=SLIDE_MAX_AI_IMAGES, max_web=SLIDE_MAX_WEB_IMAGES,
+                                                 max_icon=images.MAX_ICONS)
         except validate.SourceError as exc:
             raise StudioError(f"chưa lập được dàn ý ({exc})", refund=False) from None
         init = await self.run([py, str(scripts / "project_manager.py"), "init", "deck", "--quick-generate",

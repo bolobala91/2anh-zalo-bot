@@ -1910,7 +1910,7 @@ class ZaloToolSchemaTest(unittest.TestCase):
         self.assertEqual(set(assignments), {
             zalo_tools.TOOLSET_PUBLIC, zalo_tools.TOOLSET_OWNER, zalo_tools.TOOLSET_CRON,
         })
-        self.assertEqual(assignments.count(zalo_tools.TOOLSET_PUBLIC), 22)
+        self.assertEqual(assignments.count(zalo_tools.TOOLSET_PUBLIC), 26)
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_OWNER), 40)
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_CRON), 1)
 
