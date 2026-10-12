@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createThreadNames, fallbackName } from './thread-names.js';
 import { SidecarDown } from './sidecar-client.js';
 
@@ -50,10 +53,24 @@ test('bot trả tên nhóm chính là ID (Zalo không cho tên) → coi như ch�
   const names = createThreadNames({ loadGroups: async () => [{ id: '200', name: 'Tổ Hoá' }, { id: '987654', name: '987654' }, { id: '555', name: ' 555 ' }] });
   const map = await names.load();
   assert.deepEqual([...map], [['200', 'Tổ Hoá']]);
-  assert.equal(map.get('987654') || fallbackName('987654', 1), 'Nhóm …7654');
+  assert.equal(map.get('987654') || fallbackName('987654', 1), 'Nhóm chưa rõ tên');
 });
 
-test('tên dự phòng', () => {
-  assert.equal(fallbackName('987654', 1), 'Nhóm …7654');
-  assert.equal(fallbackName('123456789', 0), 'Người dùng …6789');
+test('tên dự phòng không lộ ID', () => {
+  assert.equal(fallbackName('987654', 1), 'Nhóm chưa rõ tên');
+  assert.equal(fallbackName('123456789', 0), 'Người chưa rõ tên');
+});
+
+test('tên đã biết được lưu xuống đĩa: khởi động lại vẫn có tên ngay, nhóm đã rời vẫn giữ tên', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'thread-names-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, 'group-names.json');
+  await createThreadNames({ loadGroups: async () => [{ id: '200', name: 'Tổ Hoá' }, { id: '300', name: 'CLB' }], file }).load();
+  const restarted = createThreadNames({ loadGroups: async () => { throw Object.assign(new Error('tắt'), { name: 'SidecarDown' }); }, file });
+  const map = await restarted.load();
+  assert.equal(map.get('200'), 'Tổ Hoá', 'kết nối Zalo chưa lên vẫn có tên đã lưu');
+  const later = createThreadNames({ loadGroups: async () => [{ id: '200', name: 'Tổ Hoá học' }], file });
+  const merged = await later.load();
+  assert.equal(merged.get('200'), 'Tổ Hoá học', 'tên mới thắng');
+  assert.equal(merged.get('300'), 'CLB', 'nhóm bot đã rời vẫn giữ tên cũ');
 });

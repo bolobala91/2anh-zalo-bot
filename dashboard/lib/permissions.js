@@ -461,7 +461,7 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       }
       if (Object.keys(entry).length) data.groups[groupId] = cleanName ? { name: cleanName, ...entry } : entry;
       // `keep`: nhóm thuộc danh sách cũ "chỉ chủ nhân" — mục chỉ có tên vẫn là "đã phân quyền riêng" với bot.
-      else if (keep) data.groups[groupId] = { name: cleanName || `Nhóm …${String(groupId).slice(-4)}` };
+      else if (keep) data.groups[groupId] = { name: cleanName || 'Nhóm chưa rõ tên' };
       else delete data.groups[groupId];
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), changed };

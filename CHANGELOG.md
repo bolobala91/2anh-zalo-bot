@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.20.3] — 2026-10-12
+
+### Sửa
+
+- **Giao diện chỉ hiện tên, không hiện UID.** Các danh sách Liên hệ, quyền nhắn riêng, hạn mức xưởng, Sức khoẻ, chủ nhân, hồ sơ tài khoản và các hộp xác nhận không còn hiện UID hay đuôi số. UID chỉ còn ở ô nhập khi bắt buộc phải gõ (thêm chủ nhân, thêm người theo UID).
+- **Tên nhóm được lưu xuống đĩa** (`group-names.json` của dashboard). Sau khi cập nhật hoặc khởi động lại, dashboard vẫn hiện đúng tên nhóm ngay, kể cả lúc kết nối Zalo chưa lên; nhóm bot đã rời vẫn giữ tên cũ. Trước đây những lúc đó ô "Dùng ở" của sổ người quen, Phiên chat, Phân quyền… hiện "Nhóm …9611".
+- Chưa biết tên thì hiện "Nhóm chưa rõ tên" / "Người chưa rõ tên" thay cho đuôi số.
+
 ## [2.20.2] — 2026-10-12
 
 ### Sửa

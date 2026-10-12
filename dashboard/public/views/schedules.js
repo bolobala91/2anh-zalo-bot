@@ -59,7 +59,7 @@ function JobDialog({ job, convs, admin, onDone, onClose }) {
   const [name, setName] = useState(job?.name || '');
   const [prompt, setPrompt] = useState(job?.prompt || '');
   const [targets, setTargets] = useState(job?.targets || []);
-  const nameOfTarget = (id) => { const c = convs.find((x) => x.threadId === id); return c ? c.name : (job?.targetNames?.[job.targets.indexOf(id)] || `…${id.slice(-4)}`); };
+  const nameOfTarget = (id) => { const c = convs.find((x) => x.threadId === id); return c ? c.name : (job?.targetNames?.[job.targets.indexOf(id)] || 'Chưa rõ tên'); };
   const [spec, setSpec] = useState(() => ({ ...blankSpec(), ...(job?.spec || {}) }));
   const [expr, setExpr] = useState(job?.expr || '');
   const [busy, setBusy] = useState(false);
@@ -153,7 +153,7 @@ function Flow({ jobs, convs, onOpen, onChanged, onError }) {
   const [pq, setPq] = useState('');
   const nameOf = (job, id) => {
     const c = convs.find((x) => x.threadId === id);
-    return c ? c.name : job.targetNames?.[job.targets.indexOf(id)] || `…${id.slice(-4)}`;
+    return c ? c.name : job.targetNames?.[job.targets.indexOf(id)] || 'Chưa rõ tên';
   };
   async function put(job, targets) {
     await api(`/api/schedules/cron/${job.id}`, { method: 'PUT', body: { targets } });

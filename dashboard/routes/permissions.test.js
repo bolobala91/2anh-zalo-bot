@@ -125,7 +125,7 @@ test('GET /api/groups: tên trùng ID thành tên dự phòng; bot tắt → 503
   ] }) });
   const res = await call('/api/groups', { cookie: admin });
   assert.deepEqual(res.json.groups, [
-    { id: G, name: 'Nhóm …4899', members: 3 }, { id: '200', name: 'Tổ Hoá', members: 12 },
+    { id: G, name: 'Nhóm chưa rõ tên', members: 3 }, { id: '200', name: 'Tổ Hoá', members: 12 },
   ]);
   const down = await ready(t, { sidecar: fakeSidecar({ groups: async () => { throw Object.assign(new Error('x'), { name: 'SidecarDown' }); } }) });
   const off = await down.call('/api/groups', { cookie: down.admin });

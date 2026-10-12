@@ -47,7 +47,7 @@ export function mergeGroups(groups, perms) {
     const custom = Boolean(own) && !sameSettings(own, base);
     // Danh sách cũ ở Cấu hình chỉ còn tác dụng với nhóm chưa có mục riêng trong tệp và không thuộc thư mục nào.
     const ownerOnly = !own && !folder && (perms.legacyOwnerOnly || []).includes(id);
-    out.push({ id, name: name || `Nhóm …${id.slice(-4)}`, members, custom, ownerOnly,
+    out.push({ id, name: name || 'Nhóm chưa rõ tên', members, custom, ownerOnly,
       folder: folder ? { id: folder.id, name: folder.name } : null, ...pick(own || base) });
   };
   for (const g of groups || []) add(g.id, g.name, g.members);

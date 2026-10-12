@@ -263,7 +263,7 @@ function StudioUsage({ usage }) {
       <div class="table-wrap"><table class="table table-cards">
         <thead><tr><th>Người nhờ</th><th>Số việc</th><th>Đã gửi</th><th>Không làm được</th><th>Trả lượt</th><th>Token</th><th>Ảnh</th></tr></thead>
         <tbody>${people.map((p) => html`<tr key=${p.uid}>
-          <td data-label="Người nhờ">${p.name || 'Chưa rõ tên'} <small class="mono muted">…${p.uid.slice(-7)}</small></td>
+          <td data-label="Người nhờ">${p.name || 'Chưa rõ tên'}</td>
           <td data-label="Số việc">${fmtNum(p.jobs)}</td><td data-label="Đã gửi">${fmtNum(p.ok)}</td>
           <td data-label="Không làm được">${fmtNum(p.failed)}</td><td data-label="Trả lượt">${fmtNum(p.refunded)}</td>
           <td data-label="Token">${fmtNum(p.tokens)}</td><td data-label="Ảnh">${fmtNum(p.images)}</td>

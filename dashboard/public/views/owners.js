@@ -80,9 +80,9 @@ export function Owners({ me }) {
     if (await save([...current.filter((u) => ZALO_UID.test(u)), v], `Đã lưu ${v}. Bấm "Khởi động lại trợ lý" ở dải vàng để áp dụng.`)) setUid('');
   }
   const remove = (o) => {
-    if (!confirm(`Bỏ quyền chủ nhân của ${o.name || o.uid}? Người này sẽ chỉ còn quyền như thành viên sau khi khởi động lại kết nối Zalo.`)) return;
+    if (!confirm(`Bỏ quyền chủ nhân của ${o.name || 'người này'}? Người này sẽ chỉ còn quyền như thành viên sau khi khởi động lại kết nối Zalo.`)) return;
     if (o.dashboardUsers?.includes(me?.username) && !confirm(OWN_UID_MSG)) return;
-    save(current.filter((u) => u !== o.uid && ZALO_UID.test(u)), `Đã bỏ ${o.name || o.uid}. Bấm "Khởi động lại trợ lý" ở dải vàng để áp dụng.`);
+    save(current.filter((u) => u !== o.uid && ZALO_UID.test(u)), `Đã bỏ ${o.name || 'người này'}. Bấm "Khởi động lại trợ lý" ở dải vàng để áp dụng.`);
   };
   async function restart() {
     if (!confirm('Khởi động lại trợ lý và kết nối Zalo? Bot sẽ ngừng trả lời khoảng một phút.')) return;
@@ -127,11 +127,11 @@ export function Owners({ me }) {
       ${data.owners.length ? html`<ul class="owner-list">
         ${data.owners.map((o) => html`<li key=${o.uid}>
           <span class="avatar" aria-hidden="true"><${Icon} name="crown" size=${16} /></span>
-          <span class="owner-main"><strong>${ownerLabel(o)}</strong><span class="mono muted">${o.uid}</span>
+          <span class="owner-main"><strong>${ownerLabel(o)}</strong>
             ${o.valid ? null : html`<span class="badge badge-warn"><${Icon} name="warn" size=${14} /> Không phải UID Zalo — bỏ dòng này</span>`}</span>
           <button class="btn btn-secondary btn-sm" disabled=${busy !== '' || (o.valid && validCount <= 1)}
             title=${o.valid && validCount <= 1 ? 'Bot phải còn ít nhất một chủ nhân' : undefined}
-            aria-label=${`Bỏ quyền chủ nhân của ${o.name || o.uid}`}
+            aria-label=${`Bỏ quyền chủ nhân của ${o.name || 'người này'}`}
             onClick=${() => remove(o)}>Bỏ</button>
         </li>`)}
       </ul>` : html`<${Notice} kind="warn">Bot chưa có chủ nhân nào — thêm UID của bạn bên dưới.<//>`}

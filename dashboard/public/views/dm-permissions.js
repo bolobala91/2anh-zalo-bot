@@ -141,7 +141,6 @@ export function filterPeople(people, { q = '', customOnly = false, names = new M
 }
 
 /** "…" + 7 số cuối của UID cho hàng gập (UID đầy đủ ở title). */
-export const shortUid = (uid) => (uid.length > 7 ? `…${uid.slice(-7)}` : uid);
 
 function Person({ p, known, base, baseStudio, features, studioFeatures, policy, open, onToggle, onChange, onRemove }) {
   const id = `dm-p-${p.uid}`;
@@ -151,7 +150,7 @@ function Person({ p, known, base, baseStudio, features, studioFeatures, policy, 
   const name = p.name || known || 'Chưa rõ tên';
   return html`<li class=${`dm-person${open ? ' open' : ''}`}>
     <div class="dm-row">
-      <span class="dm-who"><strong class="dm-name">${name}</strong><small class="mono muted" title=${p.uid}>${shortUid(p.uid)}</small></span>
+      <span class="dm-who"><strong class="dm-name">${name}</strong></span>
       <span class=${`badge badge-${s.kind}`} title=${s.detail || undefined}>${s.text}</span>
       <button type="button" class="btn btn-secondary btn-sm dm-edit-btn" aria-expanded=${open ? 'true' : 'false'}
         aria-controls=${open ? `${id}-panel` : undefined} aria-label=${`${open ? 'Xong' : 'Chỉnh'}: ${name}`} onClick=${onToggle}>${open ? 'Xong' : 'Chỉnh'}</button>
@@ -302,7 +301,7 @@ export function DmEditor({ dm, features, studioFeatures = [], studioPolicy, admi
           <label for="dm-pick" class="sr-only">Chọn người đã nhắn riêng cho bot hoặc người dùng dashboard</label>
           <select id="dm-pick" value=${pick} onChange=${(e) => setPick(e.currentTarget.value)}>
             <option value="">Chọn nhanh người đã biết…</option>
-            ${options.map((o) => html`<option key=${o.uid} value=${o.uid}>${o.name || 'Chưa rõ tên'} · ${o.uid}</option>`)}
+            ${options.map((o) => html`<option key=${o.uid} value=${o.uid}>${o.name || 'Chưa rõ tên'}</option>`)}
           </select>
           <button type="button" class="btn btn-secondary btn-sm" disabled=${!pick}
             onClick=${() => add(pick, options.find((o) => o.uid === pick)?.name)}>Thêm</button>

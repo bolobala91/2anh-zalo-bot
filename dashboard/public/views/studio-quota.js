@@ -4,7 +4,7 @@
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Notice, SaveBar } from '../ui.js';
-import { PAGE, knownNames, shortUid, suggestions } from './dm-permissions.js';
+import { PAGE, knownNames, suggestions } from './dm-permissions.js';
 import { MAX_QUOTA, parseQuota, vnToday } from './studio-box.js';
 
 const UID = /^[1-9]\d{14,21}$/;
@@ -170,8 +170,7 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
         const left = remainText(usedToday(usage, p.uid, today), p.quota);
         return html`<li class="dm-person" key=${p.uid}>
           <div class="dm-row quota-row">
-            <span class="dm-who"><strong class="dm-name">${shown}</strong>
-              <small class="mono muted" title=${p.uid}>${shortUid(p.uid)}</small></span>
+            <span class="dm-who"><strong class="dm-name">${shown}</strong></span>
             <span class="quota-edit">
               <label for=${`sq-p-${p.uid}`} class="sr-only">Số lượt mỗi ngày của ${shown}</label>
               <input id=${`sq-p-${p.uid}`} class="quota-input" inputmode="numeric" maxlength="2" value=${p.quota}

@@ -77,7 +77,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     restartSidecar,
     stateFile: paths.watchdogFile, publicUrl: config.publicUrl, botName: () => botName,
   });
-  const threadNames = createThreadNames({ loadGroups: () => sidecar.groups() });
+  const threadNames = createThreadNames({ loadGroups: () => sidecar.groups(), file: join(paths.dataDir, 'group-names.json') });
   const owners = createOwnersStore({ envFile: paths.hermesEnvFile, sidecarEnvFile: paths.sidecarEnvFile, pendingFile: paths.pendingRestartFile, inheritedValue: inheritedOwners });
   const people = createPeopleStore({ file: readEnvKey(paths.hermesEnvFile, 'ZALO_PEOPLE_FILE') || paths.peopleFile });
   return {

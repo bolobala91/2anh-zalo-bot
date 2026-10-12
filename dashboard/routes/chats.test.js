@@ -34,7 +34,7 @@ test('danh sách hội thoại: mới nhất trước, tên nhóm từ bot, tên
   const res = await call('/api/chats', { cookie });
   assert.equal(res.status, 200);
   assert.deepEqual(res.json.conversations.map((c) => [c.threadId, c.threadType, c.name]), [
-    ['200', 1, 'Tổ Hoá'], ['987654', 1, 'Nhóm …7654'], ['100', 0, 'Lan'],
+    ['200', 1, 'Tổ Hoá'], ['987654', 1, 'Nhóm chưa rõ tên'], ['100', 0, 'Lan'],
   ]);
   const dm = res.json.conversations[2];
   assert.equal(dm.lastText, 'Chào Lan');
@@ -205,5 +205,5 @@ test('kết nối Zalo tắt vẫn xem được hội thoại, nhóm dùng tên 
   const { call, cookie } = await ready(t, { sidecar: fakeSidecar({ groups: async () => { throw new SidecarDown(); } }) });
   const res = await call('/api/chats', { cookie });
   assert.equal(res.status, 200);
-  assert.equal(res.json.conversations[0].name, 'Nhóm …200');
+  assert.equal(res.json.conversations[0].name, 'Nhóm chưa rõ tên');
 });

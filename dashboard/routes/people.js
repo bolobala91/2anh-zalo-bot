@@ -37,8 +37,8 @@ export function peopleRoutes({ people, activity, threadNames }) {
       const label = (uid, place) => {
         if (place === '*') return 'Mọi nơi';
         const id = place.slice(2);
-        if (place.startsWith('g:')) return groups.get(id) || `Nhóm …${id.slice(-4)}`;
-        return id === uid ? 'Nhắn riêng' : `Nhắn riêng của ${byUid.get(id) || `…${id.slice(-4)}`}`;
+        if (place.startsWith('g:')) return groups.get(id) || 'Nhóm chưa rõ tên';
+        return id === uid ? 'Nhắn riêng' : `Nhắn riêng của ${byUid.get(id) || 'người chưa rõ tên'}`;
       };
       // Lựa chọn "Dùng ở" hiện tại của từng mục (giao diện chọn sẵn): "*" → Mọi nơi, có nơi → Như cũ, không → Chỉ nhắn riêng.
       const useOf = (places) => (places.includes('*') ? 'all' : places.length ? 'keep' : 'dm');

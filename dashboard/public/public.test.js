@@ -132,7 +132,7 @@ test('phân quyền: gộp nhóm của bot với tệp, so thay đổi, nhãn tr
   };
   const list = mergeGroups([{ id: '200', name: 'Đoàn trường', members: 40 }, { id: '300', name: 'Tổ Hoá mới', members: 12 }], perms);
   assert.deepEqual(list.map((g) => [g.id, g.name, g.members, g.custom]), [
-    ['200', 'Đoàn trường', 40, false], ['300', 'Tổ Hoá mới', 12, true], ['400', 'Nhóm …400', null, true],
+    ['200', 'Đoàn trường', 40, false], ['300', 'Tổ Hoá mới', 12, true], ['400', 'Nhóm chưa rõ tên', null, true],
   ]);
   assert.deepEqual(list[0].features, on);
   assert.equal(list[1].replyOnlyTagged, false);
@@ -351,13 +351,11 @@ const DM_F = [
 const ALL_ON = Object.fromEntries(DM_F.map((f) => [f.key, true]));
 
 test('nhắn riêng: tóm tắt từng người trên hàng gập', async () => {
-  const { personSummary, shortUid } = await import('./views/dm-permissions.js');
+  const { personSummary } = await import('./views/dm-permissions.js');
   assert.deepEqual(personSummary({ custom: false, features: { ...ALL_ON, web: false } }, DM_F), { kind: 'idle', text: 'Theo cài đặt chung', detail: '' });
   assert.deepEqual(personSummary({ custom: true, features: ALL_ON }, DM_F), { kind: 'ok', text: 'Riêng · bật tất cả', detail: '' });
   assert.deepEqual(personSummary({ custom: true, features: { ...ALL_ON, voice: false, video: false } }, DM_F),
     { kind: 'warn', text: 'Riêng · 2 tính năng tắt', detail: 'Đang tắt: Tin nhắn thoại, Video' });
-  assert.equal(shortUid('1234567890123456'), '…0123456');
-  assert.equal(shortUid('12345'), '12345');
 });
 
 test('nhắn riêng: lọc người theo tên không dấu, UID, "có chỉnh riêng"; đếm thay đổi', async () => {
@@ -937,7 +935,7 @@ test('Cấu hình: chữ nhập thành giá trị đúng kiểu; chỉ gửi m�
 test('Kho tri thức tự học: nhãn nhóm/người (có chủ nhân), tên mục dịch sang tiếng Việt', async () => {
   const { scopeLabel, entryLabel } = await import('./views/learned-memory.js');
   assert.equal(scopeLabel({ kind: 'group', id: '2054797107487294899', name: 'Tổ Hoá', owner: false }), 'Tổ Hoá');
-  assert.equal(scopeLabel({ kind: 'dm', id: '1234567890123456789', name: '', owner: true }), 'Người …6789 (chủ nhân)');
+  assert.equal(scopeLabel({ kind: 'dm', id: '1234567890123456789', name: '', owner: true }), 'Người chưa rõ tên (chủ nhân)');
   assert.equal(entryLabel('viking://user/zalo-g-1/memories/preferences'), 'Sở thích, cách xưng hô');
   assert.equal(entryLabel('viking://user/zalo-g-1/memories/events/mem_ab12.md'), 'mem_ab12');
   const { intervalText } = await import('./views/learned-memory.js');

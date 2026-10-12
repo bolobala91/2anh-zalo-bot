@@ -66,7 +66,7 @@ function PersonDialog({ person, onDone, onStale, onClose }) {
     try { await api(`/api/people/${person.uid}`, { method: 'PUT', body: personPayload(d, person.updatedAt ?? null) }); onDone('Đã lưu hồ sơ.'); } catch (err) { if (err.status === 409) onStale(err.message); else { setMsg(err.message); setBusy(false); } }
   }
   async function remove() {
-    if (!confirm(`Xoá hồ sơ của ${person.name || person.uid}? Bot sẽ không còn nhớ người này.`)) return;
+    if (!confirm(`Xoá hồ sơ của ${person.name || 'người này'}? Bot sẽ không còn nhớ người này.`)) return;
     setBusy(true); setMsg('');
     try { await api(`/api/people/${person.uid}`, { method: 'DELETE', body: { updatedAt: person.updatedAt ?? null } }); onDone('Đã xoá hồ sơ.'); } catch (err) { if (err.status === 409) onStale(err.message); else { setMsg(err.message); setBusy(false); } }
   }

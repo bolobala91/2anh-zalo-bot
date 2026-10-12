@@ -10,9 +10,9 @@ const CATEGORY = {
   cases: 'Tình huống đã gặp', patterns: 'Cách làm quen thuộc', tools: 'Cách dùng công cụ', skills: 'Kỹ năng',
 };
 
-/** Nhãn một phạm vi: tên nhóm/người, hoặc "Nhóm …1234"/"Người …1234"; chủ nhân có thêm "(chủ nhân)". */
+/** Nhãn một phạm vi: tên nhóm/người, hoặc "Nhóm/Người chưa rõ tên"; chủ nhân có thêm "(chủ nhân)". */
 export function scopeLabel(s) {
-  const base = s.name || `${s.kind === 'group' ? 'Nhóm' : 'Người'} …${String(s.id).slice(-4)}`;
+  const base = s.name || `${s.kind === 'group' ? 'Nhóm' : 'Người'} chưa rõ tên`;
   return s.owner ? `${base} (chủ nhân)` : base;
 }
 

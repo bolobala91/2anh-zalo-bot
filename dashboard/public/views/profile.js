@@ -39,7 +39,7 @@ export function Profile({ me, status }) {
         <span class="avatar avatar-lg" aria-hidden="true">${me.username.slice(0, 1).toUpperCase()}</span>
         <div class="account-info">
           <h2>${me.username}</h2>
-          <p class="muted">${roleLabel(me.role)}${me.zaloUid ? html` · UID Zalo <span class="mono">${me.zaloUid}</span>` : ' · Chưa có UID Zalo'}</p>
+          <p class="muted">${roleLabel(me.role)}${me.zaloUid ? ' · Đã liên kết Zalo' : ' · Chưa liên kết Zalo'}</p>
         </div>
         <div class="row">
           <button class="btn btn-secondary" disabled=${!!busy} onClick=${() => logout(false)}><${Icon} name="logout" size=${16} /> Đăng xuất</button>

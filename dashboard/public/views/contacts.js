@@ -20,11 +20,11 @@ function Requests({ onChanged }) {
   const load = () => api('/api/contacts/requests').then((r) => setList(r.requests)).catch((e) => setMsg({ error: e.message }));
   useEffect(() => { load(); }, []);
   async function answer(r, accept) {
-    if (!accept && !confirm(`Từ chối lời mời kết bạn của ${r.name || r.uid}?`)) return;
+    if (!accept && !confirm(`Từ chối lời mời kết bạn của ${r.name || 'người này'}?`)) return;
     setBusy(r.uid); setMsg({});
     try {
       await api(`/api/contacts/requests/${r.uid}`, { method: 'POST', body: { accept } });
-      setMsg({ ok: accept ? `Đã đồng ý kết bạn với ${r.name || r.uid}.` : `Đã từ chối lời mời của ${r.name || r.uid}.` });
+      setMsg({ ok: accept ? `Đã đồng ý kết bạn với ${r.name || 'người này'}.` : `Đã từ chối lời mời của ${r.name || 'người này'}.` });
       await load(); onChanged();
     } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
   }
@@ -67,7 +67,7 @@ export function Contacts() {
             onClick=${() => setKind(k.value)}>${k.label}${data && k.value !== 'all' ? ` (${data.counts[k.value]})` : ''}</button>`)}
         </div>
         <label class="sr-only" for="contact-q">Tìm liên hệ</label>
-        <input id="contact-q" type="search" placeholder="Tìm theo tên, UID, ghi chú…" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
+        <input id="contact-q" type="search" placeholder="Tìm theo tên, ghi chú…" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
         <button type="button" class="btn btn-secondary btn-sm" onClick=${() => load(true)}><${Icon} name="refresh" size=${16} /> Tải lại</button>
       </div>
       <${Live} error=${error} />
@@ -78,7 +78,6 @@ export function Contacts() {
         ${(data?.contacts || []).map((c) => html`<li key=${c.uid} class="row-item">
           <span class="avatar avatar-sm" aria-hidden="true">${(c.name || '?').slice(0, 1).toUpperCase()}</span>
           <span class="row-main"><strong>${c.name || 'Chưa rõ tên'}</strong>
-            <small class="muted mono">${c.uid}</small>
             ${c.profile?.note ? html`<small class="muted">${c.profile.note}</small>` : null}</span>
           <span class="row-tags">${contactBadges(c).map((b) => html`<span key=${b} class="badge">${b}</span>`)}</span>
           ${c.lastDmAt ? html`<small class="muted">${fmtTime(c.lastDmAt)}</small>` : null}
