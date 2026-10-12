@@ -72,14 +72,3 @@ test('xoá luôn được dù tệp đã vượt trần; sửa vẫn bị chặn
   assert.equal(e.view().user.used, 10);
   assert.throws(() => e.replace('user', 0, '😀'.repeat(10), '😀'.repeat(11)), (err) => err.statusCode === 400);
 });
-
-test('mỗi lần lưu bộ nhớ trên dashboard ghi dấu zalo/memory-edited.stamp để plugin dựng lại agent ngay', (t) => {
-  const { h, mem } = home(t, { memory: 'a\n§\nb' });
-  const stamp = join(h, 'zalo', 'memory-edited.stamp');
-  assert.equal(existsSync(stamp), false);
-  mem.replace('memory', 1, 'b', 'B mới');
-  const first = readFileSync(stamp, 'utf8');
-  assert.match(first, /^\d{13}$/);
-  assert.throws(() => mem.remove('memory', 9, 'x'), (e) => e.statusCode === 409);
-  assert.equal(readFileSync(stamp, 'utf8'), first, 'lưu hỏng thì không đổi dấu');
-});

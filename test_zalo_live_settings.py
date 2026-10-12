@@ -106,67 +106,6 @@ class AdapterLiveTest(unittest.TestCase):
             self.assertEqual(adapter._flood._threshold, 20)
             self.assertFalse(adapter._auto_react)
 
-    def test_file_stamp_fires_once_per_change(self):
-        home = Path(tempfile.mkdtemp(prefix="zalo-stamp-"))
-        self.addCleanup(shutil.rmtree, home, True)
-        clock = Clock()
-        path = home / "memory-edited.stamp"
-        stamp = ls.FileStamp(lambda: path, interval_s=3, clock=clock)
-        self.assertFalse(stamp.changed(force=True), "lần đầu chỉ ghi mốc (chưa có tệp)")
-        path.write_text("1", encoding="utf-8")
-        os.utime(path, (100, 100))
-        self.assertFalse(stamp.changed(), "chưa tới nhịp 3 giây")
-        clock.t = 4
-        self.assertTrue(stamp.changed())
-        clock.t = 8
-        self.assertFalse(stamp.changed(), "không đổi thì không báo lại")
-        os.utime(path, (200, 200))
-        clock.t = 12
-        self.assertTrue(stamp.changed())
-
-    def test_adapter_rebuilds_cached_agents_when_dashboard_edits_memory(self):
-        import sys
-        import threading
-        from collections import OrderedDict
-        sys.path.insert(0, os.path.join(ROOT, "hermes-plugin"))
-        from gateway.config import PlatformConfig
-        from zalo.adapter import ZaloAdapter
-
-        class Runner:
-            def __init__(self):
-                self._agent_cache = OrderedDict([("zalo:g1", object()), ("zalo:dm2", object()), ("telegram:x", object())])
-                self._agent_cache_lock = threading.Lock()
-                self.evicted = []
-
-            def _evict_cached_agent(self, key):
-                with self._agent_cache_lock:  # như gateway thật: tự lấy khoá — adapter không được giữ khoá khi gọi
-                    self._agent_cache.pop(key, None)
-                self.evicted.append(key)
-
-        home = Path(tempfile.mkdtemp(prefix="zalo-stamp-"))
-        self.addCleanup(shutil.rmtree, home, True)
-        stamp_path = home / "zalo" / "memory-edited.stamp"
-        with patch.dict(os.environ, {"ZALO_BRIDGE_TOKEN": "t" * 32}):
-            adapter = ZaloAdapter(PlatformConfig(enabled=True, extra={}))
-        clock = Clock()
-        adapter._memory_stamp = ls.FileStamp(lambda: stamp_path, interval_s=3, clock=clock)
-        adapter._memory_stamp.changed(force=True)
-        adapter.gateway_runner = runner = Runner()
-        clock.t = 5
-        adapter._reload_settings_if_changed()
-        self.assertEqual(runner.evicted, [], "chưa sửa bộ nhớ thì không đụng agent")
-        stamp_path.parent.mkdir(parents=True)
-        stamp_path.write_text("1791783501300", encoding="utf-8")
-        clock.t = 10
-        adapter._reload_settings_if_changed()
-        self.assertEqual(runner.evicted, ["zalo:g1", "zalo:dm2", "telegram:x"])
-        self.assertEqual(len(runner._agent_cache), 0)
-        adapter.gateway_runner = None
-        os.utime(stamp_path, (300, 300))
-        clock.t = 20
-        adapter._reload_settings_if_changed()  # gateway không có bộ đệm agent → chỉ ghi cảnh báo, không lỗi
-        self.assertEqual(adapter._evict_cached_agents(), -1)
-
 
 if __name__ == "__main__":
     unittest.main()

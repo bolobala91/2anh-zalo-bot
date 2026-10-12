@@ -601,10 +601,6 @@ class ZaloAdapter(BasePlatformAdapter):
             self._settings_watcher.poll(force=True)
         except Exception:
             logger.debug("[zalo] chưa ghi được mốc cấu hình", exc_info=True)
-        # Bộ nhớ trợ lý (MEMORY.md/USER.md) sửa trên dashboard: Hermes chụp bộ nhớ vào lời nhắc lúc tạo agent và gateway
-        # giữ agent tới 1 giờ — dashboard ghi dấu này mỗi lần lưu để adapter bỏ agent cũ (xem _evict_cached_agents).
-        self._memory_stamp = _live_settings.FileStamp(lambda: get_hermes_home() / "zalo" / "memory-edited.stamp")
-        self._memory_stamp.changed(force=True)
         self._settings_extra = dict(extra)
 
         self._ws = None
@@ -874,37 +870,6 @@ class ZaloAdapter(BasePlatformAdapter):
                 self._apply_settings(self._settings_extra)
         except Exception:
             logger.warning("[zalo] không áp dụng lại được cấu hình — giữ cài đặt cũ", exc_info=True)
-        stamp = getattr(self, "_memory_stamp", None)
-        try:
-            if stamp is not None and stamp.changed():
-                count = self._evict_cached_agents()
-                if count >= 0:
-                    logger.info("[zalo] bộ nhớ trợ lý vừa sửa trên dashboard — dựng lại %d cuộc trò chuyện để dùng ngay", count)
-                else:
-                    logger.warning("[zalo] bộ nhớ trợ lý vừa sửa nhưng gateway không cho dựng lại agent — sẽ áp dụng khi "
-                                   "cuộc trò chuyện nghỉ 1 giờ hoặc khởi động lại trợ lý")
-        except Exception:
-            logger.warning("[zalo] không dựng lại được agent sau khi sửa bộ nhớ", exc_info=True)
-
-    def _evict_cached_agents(self) -> int:
-        """Bỏ mọi agent gateway đang giữ sẵn (như /new, /model làm) để lượt sau tạo agent mới, đọc lại MEMORY.md/USER.md.
-
-        Agent đang chạy dở một lượt không bị phá (gateway tự bỏ qua). Trả số phiên đã bỏ, -1 nếu gateway không có
-        bộ nhớ đệm agent (bản Hermes khác)."""
-        runner = getattr(self, "gateway_runner", None)
-        evict = getattr(runner, "_evict_cached_agent", None)
-        cache = getattr(runner, "_agent_cache", None)
-        if not callable(evict) or cache is None:
-            return -1
-        lock = getattr(runner, "_agent_cache_lock", None)
-        if lock is not None:
-            with lock:
-                keys = list(cache.keys())
-        else:
-            keys = list(cache.keys())
-        for key in keys:  # gọi ngoài khoá: _evict_cached_agent tự lấy khoá
-            evict(key)
-        return len(keys)
 
     async def _on_message(self, frame: Dict[str, Any]) -> None:
         self._reload_settings_if_changed()

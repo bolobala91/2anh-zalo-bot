@@ -6,7 +6,7 @@
  * không làm hỏng; vẫn từ chối (409) khi tệp đã đổi kể từ lúc đọc hoặc mục không còn như người dùng thấy.
  * Trợ lý chụp bộ nhớ vào lời nhắc hệ thống khi mở phiên — sửa ở đây có hiệu lực từ phiên mới.
  */
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import YAML from 'yaml';
 import { writeFileAtomic } from './json-store.js';
@@ -30,16 +30,8 @@ export function parseEntries(raw) {
   return text.split(DELIMITER).map((e) => e.trim()).filter(Boolean);
 }
 
-/**
- * Dấu "chủ bot vừa sửa bộ nhớ trên dashboard": plugin Zalo thấy tệp này đổi thì bỏ các agent gateway đang giữ sẵn, để
- * tin nhắn kế tiếp dựng lại lời nhắc hệ thống với MEMORY.md/USER.md mới (Hermes chụp bộ nhớ một lần lúc tạo agent và
- * giữ agent tới 1 giờ). Chỉ dashboard ghi tệp này — bot tự ghi nhớ giữa chừng không làm vỡ bộ đệm lời nhắc.
- */
-export const MEMORY_STAMP = join('zalo', 'memory-edited.stamp');
-
 export function createHermesMemory({ hermesHome, configFile }) {
   const dir = join(hermesHome, 'memories');
-  const stampFile = join(hermesHome, MEMORY_STAMP);
   function limit(target) {
     const t = TARGETS[target];
     try {
@@ -66,8 +58,6 @@ export function createHermesMemory({ hermesHome, configFile }) {
       try { chmodSync(`${file}.bak`, 0o600); } catch { /* Windows */ }
     }
     writeFileAtomic(file, content, { tmpName: `${TARGETS[target].file}.dashboard-tmp` });
-    try { mkdirSync(join(hermesHome, 'zalo'), { recursive: true }); writeFileSync(stampFile, String(Date.now())); }
-    catch (e) { console.warn('[dashboard] không ghi được dấu sửa bộ nhớ:', e.message); }
   }
   function checkEntry(entries, index, old) {
     if (!Number.isInteger(index) || index < 0 || index >= entries.length || entries[index] !== String(old ?? '')) {

@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.19.1] — 2026-10-12
+
+### Sửa
+
+- **Sửa bộ nhớ trợ lý (MEMORY/USER) giờ tới được cả cuộc trò chuyện đang diễn ra.** Bản 2.19.0 dựng lại agent khi bộ nhớ đổi, nhưng Hermes vẫn dùng lại nguyên văn lời nhắc hệ thống đã lưu của phiên, nên mục mới chỉ tới phiên mới. Nay mỗi lượt Zalo, plugin so bộ nhớ hiện tại với bộ nhớ đóng băng trong lời nhắc của phiên; nếu lệch thì đính phần chênh (mục mới thêm, mục đã xoá) vào tin của lượt đó qua hook `pre_llm_call`. Lời nhắc hệ thống giữ nguyên, nên bộ đệm prompt không vỡ. Mục mới bị bộ quét chèn lệnh của Hermes chặn thì không đính.
+- Gỡ cơ chế dấu sửa bộ nhớ và dựng lại agent của 2.19.0, vì nó không có tác dụng.
+
 ## [2.19.0] — 2026-10-12
 
 ### Sửa

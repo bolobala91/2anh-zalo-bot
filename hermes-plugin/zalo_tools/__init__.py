@@ -41,6 +41,13 @@ def register(ctx) -> None:
     # Rào chắn tại điểm thực thi: Hermes cấp lại công cụ đã ghim của phiên nhóm
     # cho mọi lượt, kể cả lượt của người ngoài. Xem guard_member_tool_call().
     ctx.register_hook("pre_tool_call", guard_member_tool_call)
+    # Bộ nhớ trợ lý sửa giữa chừng (dashboard / cuộc trò chuyện khác): phiên đang chạy dùng lại lời nhắc cũ đã lưu,
+    # nên đính phần chênh vào tin của lượt — xem memory_drift.py.
+    try:
+        from . import memory_drift
+        ctx.register_hook("pre_llm_call", memory_drift.pre_llm_call)
+    except Exception:  # cố hết sức — thiếu thì phiên đang chạy chỉ thấy bộ nhớ mới khi bắt đầu phiên mới
+        logger.warning("[zalo] không bật được báo bộ nhớ vừa cập nhật", exc_info=True)
     # Kho khoá dự phòng (trang Khoá API & Model): đồng bộ khoá đang dùng vào os.environ trước mỗi lời gọi công cụ,
     # và đổi sang khoá kế khi kết quả công cụ báo lỗi khoá / hết lượt — không cần khởi động lại.
     try:
