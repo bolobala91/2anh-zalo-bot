@@ -25,6 +25,9 @@ export const EXTRACT_NOW_PER_DAY = 3;
 const EXTRACT_NOW_SESSIONS = 5;
 const SCOPE = /^zalo-(g|u)-(\d{1,32})$/;
 const GENERATED = new Set(['.abstract.md', '.overview.md']);
+/** Tóm tắt thư mục OpenViking chưa sinh xong trả về chỗ giữ chỗ "# viking://… [Directory abstract is not ready]" —
+ * vô nghĩa với người dùng và lộ ID nhóm/người, nên coi như chưa có tóm tắt. */
+export const cleanAbstract = (s) => { const t = String(s || ''); return /^#\s*viking:\/\//.test(t.trim()) || /abstract is not ready/i.test(t) ? '' : t; };
 const MAX_TEXT = 8000;
 export const WINDOWS_NOTE = 'Kho tri thức tự học chỉ bật trên máy chủ Linux/VPS.';
 export const OFF_NOTE = 'Trí nhớ dài hạn chưa bật — người cài đặt đặt memory.provider: zalo_memory trong config.yaml của Hermes (xem README, mục Trí nhớ dài hạn).';
@@ -141,7 +144,7 @@ export function createLearnedMemory({ settings, names = () => '', owners = () =>
         return (Array.isArray(result) ? result : [])
           .filter((e) => memoryUri(e?.uri, scope) && !GENERATED.has(String(e.uri).split('/').pop()))
           .slice(0, 500)
-          .map((e) => ({ uri: e.uri, dir: Boolean(e.isDir), modTime: e.modTime || null, abstract: String(e.abstract || '').slice(0, 400) }));
+          .map((e) => ({ uri: e.uri, dir: Boolean(e.isDir), modTime: e.modTime || null, abstract: cleanAbstract(e.abstract).slice(0, 400) }));
       },
       async read(scope, uri) {
         need(scope, role);
@@ -156,7 +159,7 @@ export function createLearnedMemory({ settings, names = () => '', owners = () =>
         const result = await orEmpty(call(scope, '/api/v1/search/find', { method: 'POST', body: { query: q, limit: 20, context_type: 'memory', target_uri: scopeRoot(scope) } }));
         return (Array.isArray(result?.memories) ? result.memories : [])
           .filter((h) => memoryUri(h?.uri, scope, { file: true }))
-          .map((h) => ({ uri: h.uri, score: Number(h.score) || 0, abstract: String(h.abstract || '').slice(0, 600) }))
+          .map((h) => ({ uri: h.uri, score: Number(h.score) || 0, abstract: cleanAbstract(h.abstract).slice(0, 600) }))
           .sort((a, b) => b.score - a.score);
       },
       async edit(scope, uri, text) {

@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.20.4] — 2026-10-12
+
+### Sửa
+
+Đã rà toàn bộ trang và tab của dashboard bằng trình duyệt thật: không còn UID hay ID nhóm nào hiện ra giao diện.
+
+- **Người dùng:** cột "UID Zalo" thành "Zalo", hiện "Đã liên kết" hoặc "Chưa liên kết".
+- **Nhật ký › Chi tiết kỹ thuật:** bỏ `actorUid` và `threadId` (người và nơi đã hiện bằng tên).
+- **Trí nhớ tự học:** bỏ dòng tóm tắt giả "viking://user/zalo-g-…/memories/… [Directory abstract is not ready]" của các thư mục chưa sinh tóm tắt.
+
 ## [2.20.3] — 2026-10-12
 
 ### Sửa

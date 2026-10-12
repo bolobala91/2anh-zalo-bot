@@ -182,3 +182,10 @@ test('rút ngay: chỉ Quản trị; commit đúng phiên còn tin chờ của k
   clock += 24 * 3600_000;
   assert.equal((await lm.as('admin').extractNow(G)).committed, 1, 'sang ngày mới được rút lại');
 });
+
+test('tóm tắt thư mục chưa sinh (lộ ID nhóm) không hiện ra giao diện', async () => {
+  const { cleanAbstract } = await import('./learned-memory.js');
+  assert.equal(cleanAbstract('# viking://user/zalo-g-7903718250465581275/memories/entities [Directory abstract is not ready]'), '');
+  assert.equal(cleanAbstract('Sở thích: cầu lông'), 'Sở thích: cầu lông');
+  assert.equal(cleanAbstract(undefined), '');
+});

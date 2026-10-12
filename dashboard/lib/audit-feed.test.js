@@ -53,7 +53,7 @@ test('nhãn: Chủ bot chữ dễ hiểu không có mã; Quản trị có mã; v
   assert.equal(describe(odd, { role: 'owner', ...ctx }).where, '—');
   const admin = describe(odd, { role: 'admin', ...ctx });
   assert.equal(admin.what, 'createNote');
-  assert.deepEqual(admin.code, { action: 'createNote', category: 'send', actorUid: '555', actorRole: 'system', threadId: '', error: null });
+  assert.deepEqual(admin.code, { action: 'createNote', category: 'send', actorRole: 'system', error: null }, 'chi tiết kỹ thuật không lộ UID/ID nhóm');
   const act = describe({ src: 'dashboard', at: 4, actor: 'anh', action: 'user_create', detail: 'khach (owner)', ok: true }, { role: 'admin', ...ctx });
   assert.deepEqual(act.code, { action: 'user_create', detail: 'khach (owner)' });
   assert.equal('code' in describe({ src: 'dashboard', at: 4, actor: 'anh', action: 'user_create', detail: 'khach (owner)', ok: true }, { role: 'owner', ...ctx }), false);

@@ -134,7 +134,7 @@ export function describe(x, { role, names = new Map(), groups = new Map(), isUse
     what: ACTION_LABELS[x.action] || (admin ? x.action : 'Thao tác khác của bot'),
     where, ok: x.ok,
     result: x.ok ? 'Thành công' : `Không thành công${REASONS[x.error] ? ` — ${REASONS[x.error]}` : ''}`,
-    ...(admin ? { code: { action: scrub(x.action), category: x.category, actorUid: x.actorUid, actorRole: x.actorRole, threadId: x.threadId, error: scrub(x.error) } } : {}),
+    ...(admin ? { code: { action: scrub(x.action), category: x.category, actorRole: x.actorRole, error: scrub(x.error) } } : {}),
   };
 }
 
