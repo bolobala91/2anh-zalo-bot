@@ -1026,7 +1026,8 @@ test('Tổng quan: biểu đồ chấm và gộp cột; menu có màu và số l
   const { navValue, tintOf } = await import('./views/shell.js');
   assert.equal(tintOf('/chats'), 'blue');
   assert.equal(tintOf('/la'), 'gray');
-  assert.equal(navValue('/chats', { today: { received: 3, sent: 2 } }), '5');
+  assert.equal(navValue('/chats', { today: { received: 3, sent: 2 } }), '5', 'máy chủ cũ: số tin');
+  assert.equal(navValue('/chats', { today: { received: 3, sent: 2, threads: 2 } }), '2', 'số hội thoại có tin hôm nay');
   assert.equal(navValue('/health', { host: { cpuPct: 12.6 } }), '13%');
   assert.equal(navValue('/maintenance', null, { newer: true }), 'Mới');
   assert.equal(navValue('/', {}), '');
@@ -1072,4 +1073,12 @@ test('thư mục có màu: chỉ mục, lọc, thư mục của hội thoại nh
   assert.equal(inFolderFilter(NO_FOLDER, null), true);
   assert.equal(inFolderFilter('a', folders[0]), true);
   assert.equal(inFolderFilter('a', folders[1]), false);
+});
+
+test('phiên chat: dòng thống kê hội thoại — số tin, hôm nay, phiên AI', async () => {
+  const { convStats } = await import('./views/chats.js');
+  assert.equal(convStats({ name: 'x' }), '', 'mở từ kết quả tìm: chưa có số');
+  assert.equal(convStats({ total: 1234, today: 56, ai: { sessions: 3, startedAt: Date.UTC(2026, 9, 9, 3), turns: 120 } }),
+    '1.234 tin · 56 hôm nay · 3 phiên AI · phiên hiện tại từ 09/10 (120 lượt)');
+  assert.equal(convStats({ total: 5, today: 0, ai: null }), '5 tin · chưa có phiên AI');
 });

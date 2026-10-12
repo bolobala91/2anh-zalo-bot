@@ -131,3 +131,17 @@ test('cầu nối tool_call của Hermes: hiện tên công cụ thật bên tro
   assert.equal(toolOf('tool_call', 'hỏng').name, 'tool_call');
   assert.equal(toolOf('zalo_web_search', '{}').name, 'zalo_web_search');
 });
+test('số phiên AI mỗi hội thoại: đếm phiên có tin, phiên hiện tại = mới hoạt động nhất, lượt = tin người dùng', (t) => {
+  const path = stateDb(t);
+  const db = new DatabaseSync(path);
+  const s = db.prepare('INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  s.run('z0', 'zalo', 'group', '200', '', 'hermes', 500, 600, 610, 3, 0, 1, 0, 0, 0, '');
+  s.run('z9', 'zalo', 'group', '200', '', 'hermes', 2000, null, null, 0, 0, 0, 0, 0, 0, '');
+  s.run('d1', 'zalo', 'dm', '777', '', 'hermes', 1500, 1600, null, 2, 0, 1, 0, 0, 0, '');
+  db.prepare('INSERT INTO messages (session_id, role, content, timestamp) VALUES (?,?,?,?)').run('d1', 'user', 'chào', 1500);
+  db.close();
+  const stats = createAgentTrace({ dbPath: path }).chatSessionStats();
+  assert.deepEqual(stats.get('200'), { sessions: 2, startedAt: 1_000_000, turns: 1 }, 'phiên trống (z9) không tính; z1 mới nhất');
+  assert.deepEqual(stats.get('777'), { sessions: 1, startedAt: 1_500_000, turns: 1 });
+  assert.equal(stats.has(''), false);
+});

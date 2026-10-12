@@ -129,7 +129,8 @@ test('tin mã đăng nhập không tính vào danh sách hội thoại và số 
   const r = s.reader();
   assert.deepEqual(r.listConversations().map((c) => [c.threadId, c.total, c.lastAtMs]), [['100', 1, 1000]]);
   const { hourly, ...rest } = r.todayStats(0);
-  assert.deepEqual(rest, { received: 1, sent: 0, topGroups: [] });
+  assert.deepEqual(rest, { received: 1, sent: 0, threads: 1, topGroups: [] });
+  assert.deepEqual([...r.todayCounts(0)], [['0:100', 1]], 'tin mã đăng nhập không tính vào số tin hôm nay của hội thoại');
   assert.equal(hourly.length, 24);
   assert.equal(hourly.reduce((a, b) => a + b, 0), 1, 'tin mã đăng nhập không tính vào biểu đồ theo giờ');
 });

@@ -55,6 +55,11 @@ export const SQL = {
   todayHourly: `
     SELECT CAST((timestamp_ms - ?) / 3600000 AS INTEGER) AS h, COALESCE(SUM(is_self = 0), 0) AS received, COALESCE(SUM(is_self = 1), 0) AS sent
     FROM messages WHERE +account_id = ? AND timestamp_ms >= ? AND text NOT LIKE ? GROUP BY h`,
+  // Số tin hôm nay của từng hội thoại (nhóm và nhắn riêng).
+  todayByThread: `
+    SELECT thread_type, thread_id, COUNT(*) AS n FROM messages
+    WHERE +account_id = ? AND timestamp_ms >= ? AND text NOT LIKE ?
+    GROUP BY thread_type, thread_id`,
   todayTop: `
     SELECT thread_id, COUNT(*) AS n FROM messages
     WHERE +account_id = ? AND thread_type = 1 AND timestamp_ms >= ? AND text NOT LIKE ?
@@ -339,7 +344,17 @@ export function createStoreReader({
       const h = Number(row.h);
       if (h >= 0 && h < 24) hourly[h] = Number(row.received) + Number(row.sent);
     }
-    return { received: Number(totals.received), sent: Number(totals.sent), hourly, topGroups: top.map((g) => ({ threadId: g.thread_id, count: Number(g.n) })) };
+    const threads = d.prepare(SQL.todayByThread).all(acc, sinceMs, SECRET).length;
+    return { received: Number(totals.received), sent: Number(totals.sent), threads, hourly, topGroups: top.map((g) => ({ threadId: g.thread_id, count: Number(g.n) })) };
+  }
+
+  /** `Map("<loại>:<id>" → số tin hôm nay)` cho danh sách Phiên chat. */
+  function todayCounts(sinceMs) {
+    const acc = account();
+    const out = new Map();
+    if (!acc) return out;
+    for (const r of open().prepare(SQL.todayByThread).all(acc, sinceMs, SECRET)) out.set(`${Number(r.thread_type)}:${r.thread_id}`, Number(r.n));
+    return out;
   }
 
   function senderNames(uids) {
@@ -405,6 +420,7 @@ export function createStoreReader({
     listMedia,
     hasThread,
     todayStats,
+    todayCounts,
     senderNames,
     /**
      * Người từng nhắn trong nhóm (kể cả tin đã thu hồi), mới nhắn trước, kèm tên gần nhất — bù cho danh sách thành viên

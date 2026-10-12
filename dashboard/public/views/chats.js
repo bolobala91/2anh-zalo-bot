@@ -82,9 +82,25 @@ export function preview(c) {
 
 function ConvItem({ c, active, folder, onSelect }) {
   return html`<li><button type="button" class=${`conv${active ? ' active' : ''}`} aria-current=${active ? 'true' : undefined} onClick=${() => onSelect(c)}>
-    <span class="conv-top"><span class="conv-name">${c.name}</span><time class="conv-time">${fmtTime(c.lastAtMs)}</time></span>
+    <span class="conv-top"><span class="conv-name">${c.name}</span>${c.today ? html`<span class="conv-count" title=${`${c.today} tin hôm nay`}>${c.today}</span>` : null}<time class="conv-time">${fmtTime(c.lastAtMs)}</time></span>
     <span class="conv-sub">${folder ? html`<${FolderChip} folder=${folder} />` : c.threadType === 1 ? html`<span class="tag">Nhóm</span>` : null}<span class="conv-preview">${preview(c)}</span></span>
   </button></li>`;
+}
+
+/** "1.234 tin · 56 hôm nay · 3 phiên AI · phiên hiện tại từ 09/10 (120 lượt)" — rỗng khi chưa có số (vd. mở từ kết quả tìm). */
+export function convStats(c) {
+  if (!Number.isFinite(c?.total)) return '';
+  const n = new Intl.NumberFormat('vi-VN');
+  const parts = [`${n.format(c.total)} tin`];
+  if (c.today) parts.push(`${n.format(c.today)} hôm nay`);
+  if (c.ai?.sessions) {
+    parts.push(`${n.format(c.ai.sessions)} phiên AI`);
+    if (c.ai.startedAt) {
+      const d = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' }).format(new Date(c.ai.startedAt));
+      parts.push(`phiên hiện tại từ ${d} (${n.format(c.ai.turns || 0)} lượt)`);
+    }
+  } else parts.push('chưa có phiên AI');
+  return parts.join(' · ');
 }
 
 function ResultItem({ r, q, onSelect }) {
@@ -571,6 +587,7 @@ function Thread({ conv, onBack }) {
       <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
       <h2>${conv.name}</h2>
       ${group ? html`<span class="tag">Nhóm</span>` : null}
+      ${convStats(conv) ? html`<p class="thread-stats muted small">${convStats(conv)}</p>` : null}
       <button type="button" ref=${toggles.search} class=${`btn btn-ghost btn-sm head-tool${side === 'search' ? ' active' : ''}`} aria-pressed=${side === 'search' ? 'true' : 'false'}
         onClick=${() => toggle('search')} aria-label="Tìm trong hội thoại" title="Tìm trong hội thoại"><${Icon} name="search" /></button>
       <button type="button" ref=${toggles.media} class=${`btn btn-ghost btn-sm head-tool${side === 'media' ? ' active' : ''}`} aria-pressed=${side === 'media' ? 'true' : 'false'}

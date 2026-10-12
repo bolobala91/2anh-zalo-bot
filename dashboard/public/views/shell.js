@@ -107,9 +107,12 @@ function NavIcon({ path, icon }) {
   return html`<span class=${`nav-ico tint-${tintOf(path)}`} aria-hidden="true"><${Icon} name=${icon} size=${16} /></span>`;
 }
 
-/** Số liệu nhỏ bên phải mục menu (như "CPU 59%"): tin hôm nay, CPU máy chủ, có bản mới. */
+/** Số liệu nhỏ bên phải mục menu (như "CPU 59%"): số hội thoại có tin hôm nay, CPU máy chủ, có bản mới. */
 export function navValue(path, status, notice) {
-  if (path === '/chats' && status?.today) return String((status.today.received || 0) + (status.today.sent || 0));
+  if (path === '/chats' && status?.today) {
+    // Bản cũ của máy chủ chưa có `threads` → vẫn hiện số tin như trước.
+    return Number.isFinite(status.today.threads) ? String(status.today.threads) : String((status.today.received || 0) + (status.today.sent || 0));
+  }
   if (path === '/health' && Number.isFinite(status?.host?.cpuPct)) return `${Math.round(status.host.cpuPct)}%`;
   if (path === '/zalo' && status) return status.sidecar === 'down' || status.zalo?.status !== 'logged-in' ? 'Tắt' : '';
   if (path === '/maintenance' && notice?.newer) return 'Mới';
@@ -281,7 +284,9 @@ function MobileNav({ me, path, features }) {
 function Sidebar({ me, brand, path, features, status, update }) {
   const link = (it) => {
     const v = navValue(it.path, status, update);
-    return html`<a class=${`nav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`}
+    const tip = it.path === '/chats' && status?.today && Number.isFinite(status.today.threads)
+      ? `${status.today.threads} hội thoại có tin hôm nay · ${(status.today.received || 0) + (status.today.sent || 0)} tin` : undefined;
+    return html`<a class=${`nav-item${path === it.path ? ' active' : ''}`} href=${`#${it.path}`} title=${tip}
       aria-current=${path === it.path ? 'page' : undefined}><${NavIcon} path=${it.path} icon=${it.icon} /><span>${it.text}</span>${v ? html`<span class="nav-val">${v}</span>` : null}</a>`;
   };
   return html`<aside class="sidebar">

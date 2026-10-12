@@ -118,6 +118,35 @@ export function createAgentTrace({ dbPath }) {
     try { db.exec('PRAGMA query_only = ON'); return fn(db); } finally { db.close(); }
   }
   return {
+    /**
+     * Phiên AI của từng nhóm/người Zalo: `Map(chat_id → { sessions, startedAt, turns })` — số phiên trợ lý đã mở với
+     * hội thoại đó, phiên hiện tại (mới hoạt động nhất) bắt đầu lúc nào và đã bao nhiêu lượt (tin người dùng).
+     */
+    chatSessionStats({ source = 'zalo' } = {}) {
+      return withDb((db) => {
+        const rows = db.prepare(`SELECT chat_id, COUNT(*) AS n FROM sessions
+          WHERE source = ? AND COALESCE(chat_id, '') <> '' AND COALESCE(message_count, 0) > 0 GROUP BY chat_id`).all(source);
+        const latest = db.prepare(`SELECT s.chat_id, s.id, s.started_at FROM sessions s
+          WHERE s.source = ? AND COALESCE(s.chat_id, '') <> '' AND COALESCE(s.message_count, 0) > 0
+            AND COALESCE(s.last_activity_at, s.started_at) = (SELECT MAX(COALESCE(t.last_activity_at, t.started_at)) FROM sessions t
+              WHERE t.source = s.source AND t.chat_id = s.chat_id AND COALESCE(t.message_count, 0) > 0)`).all(source);
+        const out = new Map(rows.map((r) => [String(r.chat_id), { sessions: Number(r.n) || 0, startedAt: null, turns: 0, id: null }]));
+        for (const l of latest) {
+          const o = out.get(String(l.chat_id));
+          if (o && !o.id) { o.id = String(l.id); o.startedAt = Math.round(Number(l.started_at) * 1000); }
+        }
+        const ids = [...out.values()].map((o) => o.id).filter(Boolean);
+        for (let i = 0; i < ids.length; i += 200) {
+          const part = ids.slice(i, i + 200);
+          const counted = db.prepare(`SELECT session_id, COUNT(*) AS n FROM messages WHERE role = 'user' AND session_id IN (${part.map(() => '?').join(',')})
+            GROUP BY session_id`).all(...part);
+          const byId = new Map(counted.map((c) => [String(c.session_id), Number(c.n) || 0]));
+          for (const o of out.values()) if (byId.has(o.id)) o.turns = byId.get(o.id);
+        }
+        for (const o of out.values()) delete o.id;
+        return out;
+      });
+    },
     /** Phiên mới hoạt động trước; `chat` = id nhóm/người Zalo (chat_id); `before` (ms) = trang sau: phiên cũ hơn mốc. */
     sessions({ source = 'zalo', chat = '', limit = 50, before } = {}) {
       if (!SOURCES.includes(source)) throw err(400, 'Nguồn không hợp lệ.');

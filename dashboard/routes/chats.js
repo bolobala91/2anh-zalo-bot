@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { requireAuth } from '../lib/http-guards.js';
-import { parseCursor } from '../lib/store-reader.js';
+import { parseCursor, startOfDayVN } from '../lib/store-reader.js';
 import { fallbackName } from '../lib/thread-names.js';
 import { failSidecar, failStore } from '../lib/route-errors.js';
 
@@ -30,7 +30,15 @@ const MEDIA_KINDS = ['photo', 'file', 'link'];
 export const parseType = (v) => (v === 0 || v === '0' ? 0 : v === 1 || v === '1' ? 1 : null);
 const cursorOk = (v) => v === undefined || v === '' || (typeof v === 'string' && parseCursor(v) !== null);
 
-export function chatRoutes({ store, sidecar, threadNames, outboxDir = null, sendLimit = { max: 10, windowMs: 60_000 }, now = Date.now }) {
+export function chatRoutes({ store, sidecar, threadNames, agentTrace = null, outboxDir = null, sendLimit = { max: 10, windowMs: 60_000 }, now = Date.now }) {
+  // Số phiên AI mỗi hội thoại (đọc state.db của trợ lý) — đệm 60 s, lỗi/không có thì bỏ qua.
+  let aiCache = { at: -Infinity, map: new Map() };
+  const aiStats = () => {
+    if (!agentTrace?.chatSessionStats) return new Map();
+    if (now() - aiCache.at < 60_000) return aiCache.map;
+    try { aiCache = { at: now(), map: agentTrace.chatSessionStats() }; } catch { aiCache = { at: now(), map: new Map() }; }
+    return aiCache.map;
+  };
   const r = express.Router();
   const bad = (res, error) => res.status(400).json({ ok: false, error });
   const nameOf = (groups, id, type, peerName = '') => (type === 1 ? groups.get(id) : peerName) || fallbackName(id, type);
@@ -40,7 +48,11 @@ export function chatRoutes({ store, sidecar, threadNames, outboxDir = null, send
       if (!store.available()) return res.json({ ok: true, conversations: [], unavailable: true });
       const list = store.listConversations();
       const groups = await threadNames.load();
-      res.json({ ok: true, conversations: list.map(({ peerName, ...c }) => ({ ...c, name: nameOf(groups, c.threadId, c.threadType, peerName) })) });
+      let today = new Map();
+      try { today = store.todayCounts ? store.todayCounts(startOfDayVN(now())) : today; } catch { /* số hôm nay là phụ */ }
+      const ai = aiStats();
+      res.json({ ok: true, conversations: list.map(({ peerName, ...c }) => ({ ...c, name: nameOf(groups, c.threadId, c.threadType, peerName),
+        today: today.get(`${c.threadType}:${c.threadId}`) || 0, ai: ai.get(String(c.threadId)) || null })) });
     } catch (err) { failStore(res, err, READ_FAIL); }
   });
 

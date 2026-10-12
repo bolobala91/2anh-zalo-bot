@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.24.0] — 2026-10-12
+
+### Thêm
+
+- **Số liệu từng hội thoại ở Phiên chat:** mỗi hội thoại có ô số tin hôm nay. Mở hội thoại thì đầu khung tin hiện tổng số tin, số tin hôm nay, số phiên AI trợ lý đã mở với nhóm/người đó, và phiên hiện tại bắt đầu từ ngày nào, bao nhiêu lượt.
+
+### Đổi
+
+- Số cạnh menu "Phiên chat" giờ là **số hội thoại có tin hôm nay**, khớp với danh sách bên trong. Trước đây là tổng số tin hôm nay, nên trông như lệch. Rê chuột vào để xem "N hội thoại có tin hôm nay · M tin".
+
 ## [2.23.0] — 2026-10-12
 
 ### Thêm
