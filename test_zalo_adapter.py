@@ -1174,6 +1174,22 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("vàng", event.text)
                 self.assertIn("[Người nhắn — Yến: Yến. Lời tự khai", event.text, "tên vẫn dùng được")
 
+    async def test_profile_marked_everywhere_on_dashboard_is_used_in_any_group(self):
+        # Chủ bot chọn "Mọi nơi" ở Trí nhớ › Sổ người quen → nơi dùng "*".
+        tools = SimpleNamespace(__package__="x", set_turn_context=lambda **kw: None)
+        event = await self._people_turn(tools, people_note="Lớp trưởng 10 Trung", scope="*")
+        self.assertIn("Yến · Lớp trưởng 10 Trung", event.text)
+
+    def test_everywhere_mark_survives_the_bot_adding_places(self):
+        from plugins.zalo_tools import people
+
+        uid = "2222222222222222222"
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"ZALO_PEOPLE_FILE": os.path.join(tmp, "p.json")}):
+            people.remember_person(uid, name="Yến", note="Lớp trưởng", scope="*")
+            for n in range(people.MAX_SCOPES + 3):
+                people.remember_person(uid, note="Lớp trưởng", scope=f"g:{n}")
+            self.assertEqual(people.visible_profile(uid, people._load()[uid], "g:khac").get("note"), "Lớp trưởng")
+
     async def test_unscoped_legacy_profile_only_in_dm_with_that_person(self):
         tools = SimpleNamespace(__package__="x", set_turn_context=lambda **kw: None)
         uid = "2222222222222222222"

@@ -21,7 +21,7 @@ Cấu trúc::
       }
 
 ``scopes`` ghi nơi mỗi mục được nói ra; mục chỉ được dùng lại ở đúng nơi đó và trong
-tin nhắn riêng của chính người đó (xem ``visible_profile``).
+tin nhắn riêng của chính người đó (xem ``visible_profile``). ``"*"`` = chủ bot chọn "Mọi nơi" trên dashboard.
     }
 
 Ranh giới quan trọng: hồ sơ ở đây là **lời tự khai**, không phải danh tính đã
@@ -123,7 +123,8 @@ def visible_profile(uid: str, person: Optional[Dict[str, Any]], scope: str, *, f
     field_scopes = scopes.get("fields") if isinstance(scopes.get("fields"), dict) else {}
 
     def ok(places: list) -> bool:
-        if full:
+        # "*": chủ bot chọn "Mọi nơi" trên dashboard — dùng ở mọi nhóm và mọi tin nhắn riêng.
+        if full or "*" in places:
             return True
         if own_dm:
             return not places or any(p == scope or p.startswith("g:") for p in places)
@@ -160,6 +161,8 @@ def _with_scope(old: list, scope: str, same_value: bool) -> list:
     """Giá trị không đổi → thêm nơi biết; giá trị mới → chỉ nơi vừa nói (không đẩy giá trị mới sang nơi cũ)."""
     if not scope:
         return old if same_value else []
+    if same_value and "*" in old:
+        return old  # chủ bot đã cho dùng "Mọi nơi" — giữ nguyên, đừng cắt mất dấu "*"
     merged = [x for x in old if x != scope] if same_value else []
     return (merged + [scope])[-MAX_SCOPES:]
 

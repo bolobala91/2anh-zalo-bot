@@ -11,6 +11,12 @@ import { writeFileAtomic } from './json-store.js';
 import { ZALO_UID } from './users.js';
 
 export const LIMITS = { name: 80, note: 400, fields: 12, key: 40, value: 120 };
+/**
+ * Nơi bot được dùng một mục chủ bot sửa trên dashboard: `all` = mọi nhóm và tin nhắn riêng (nơi dùng `"*"`),
+ * `dm` = chỉ khi chính người đó nhắn riêng, `keep` = như cũ (nơi bot đã nghe — chỉ khi mục không đổi nội dung).
+ */
+export const USES = ['all', 'dm', 'keep'];
+const useOf = (v) => (USES.includes(v) ? v : 'keep');
 
 const err = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 // eslint-disable-next-line no-control-regex
@@ -27,6 +33,7 @@ export function parsePerson(body) {
   const list = Array.isArray(b.fields) ? b.fields : [];
   if (list.length > LIMITS.fields) throw err(400, `Tối đa ${LIMITS.fields} thông tin thêm — bỏ bớt rồi lưu.`);
   const fields = {};
+  const uses = {};
   for (const f of list) {
     const key = clean(f?.key);
     const value = clean(f?.value);
@@ -36,9 +43,10 @@ export function parsePerson(body) {
       throw err(400, `Tên mục tối đa ${LIMITS.key} ký tự, nội dung tối đa ${LIMITS.value} ký tự — rút gọn rồi lưu.`);
     }
     fields[key] = value;
+    uses[key] = useOf(f?.use);
   }
   if (!name && !note && !Object.keys(fields).length) throw err(400, 'Hồ sơ trống — điền ít nhất tên hoặc ghi chú, hoặc bấm Xoá hồ sơ.');
-  return { name, note, fields };
+  return { name, note, fields, uses, noteUse: useOf(b.noteUse) };
 }
 
 const stampOf = (file) => { try { const s = statSync(file); return `${s.mtimeMs}:${s.size}`; } catch { return 'none'; } };
@@ -50,7 +58,7 @@ const stampOf = (file) => { try { const s = statSync(file); return `${s.mtimeMs}
 function placesOf(p, key) {
   const sc = p?.scopes && typeof p.scopes === 'object' ? p.scopes : {};
   const list = key === null ? sc.note : (sc.fields && typeof sc.fields === 'object' ? sc.fields[key] : null);
-  return Array.isArray(list) ? list.filter((x) => typeof x === 'string' && /^[gu]:\d{1,32}$/.test(x)) : [];
+  return Array.isArray(list) ? list.filter((x) => typeof x === 'string' && (x === '*' || /^[gu]:\d{1,32}$/.test(x))) : [];
 }
 
 export function createPeopleStore({ file, now = Date.now }) {
@@ -98,16 +106,21 @@ export function createPeopleStore({ file, now = Date.now }) {
       checkSeen(data, uid, expectedUpdatedAt);
       if (!data[uid] && Object.keys(data).length >= 5000) throw err(400, 'Sổ người quen đã đủ 5000 người — xoá bớt hồ sơ cũ trước.');
       const entry = { ...(data[uid] || {}) };
-      // Nơi ghi (plugin, Sổ người quen theo nơi ghi): mục giữ nguyên giá trị thì giữ nơi ghi; mục sửa/thêm ở
-      // dashboard không có nơi ghi → trợ lý chỉ dùng khi nhắn riêng với chính người đó (không đẩy giá trị mới sang nhóm cũ).
+      // Nơi dùng từng mục (plugin, Sổ người quen theo nơi ghi) do chủ bot chọn: "Mọi nơi" → ["*"]; "Chỉ nhắn riêng" →
+      // không ghi nơi; "Như cũ" → giữ nơi bot đã nghe, nhưng chỉ khi mục không đổi nội dung (không đẩy giá trị mới sang
+      // nhóm cũ) — đổi nội dung mà vẫn "như cũ" thì như "Chỉ nhắn riêng".
       const oldFields = entry.fields && typeof entry.fields === 'object' ? entry.fields : {};
       const oldScopes = entry.scopes && typeof entry.scopes === 'object' ? entry.scopes : {};
       const oldFieldScopes = oldScopes.fields && typeof oldScopes.fields === 'object' ? oldScopes.fields : {};
+      const placesFor = (use, same, old) => (use === 'all' ? ['*'] : use === 'keep' && same && Array.isArray(old) ? old : null);
       const scopes = { fields: {} };
       for (const [k, v] of Object.entries(person.fields)) {
-        if (Object.hasOwn(oldFields, k) && clean(String(oldFields[k])) === v && Array.isArray(oldFieldScopes[k])) scopes.fields[k] = oldFieldScopes[k];
+        const same = Object.hasOwn(oldFields, k) && clean(String(oldFields[k])) === v;
+        const places = placesFor(person.uses?.[k] ?? 'keep', same, oldFieldScopes[k]);
+        if (places) scopes.fields[k] = places;
       }
-      if (person.note && person.note === clean(entry.note) && Array.isArray(oldScopes.note)) scopes.note = oldScopes.note;
+      const notePlaces = person.note ? placesFor(person.noteUse ?? 'keep', person.note === clean(entry.note), oldScopes.note) : null;
+      if (notePlaces) scopes.note = notePlaces;
       entry.scopes = scopes;
       for (const k of ['name', 'note']) { if (person[k]) entry[k] = person[k]; else delete entry[k]; }
       if (Object.keys(person.fields).length) entry.fields = person.fields; else delete entry.fields;

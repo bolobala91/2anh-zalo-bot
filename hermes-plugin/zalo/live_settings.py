@@ -109,3 +109,35 @@ class SettingsWatcher:
             logger.warning("[zalo] không đọc lại được config.yaml — chỉ áp dụng phần .env", exc_info=True)
         logger.info("[zalo] cấu hình vừa đổi — đã áp dụng ngay, không cần khởi động lại")
         return True, extra
+
+
+class FileStamp:
+    """Theo dõi một tệp đánh dấu (vd. ``zalo/memory-edited.stamp`` dashboard ghi mỗi lần sửa bộ nhớ trợ lý).
+
+    :meth:`changed` trả True đúng một lần sau mỗi lần tệp đổi; lần gọi đầu chỉ ghi mốc. Kiểm tối đa mỗi
+    ``interval_s`` giây, mỗi lần chỉ một ``stat`` — đi kèm lượt kiểm Cấu hình ở mỗi tin tới.
+    """
+
+    def __init__(self, path: Callable[[], Path], interval_s: float = 3.0, clock: Callable[[], float] = time.monotonic):
+        self._path = path
+        self._interval = interval_s
+        self._clock = clock
+        self._next = 0.0
+        self._seen: Optional[float] = None
+
+    def changed(self, force: bool = False) -> bool:
+        now = self._clock()
+        if not force and now < self._next:
+            return False
+        self._next = now + self._interval
+        try:
+            mtime = self._path().stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        if self._seen is None:
+            self._seen = mtime
+            return False
+        if mtime == self._seen:
+            return False
+        self._seen = mtime
+        return True

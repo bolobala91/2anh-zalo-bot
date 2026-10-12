@@ -9,14 +9,19 @@ import { LearnedMemory } from './learned-memory.js';
 /** Gợi ý tên mục hay dùng — bấm là thêm dòng, khỏi nghĩ tên. */
 export const FIELD_PRESETS = ['Xưng hô', 'Chức vụ', 'Lớp', 'Môn dạy', 'Đơn vị', 'Sở thích', 'Ngày sinh'];
 
+/** Lựa chọn "Dùng ở" mặc định của mục đang có: theo máy chủ, thiếu thì suy từ nơi dùng. */
+const useFrom = (use, places) => use || (places?.length ? 'keep' : 'dm');
+
 /** Bản nháp sửa hồ sơ (không còn dòng trống thừa — thêm bằng nút). */
 export function personDraft(p) {
-  return { name: p?.name || '', note: p?.note || '', fields: (p?.fields || []).map((f) => ({ key: f.key, value: f.value, places: f.places || [] })) };
+  return { name: p?.name || '', note: p?.note || '', noteUse: useFrom(p?.noteUse, p?.notePlaces),
+    fields: (p?.fields || []).map((f) => ({ key: f.key, value: f.value, places: f.places || [], use: useFrom(f.use, f.places) })) };
 }
 
-/** Thân PUT /api/people/:uid — bỏ dòng thông tin thêm trống hoàn toàn. */
+/** Thân PUT /api/people/:uid — bỏ dòng thông tin thêm trống hoàn toàn; kèm "Dùng ở" của từng mục. */
 export function personPayload(d, updatedAt) {
-  const out = { name: d.name, note: d.note, fields: d.fields.filter((f) => f.key.trim() || f.value.trim()).map(({ key, value }) => ({ key, value })) };
+  const out = { name: d.name, note: d.note, noteUse: d.noteUse || 'keep',
+    fields: d.fields.filter((f) => f.key.trim() || f.value.trim()).map(({ key, value, use }) => ({ key, value, use: use || 'keep' })) };
   if (updatedAt !== undefined) out.updatedAt = updatedAt;   // mốc sửa khách đã thấy: bot sửa sau đó thì server trả 409
   return out;
 }
@@ -30,16 +35,32 @@ export function usageText(used, limit) {
 /** Nhãn "dùng ở đâu" của một mục: danh sách nơi, rỗng = chỉ khi nhắn riêng với chính người đó. */
 export const placesText = (places) => (places && places.length ? places.join(', ') : 'Chỉ khi nhắn riêng');
 
+/**
+ * Ô "Dùng ở" của một mục hồ sơ: Mọi nơi / Chỉ khi người này nhắn riêng / Như cũ (nơi bot đã nghe người đó nói —
+ * chỉ có khi mục chưa đổi nội dung và bot đã nghe ở nhóm nào đó).
+ */
+function UseSelect({ use, keepPlaces, label, onChange }) {
+  const canKeep = keepPlaces && keepPlaces.length && !keepPlaces.includes('Mọi nơi');
+  return html`<label class="mem-use"><span class="muted small">Dùng ở</span>
+    <select aria-label=${`Bot dùng ${label} ở đâu`} value=${use === 'keep' && !canKeep ? 'dm' : use} onChange=${(e) => onChange(e.currentTarget.value)}>
+      <option value="all">Mọi nơi (mọi nhóm và nhắn riêng)</option>
+      <option value="dm">Chỉ khi người này nhắn riêng</option>
+      ${canKeep ? html`<option value="keep">Như cũ: ${keepPlaces.join(', ')}</option>` : null}
+    </select></label>`;
+}
+
 function PersonDialog({ person, onDone, onStale, onClose }) {
   const [d, setD] = useState(personDraft(person));
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const original = JSON.stringify(personPayload(personDraft(person)));
   const dirty = () => !busy && JSON.stringify(personPayload(d)) !== original;
-  // Đổi tên mục hoặc nội dung → mục đó thành "mới" (máy chủ bỏ nơi dùng cũ, chỉ còn nhắn riêng) — hiện đúng như vậy.
-  const setField = (i, patch) => setD({ ...d, fields: d.fields.map((f, j) => (j === i ? { ...f, ...patch, places: [] } : f)) });
-  const isOriginal = (f) => (person.fields || []).some((o) => o.key === f.key && o.value === f.value);
-  const addField = (key = '') => setD({ ...d, fields: [...d.fields, { key, value: '', places: [] }] });
+  // Đổi tên mục hoặc nội dung → nơi bot đã nghe không còn đúng: "Như cũ" chuyển thành "Mọi nơi" (anh tự đổi được).
+  const setField = (i, patch) => setD({ ...d, fields: d.fields.map((f, j) => (j === i
+    ? { ...f, ...patch, places: [], use: f.use === 'keep' ? 'all' : f.use } : f)) });
+  const setUse = (i, use) => setD({ ...d, fields: d.fields.map((f, j) => (j === i ? { ...f, use } : f)) });
+  const origField = (f) => (person.fields || []).find((o) => o.key === f.key && o.value === f.value);
+  const addField = (key = '') => setD({ ...d, fields: [...d.fields, { key, value: '', places: [], use: 'all' }] });
   async function save(e) {
     e.preventDefault(); setBusy(true); setMsg('');
     try { await api(`/api/people/${person.uid}`, { method: 'PUT', body: personPayload(d, person.updatedAt ?? null) }); onDone('Đã lưu hồ sơ.'); } catch (err) { if (err.status === 409) onStale(err.message); else { setMsg(err.message); setBusy(false); } }
@@ -54,21 +75,22 @@ function PersonDialog({ person, onDone, onStale, onClose }) {
   return html`<${Dialog} title=${person.name || 'Hồ sơ'} onClose=${onClose} dirty=${dirty} wide>
     <form class="stack" onSubmit=${save} novalidate>
       <label class="field"><span>Tên gọi</span><input maxlength="80" value=${d.name} placeholder="Ví dụ: Cô Lan" onInput=${(e) => setD({ ...d, name: e.currentTarget.value })} /></label>
-      <label class="field"><span>Ghi chú</span><textarea maxlength="400" rows="2" value=${d.note} placeholder="Ví dụ: Giáo viên chủ nhiệm 12A1, thích được gọi là cô" onInput=${(e) => setD({ ...d, note: e.currentTarget.value })}></textarea>
-        ${person.note && d.note === person.note ? html`<small class="muted">Bot dùng ghi chú ở: ${placesText(person.notePlaces)}</small>`
-          : d.note ? html`<small class="muted">Ghi chú mới: chỉ dùng khi nhắn riêng với người này.</small>` : null}</label>
+      <label class="field"><span>Ghi chú</span><textarea maxlength="400" rows="2" value=${d.note} placeholder="Ví dụ: Giáo viên chủ nhiệm 12A1, thích được gọi là cô"
+        onInput=${(e) => setD({ ...d, note: e.currentTarget.value, noteUse: d.noteUse === 'keep' ? 'all' : d.noteUse })}></textarea></label>
+      ${d.note ? html`<${UseSelect} use=${d.noteUse} label="ghi chú" keepPlaces=${person.note && d.note === person.note ? person.notePlaces : null}
+        onChange=${(noteUse) => setD({ ...d, noteUse })} />` : null}
       <fieldset class="field"><legend>Thông tin thêm <small class="muted">(tối đa 12)</small></legend>
         ${d.fields.length ? null : html`<p class="muted small">Chưa có — bấm một gợi ý bên dưới để thêm.</p>`}
         ${d.fields.map((f, i) => html`<div class="mem-field" key=${i}>
           <input aria-label="Tên mục" placeholder="Tên mục" maxlength="40" value=${f.key} onInput=${(e) => setField(i, { key: e.currentTarget.value })} />
           <input aria-label=${`Nội dung ${f.key || 'mục'}`} placeholder="Nội dung" maxlength="120" value=${f.value} onInput=${(e) => setField(i, { value: e.currentTarget.value })} />
           <button type="button" class="btn btn-ghost btn-sm" aria-label=${`Bỏ ${f.key || 'mục này'}`} onClick=${() => setD({ ...d, fields: d.fields.filter((_, j) => j !== i) })}><${Icon} name="close" size=${14} /></button>
-          ${f.key || f.value ? html`<small class="muted mem-place">${isOriginal(f) ? `Dùng ở: ${placesText(f.places)}` : 'Mục mới/đã sửa: chỉ dùng khi nhắn riêng với người này'}</small>` : null}
+          ${f.key || f.value ? html`<${UseSelect} use=${f.use} label=${f.key || 'mục này'} keepPlaces=${origField(f)?.places || null} onChange=${(use) => setUse(i, use)} />` : null}
         </div>`)}
         ${d.fields.length < 12 ? html`<div class="chips">${presets.map((p) => html`<button type="button" key=${p} class="btn btn-secondary btn-sm chip" onClick=${() => addField(p)}><${Icon} name="plus" size=${12} /> ${p}</button>`)}
           <button type="button" class="btn btn-secondary btn-sm chip" onClick=${() => addField('')}><${Icon} name="plus" size=${12} /> Mục khác</button></div>` : null}
       </fieldset>
-      <p class="muted small">Sửa lần cuối ${fmtTime(person.updatedAt)}${person.updatedBy.startsWith('dashboard:') ? ` trên dashboard (${person.updatedBy.slice(10)})` : ' bởi bot'}. Điều nói ở nhóm nào chỉ được bot dùng lại ở nhóm đó và khi nhắn riêng với chính người này.</p>
+      <p class="muted small">Sửa lần cuối ${fmtTime(person.updatedAt)}${person.updatedBy.startsWith('dashboard:') ? ` trên dashboard (${person.updatedBy.slice(10)})` : ' bởi bot'}. Mỗi mục chọn được bot dùng ở đâu: <strong>Mọi nơi</strong>, <strong>chỉ khi người này nhắn riêng</strong>, hoặc <strong>như cũ</strong> (đúng nhóm bot đã nghe người đó nói). Thông tin riêng tư (tài sản, gia đình…) nên để "chỉ khi nhắn riêng".</p>
       <${Live} error=${msg} />
       <div class="dialog-actions">
         <button class="btn btn-primary" disabled=${busy}>${busy ? 'Đang lưu…' : 'Lưu'}</button>

@@ -17,7 +17,7 @@ function setup(t, data) {
 
 test('parsePerson: làm sạch chữ, bỏ dòng trống, kiểm giới hạn của people.py, hồ sơ trống bị từ chối', () => {
   assert.deepEqual(parsePerson({ name: ' Cô\nLan ', note: '', fields: [{ key: 'môn', value: 'Hoá' }, { key: '', value: '' }] }),
-    { name: 'Cô Lan', note: '', fields: { 'môn': 'Hoá' } });
+    { name: 'Cô Lan', note: '', fields: { 'môn': 'Hoá' }, uses: { 'môn': 'keep' }, noteUse: 'keep' });
   for (const [body, re] of [
     [null, /không hợp lệ/], [{ name: 'x'.repeat(81) }, /Tên tối đa 80/], [{ name: 'a', note: 'x'.repeat(401) }, /Ghi chú tối đa 400/],
     [{ name: 'a', fields: Array.from({ length: 13 }, (_, i) => ({ key: `k${i}`, value: 'v' })) }, /Tối đa 12/],
@@ -77,4 +77,26 @@ test('bot ghi chen giữa lúc đọc và lúc ghi → 409, không đè mất h�
   assert.throws(() => store.put(A, parsePerson({ name: 'Cô Lan' }), 'anh'), (e) => e.statusCode === 409);
   assert.equal(calls, 1);
   assert.equal(JSON.parse(readFileSync(file, 'utf8'))[B].name, 'Bot vừa ghi');
+});
+
+test('"Dùng ở" từng mục: Mọi nơi → "*", Chỉ nhắn riêng → không nơi, Như cũ → giữ nơi bot đã nghe nếu không đổi nội dung', (t) => {
+  const { store, file } = setup(t, { [A]: { name: 'Thu Giang', note: 'Hay hỏi bài', fields: { lop: '10 Trung', chuc_vu: 'Lớp trưởng', mon: 'Hoá' },
+    scopes: { fields: { lop: ['g:111'], mon: ['g:222'] }, note: ['g:111'] }, updated_at: 1 } });
+  const read = () => JSON.parse(readFileSync(file, 'utf8'));
+  store.put(A, parsePerson({ name: 'Thu Giang', note: 'Hay hỏi bài', noteUse: 'keep', fields: [
+    { key: 'lop', value: '10 Trung', use: 'all' },
+    { key: 'chuc_vu', value: 'Lớp trưởng', use: 'dm' },
+    { key: 'mon', value: 'Hoá', use: 'keep' },
+    { key: 'so_thich', value: 'Cầu lông', use: 'keep' },        // mục mới mà "như cũ" → không có nơi cũ → chỉ nhắn riêng
+  ] }), 'anh');
+  const s = read()[A].scopes;
+  assert.deepEqual(s.fields, { lop: ['*'], mon: ['g:222'] });
+  assert.deepEqual(s.note, ['g:111']);
+  store.put(A, parsePerson({ name: 'Thu Giang', note: 'Đã đổi', noteUse: 'keep', fields: [{ key: 'mon', value: 'Lý', use: 'keep' }] }), 'anh');
+  assert.equal(read()[A].scopes.note, undefined, 'đổi nội dung mà như cũ → không đẩy sang nơi cũ');
+  assert.equal(read()[A].scopes.fields.mon, undefined);
+  const view = store.list()[0];
+  assert.deepEqual(view.fields[0].places, []);
+  store.put(A, parsePerson({ name: 'Thu Giang', note: 'Đã đổi', noteUse: 'all', fields: [{ key: 'mon', value: 'Lý', use: 'bậy' }] }), 'anh');
+  assert.deepEqual(store.list()[0].notePlaces, ['*'], 'lựa chọn lạ coi như "như cũ"; ghi chú Mọi nơi');
 });

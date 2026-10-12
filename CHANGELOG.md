@@ -2,6 +2,19 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.19.0] — 2026-10-12
+
+### Sửa
+- **Bộ nhớ của trợ lý** (Trí nhớ › Hồ sơ chủ nhân, Ghi chú của trợ lý) **sửa xong là bot dùng ngay** ở tin nhắn kế tiếp, trong mọi cuộc trò chuyện. Trước đây Hermes chụp bộ nhớ một lần lúc tạo agent và giữ agent tới 1 giờ, nên một nhóm đang nói chuyện liên tục có thể dùng bản cũ mãi, tới khi khởi động lại trợ lý.
+
+### Thêm
+- **Sổ người quen: chọn "Dùng ở" cho từng mục** (và cho ghi chú). Có ba lựa chọn:
+  - **Mọi nơi:** mọi nhóm và tin nhắn riêng. Đây là mặc định khi sửa hoặc thêm mục.
+  - **Chỉ khi người này nhắn riêng.**
+  - **Như cũ:** đúng những nhóm bot đã nghe người đó nói.
+
+  Trước đây mục sửa trên dashboard chỉ được dùng khi người đó nhắn riêng. Thông tin riêng tư (tài sản, gia đình…) nên để "chỉ khi nhắn riêng".
+
 ## [2.18.1] — 2026-10-12
 
 ### Sửa

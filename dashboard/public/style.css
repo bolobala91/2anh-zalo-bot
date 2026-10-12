@@ -1180,3 +1180,5 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .folder-edit .thread-head h2 { display: inline-flex; align-items: center; gap: 8px; }
 .folder-settings-head { margin: 16px 0 4px; font-size: 15px; }
 .folder-edit details > summary + p { margin-top: 10px; }
+.mem-use { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; margin: 2px 0 6px; }
+.mem-use select { flex: 1; min-width: 0; max-width: 360px; }

@@ -802,9 +802,10 @@ test('Liên hệ: nhãn nguồn theo thứ tự chủ nhân → bạn bè → nh
 test('Trí nhớ: bản nháp hồ sơ giữ nơi dùng, thân gửi bỏ dòng trống và nơi dùng; chữ dung lượng bộ nhớ', async () => {
   const { personDraft, personPayload, usageText, placesText, FIELD_PRESETS } = await import('./views/memory.js');
   const d = personDraft({ name: 'Lan', note: '', fields: [{ key: 'môn', value: 'Hoá', places: ['Nhóm Đoàn'] }] });
-  assert.deepEqual(d.fields, [{ key: 'môn', value: 'Hoá', places: ['Nhóm Đoàn'] }]);
+  assert.deepEqual(d.fields, [{ key: 'môn', value: 'Hoá', places: ['Nhóm Đoàn'], use: 'keep' }]);
+  assert.equal(personDraft({ name: 'X', fields: [{ key: 'a', value: 'b', places: [] }] }).fields[0].use, 'dm', 'không nơi dùng → chỉ nhắn riêng');
   d.fields.push({ key: '', value: '', places: [] });
-  assert.deepEqual(personPayload(d), { name: 'Lan', note: '', fields: [{ key: 'môn', value: 'Hoá' }] });
+  assert.deepEqual(personPayload(d), { name: 'Lan', note: '', noteUse: 'dm', fields: [{ key: 'môn', value: 'Hoá', use: 'keep' }] });
   assert.equal(placesText([]), 'Chỉ khi nhắn riêng');
   assert.equal(placesText(['Nhóm Đoàn', 'Nhắn riêng']), 'Nhóm Đoàn, Nhắn riêng');
   assert.ok(FIELD_PRESETS.includes('Chức vụ'));

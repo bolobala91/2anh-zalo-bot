@@ -35,12 +35,16 @@ export function peopleRoutes({ people, activity, threadNames }) {
       try { groups = await threadNames.load(); } catch { /* tên dự phòng */ }
       const byUid = new Map(all.map((p) => [p.uid, p.name]));
       const label = (uid, place) => {
+        if (place === '*') return 'Mọi nơi';
         const id = place.slice(2);
         if (place.startsWith('g:')) return groups.get(id) || `Nhóm …${id.slice(-4)}`;
         return id === uid ? 'Nhắn riêng' : `Nhắn riêng của ${byUid.get(id) || `…${id.slice(-4)}`}`;
       };
+      // Lựa chọn "Dùng ở" hiện tại của từng mục (giao diện chọn sẵn): "*" → Mọi nơi, có nơi → Như cũ, không → Chỉ nhắn riêng.
+      const useOf = (places) => (places.includes('*') ? 'all' : places.length ? 'keep' : 'dm');
       for (const p of all) {
-        for (const f of p.fields) f.places = f.places.map((x) => label(p.uid, x));
+        for (const f of p.fields) { f.use = useOf(f.places); f.places = f.places.map((x) => label(p.uid, x)); }
+        p.noteUse = useOf(p.notePlaces);
         p.notePlaces = p.notePlaces.map((x) => label(p.uid, x));
       }
       const hits = q ? all.filter((p) => fold(`${p.name} ${p.note} ${p.uid} ${p.fields.map((f) => `${f.key} ${f.value}`).join(' ')}`).includes(q)) : all;
