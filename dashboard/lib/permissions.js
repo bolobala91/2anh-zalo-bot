@@ -64,6 +64,7 @@ const MAX_NAME = 120;
 const MAX_GROUPS = 500;
 export const FOLDER_ID = /^[a-z0-9]{1,16}$/;
 export const MAX_FOLDERS = 50;
+export const MAX_FOLDER_PEOPLE = 300;
 const MAX_FOLDER_NAME = 60;
 const MAX_DM_PEOPLE = 200;
 const MAX_PERSON_NAME = 80;
@@ -188,11 +189,21 @@ function normalizeStudio(raw) {
 export function normalizeFolders(raw) {
   const out = {};
   const taken = new Set();
+  const takenPeople = new Set();
   for (const [fid, entry] of Object.entries(isObj(raw) ? raw : {})) {
     if (!FOLDER_ID.test(fid) || !isObj(entry) || Object.keys(out).length >= MAX_FOLDERS) continue;
     const groups = (Array.isArray(entry.groups) ? entry.groups : []).filter((id) => typeof id === 'string' && GROUP_ID.test(id) && !taken.has(id)).slice(0, MAX_GROUPS);
     groups.forEach((id) => taken.add(id));
-    out[fid] = { name: tidy(entry.name, MAX_FOLDER_NAME) || 'Thư mục', groups, ...layer(entry) };
+    // Người trong thư mục (khi nhắn riêng): [{ uid, name }] — mỗi người một thư mục, như nhóm.
+    const people = [];
+    for (const p of Array.isArray(entry.people) ? entry.people : []) {
+      const uid = String((isObj(p) ? p.uid : p) ?? '');
+      if (!ZALO_UID.test(uid) || takenPeople.has(uid) || people.length >= MAX_FOLDER_PEOPLE) continue;
+      takenPeople.add(uid);
+      const name = isObj(p) ? tidy(p.name, MAX_NAME) : '';
+      people.push(name ? { uid, name } : { uid });
+    }
+    out[fid] = { name: tidy(entry.name, MAX_FOLDER_NAME) || 'Thư mục', groups, ...(people.length ? { people } : {}), ...layer(entry) };
   }
   return out;
 }
@@ -401,7 +412,7 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       return [id, { name: g.name || '', custom: true, folder: base.folder, ...merge(base, g), studioQuota: g.studioQuota ?? base.studioQuota }];
     }));
     const folders = Object.entries(data.folders || {}).map(([id, f]) => ({
-      id, name: f.name, groups: [...f.groups], ...merge(defaults, f), studioQuota: f.studioQuota ?? null,
+      id, name: f.name, groups: [...f.groups], people: (f.people || []).map((p) => ({ uid: p.uid, name: p.name || '' })), ...merge(defaults, f), studioQuota: f.studioQuota ?? null,
     }));
     return { exists, corrupt, defaults, groups, folders, dm: dmView(data.dm), studio: studioView(data.studio), toolsOff: data.tools?.off || [] };
   };
@@ -505,6 +516,33 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       write(data);
       return view({ data, exists: true, corrupt: false });
     },
+    /**
+     * Đặt danh sách NGƯỜI của thư mục (`[{ uid, name }]`): khi họ nhắn riêng, bot dùng cài đặt thư mục và họ được
+     * tính là có trong danh sách nhắn riêng. Người đang ở thư mục khác thì chuyển sang (mỗi người một thư mục).
+     */
+    setFolderPeople(fid, people) {
+      if (!Array.isArray(people) || people.some((p) => !isObj(p) || !ZALO_UID.test(String(p.uid ?? '')))) {
+        throw new InvalidPermissions('Danh sách người không hợp lệ — UID Zalo là dãy 15–22 chữ số.');
+      }
+      const seen = new Set();
+      const clean = [];
+      for (const p of people) {
+        const uid = String(p.uid);
+        if (seen.has(uid)) continue;
+        seen.add(uid);
+        const name = tidy(p.name, MAX_NAME);
+        clean.push(name ? { uid, name } : { uid });
+      }
+      if (clean.length > MAX_FOLDER_PEOPLE) throw new InvalidPermissions(`Một thư mục tối đa ${MAX_FOLDER_PEOPLE} người.`);
+      const { data } = read();
+      const folder = folderOrThrow(data, fid);
+      for (const [other, f] of Object.entries(data.folders)) {
+        if (other !== fid && f.people) { f.people = f.people.filter((p) => !seen.has(p.uid)); if (!f.people.length) delete f.people; }
+      }
+      if (clean.length) folder.people = clean; else delete folder.people;
+      write(data);
+      return view({ data, exists: true, corrupt: false });
+    },
     /** Lưu cài đặt thư mục (đã qua parseSettings): chỉ ghi khoá khác mặc định — nhóm bên trong thừa hưởng ngay. */
     setFolderSettings(fid, settings) {
       const { data } = read();
@@ -512,7 +550,7 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       seedReplyOnlyTagged(data);
       const defaults = { ...merge(builtin(), data.defaults), studioQuota: null };
       const { entry, changed } = diffLayer(settings, defaults, folder);
-      data.folders[fid] = { name: folder.name, groups: folder.groups, ...entry };
+      data.folders[fid] = { name: folder.name, groups: folder.groups, ...(folder.people?.length ? { people: folder.people } : {}), ...entry };
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), changed };
     },

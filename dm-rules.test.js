@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DM_FEATURE_KEYS, STUDIO_KEYS, createDmRules, dmVerdict, normalizeDm, permissionsFileFromEnv } from './dm-rules.js';
+import { DM_FEATURE_KEYS, STUDIO_KEYS, createDmRules, dmVerdict, folderPeople, normalizeDm, permissionsFileFromEnv } from './dm-rules.js';
 
 const A = '1111111111111111111';
 const B = '2222222222222222222';
@@ -77,4 +77,28 @@ test('xưởng (spec §17): normalizeDm giữ 4 nút xưởng để dashboard kh
   assert.deepEqual(dm.people[A].features, { web: false, studioDocs: true });
   assert.deepEqual(Object.keys(dmVerdict(dm, A).features), DM_FEATURE_KEYS);
   assert.deepEqual(STUDIO_KEYS, ['studioSlides', 'studioDocs', 'studioExams', 'studioVideo']);
+});
+
+test('thư mục chứa người: vào thư mục = được nhắn riêng, nút = mặc định nhóm ← thư mục; chỉnh riêng của người thắng', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'dm-folder-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, 'permissions.json');
+  const P = '1111111111111111111'; const Q = '2222222222222222222';
+  writeFileSync(file, JSON.stringify({ version: 1, defaults: { features: { kb: false } },
+    folders: { bch: { people: [{ uid: P, name: 'Lan' }, Q, 'bad'], features: { web: false } }, x2: { people: [P], features: { web: true } } },
+    dm: { who: 'list', features: { voice: false }, people: { [Q]: { features: { web: true } } } } }));
+  assert.deepEqual(Object.keys(folderPeople(JSON.parse(readFileSync(file, 'utf8')))).sort(), [P, Q]);
+  const dm = createDmRules({ file })();
+  const p = dmVerdict(dm, P);
+  assert.equal(p.allowed, true);
+  assert.equal(p.features.web, false, 'thư mục đầu giữ người');
+  assert.equal(p.features.kb, false);
+  assert.equal(p.features.voice, true, 'không theo tính năng chung nhắn riêng');
+  assert.equal(dmVerdict(dm, Q).features.web, true);
+  assert.equal(dmVerdict(dm, '3333333333333333333').allowed, false);
+  // Không có mục dm nhưng có người trong thư mục: tệp vẫn được đọc, quyết định "ai được nhắn" vẫn theo ZALO_DM_POLICY.
+  writeFileSync(file, JSON.stringify({ version: 1, folders: { bch: { people: [P], features: { web: false } } } }));
+  const only = createDmRules({ file })();
+  assert.equal(dmVerdict(only, P).allowed, null);
+  assert.equal(dmVerdict(only, P).features.web, false);
 });

@@ -21,7 +21,7 @@ export const FILTER_FROM = 8;
 
 export const WHO_OPTIONS = [
   { value: 'owners', label: 'Chỉ chủ nhân', hint: 'Người khác nhắn riêng thì bot không trả lời (trừ lệnh /sethome để biết UID của chính họ).' },
-  { value: 'list', label: 'Chủ nhân và những người trong danh sách', hint: 'Thêm người ở hộp Danh sách người bên dưới.' },
+  { value: 'list', label: 'Chủ nhân và những người trong danh sách', hint: 'Thêm người ở hộp Danh sách người bên dưới, hoặc đưa họ vào một thư mục (Phân quyền Bot › Thư mục).' },
   { value: 'everyone', label: 'Mọi người', hint: 'Ai nhắn riêng bot cũng trả lời, với các tính năng chung bên dưới. Danh sách dùng để chỉnh tính năng riêng cho từng người.' },
 ];
 
@@ -140,6 +140,19 @@ export function personSummary(p, features, studioFeatures = [], policy, base = n
     detail: [`Đang tắt: ${off.join(', ')}`, studioDetail].filter(Boolean).join('. ') };
 }
 
+/** uid → thư mục chứa người đó (thư mục đứng trước giữ người, như máy chủ). */
+export function folderOfPeople(folders) {
+  const out = new Map();
+  for (const f of folders || []) for (const p of f.people || []) if (!out.has(p.uid)) out.set(p.uid, f);
+  return out;
+}
+
+/** "Theo thư mục "X" · 9/9" — người nằm trong thư mục và không chỉnh riêng. */
+export function folderSummary(folder, features) {
+  const on = features.filter((f) => folder.features?.[f.key] !== false).length;
+  return { kind: 'idle', text: `Theo thư mục "${folder.name}" · ${on}/${features.length}`, detail: `Đang dùng cài đặt của thư mục "${folder.name}" (Phân quyền Bot › Thư mục)` };
+}
+
 /** Lọc danh sách người theo tên (không phân biệt dấu) hoặc UID, và "chỉ người có chỉnh riêng". */
 export function filterPeople(people, { q = '', customOnly = false, names = new Map() } = {}) {
   const needle = fold(String(q).trim());
@@ -149,9 +162,9 @@ export function filterPeople(people, { q = '', customOnly = false, names = new M
 
 /** "…" + 7 số cuối của UID cho hàng gập (UID đầy đủ ở title). */
 
-function Person({ p, known, base, baseStudio, features, studioFeatures, policy, open, onToggle, onChange, onRemove }) {
+function Person({ p, known, base, baseStudio, features, studioFeatures, policy, folder, open, onToggle, onChange, onRemove }) {
   const id = `dm-p-${p.uid}`;
-  const s = personSummary(p, features, studioFeatures, policy, base, baseStudio);
+  const s = !p.custom && folder ? folderSummary(folder, features) : personSummary(p, features, studioFeatures, policy, base, baseStudio);
   // Bật/tắt "tính năng riêng" hoặc đặt lại: nút xưởng đi cùng nút tính năng.
   const withStudio = (st) => (baseStudio && st ? { studio: { ...st } } : {});
   const name = p.name || known || 'Chưa rõ tên';
@@ -165,7 +178,7 @@ function Person({ p, known, base, baseStudio, features, studioFeatures, policy, 
     ${open ? html`<div class="dm-panel" id=${`${id}-panel`}>
       ${s.detail ? html`<p class="muted small">${s.detail}.</p>` : null}
       <${Toggle} id=${`${id}-custom`} checked=${p.custom} label="Dùng tính năng riêng"
-        hint=${p.custom ? 'Các nút dưới đây chỉ áp cho người này.' : 'Đang theo Tính năng chung khi nhắn riêng ở trên.'}
+        hint=${p.custom ? 'Các nút dưới đây chỉ áp cho người này.' : folder ? `Đang theo thư mục "${folder.name}".` : 'Đang theo Tính năng chung khi nhắn riêng ở trên.'}
         onChange=${(v) => onChange({ custom: v, features: { ...(v ? base : p.features) }, ...withStudio(v ? baseStudio : p.studio) })} />
       ${p.custom ? html`<div class="perm-grid">
         ${features.map((f) => html`<${Toggle} key=${f.key} id=${`${id}-${f.key}`} checked=${p.features[f.key]} label=${f.label}
@@ -190,7 +203,7 @@ function Person({ p, known, base, baseStudio, features, studioFeatures, policy, 
 /** Lưu được khi có thay đổi, hoặc khi chưa từng lưu (đang theo cài đặt lúc cài bot — thông báo bảo bấm Lưu). */
 export const canSaveDm = (dm, dirty) => dirty || !dm.explicit;
 
-export function DmEditor({ dm, features, studioFeatures = [], studioPolicy, admin, onSaved, onBack, onDirty }) {
+export function DmEditor({ dm, folders = [], features, studioFeatures = [], studioPolicy, admin, onSaved, onBack, onDirty }) {
   const [draft, setDraft] = useState(() => dmDraft(dm));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
@@ -267,6 +280,10 @@ export function DmEditor({ dm, features, studioFeatures = [], studioPolicy, admi
   const opened = shown.find((p) => p.uid === openUid);
   if (opened && !visible.includes(opened)) visible.push(opened);
   const customCount = draft.people.filter((p) => p.custom).length;
+  const folderOf = folderOfPeople(folders);
+  // Người chỉ được nhắn riêng nhờ nằm trong thư mục (chưa có trong danh sách) — hiện để nhìn một chỗ thấy hết.
+  const inDraft = new Set(draft.people.map((p) => p.uid));
+  const viaFolder = [...folderOf].filter(([uid]) => !inDraft.has(uid));
   const count = dmChangeCount(draft, dm);
   return html`<form class="perm-form" onSubmit=${save} novalidate>
     <header class="thread-head">
@@ -334,7 +351,7 @@ export function DmEditor({ dm, features, studioFeatures = [], studioPolicy, admi
       </div>` : null}
       ${draft.people.length ? html`<ul class="dm-people">
         ${visible.map((p) => html`<${Person} key=${p.uid} p=${p} known=${names.get(p.uid)} base=${draft.features} features=${features}
-          baseStudio=${draft.studio} studioFeatures=${studioFeatures} policy=${studioPolicy}
+          baseStudio=${draft.studio} studioFeatures=${studioFeatures} policy=${studioPolicy} folder=${folderOf.get(p.uid)}
           open=${openUid === p.uid} onToggle=${() => setOpenUid(openUid === p.uid ? null : p.uid)}
           onChange=${(patch) => setPerson(p.uid, patch)} onRemove=${() => remove(p)} />`)}
       </ul>
@@ -343,6 +360,13 @@ export function DmEditor({ dm, features, studioFeatures = [], studioPolicy, admi
       ${!shown.length ? html`<p class="muted small dm-empty">Không có ai khớp bộ lọc — xoá bớt chữ trong ô lọc hoặc bỏ chọn "Có chỉnh riêng".</p>` : null}`
       : html`<p class="muted small dm-empty">Chưa có ai. ${draft.who === 'list' ? 'Bấm "+ Thêm người" — nếu danh sách trống, chỉ chủ nhân nhắn riêng được.' : ''}</p>`}
     </fieldset>
+    ${viaFolder.length ? html`<fieldset class="perm-box" disabled=${ownersOnly}>
+      <legend>Được nhắn riêng qua thư mục (${viaFolder.length})</legend>
+      <p class="muted small">Những người này nằm trong thư mục nên được nhắn riêng và dùng cài đặt của thư mục. Bỏ họ khỏi thư mục ở Phân quyền Bot › Thư mục; muốn chỉnh riêng một người thì "+ Thêm người" ở trên.</p>
+      <ul class="dm-people">${viaFolder.map(([uid, f]) => { const s = folderSummary(f, features); const p = f.people.find((x) => x.uid === uid); return html`<li key=${uid} class="dm-person"><div class="dm-row">
+        <span class="dm-who"><strong class="dm-name">${p?.name || names.get(uid) || 'Chưa rõ tên'}</strong></span>
+        <span class="badge badge-idle" title=${s.detail}>${s.text}</span></div></li>`; })}</ul>
+    </fieldset>` : null}
     <${SaveBar} count=${dirty ? count : 0} busy=${busy} canSave=${canSave} onUndo=${reset} msg=${msg}
       idle=${dm.explicit ? 'Chưa có thay đổi.' : 'Chưa từng lưu — bấm Lưu để quản lý từ đây.'} />
   </form>`;

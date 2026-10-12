@@ -145,6 +145,14 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity, 
       res.json(full(state));
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
+  r.put('/permissions/folders/:fid/people', requireAuth, (req, res) => {
+    try {
+      const state = permissions.setFolderPeople(req.params.fid, req.body?.people);
+      const f = state.folders.find((x) => x.id === req.params.fid);
+      logFolder(req, `thư mục "${f?.name}": ${f?.people.length ?? 0} người`);
+      res.json(full(state));
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
   r.put('/permissions/folders/:fid/settings', requireAuth, (req, res) => {
     let s;
     try { s = parseSettings(req.body); } catch (err) { return fail(res, err, SAVE_FAIL); }

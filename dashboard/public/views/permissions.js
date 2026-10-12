@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import { html, Icon, Live, Notice, PageHead, SaveBar, Spinner, Toggle, onText } from '../ui.js';
 import { fold } from '../fold.js';
 import { DmEditor, dmBadge } from './dm-permissions.js';
+import { FolderPeople } from './folder-people.js';
 import { StudioBox, applyPolicy, parseQuota, studioComplete } from './studio-box.js';
 import { QuotaEditor, quotaBadge } from './studio-quota.js';
 import { CallWordsEditor } from './call-words.js';
@@ -172,11 +173,13 @@ export function Editor({ target, value, defaults, features, studioFeatures, stud
 
 /** Nhãn của thư mục ở danh sách bên trái. */
 export function folderBadge(f) {
-  if (!f.active) return { kind: 'danger', text: `Đang tắt · ${f.groups.length} nhóm` };
-  return { kind: 'idle', text: `${f.groups.length} nhóm` };
+  const n = (f.people || []).length;
+  const count = `${f.groups.length} nhóm${n ? ` · ${n} người` : ''}`;
+  if (!f.active) return { kind: 'danger', text: `Đang tắt · ${count}` };
+  return { kind: 'idle', text: count };
 }
 
-function FolderEditor({ folder, perms, list, onSaved, onBack, onDirty, onDeleted }) {
+function FolderEditor({ folder, perms, list, admin, onSaved, onBack, onDirty, onDeleted }) {
   const [name, setName] = useState(folder.name);
   const [picked, setPicked] = useState(() => new Set(folder.groups));
   const [q, setQ] = useState('');
@@ -225,6 +228,7 @@ function FolderEditor({ folder, perms, list, onSaved, onBack, onDirty, onDeleted
         <button type="button" class="btn btn-ghost btn-sm" disabled=${busy !== '' || !membersDirty} onClick=${() => setPicked(new Set(folder.groups))}>Hoàn tác</button>
       </div>
     </details>
+    <${FolderPeople} folder=${folder} folders=${perms.folders} admin=${admin} busy=${busy} run=${run} base=${base} />
     <details class="perm-box">
       <summary><span>Tên và xoá thư mục</span></summary>
       <div class="row">
@@ -240,7 +244,7 @@ function FolderEditor({ folder, perms, list, onSaved, onBack, onDirty, onDeleted
     <${Editor} key=${`fs-${folder.id}`} head=${false} target=${{ id: `${FOLDER_PREFIX}${folder.id}`, name: folder.name, members: null }}
       value=${pick(folder)} defaults=${pick(perms.defaults)} features=${perms.features} studioFeatures=${perms.studioFeatures || []}
       studioPolicy=${perms.studioPolicy} defaultQuota=${perms.studio?.quota ?? 3} path=${`${base}/settings`}
-      note=${`Mọi nhóm trong thư mục thừa hưởng các cài đặt này ngay khi lưu, kể cả nhóm thêm vào sau. Nhóm chỉnh riêng mục nào thì mục đó của nhóm thắng. Chủ nhân bot luôn dùng được mọi tính năng.`}
+      note=${`Mọi nhóm trong thư mục thừa hưởng các cài đặt này ngay khi lưu, kể cả nhóm thêm vào sau; người trong thư mục dùng các tính năng này khi nhắn riêng (bật bot, chỉ trả lời khi tag chỉ áp cho nhóm). Nhóm/người chỉnh riêng mục nào thì mục đó của họ thắng. Chủ nhân bot luôn dùng được mọi tính năng.`}
       onSaved=${(r) => { onSaved(r); return true; }} onDirty=${onDirty} onBack=${onBack} />
   </div>`;
 }
@@ -385,10 +389,10 @@ export function Permissions({ me }) {
       </section>
       <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : selected === QUOTA_KEY ? 'Hạn mức xưởng' : selected === CALL_KEY ? 'Cách gọi bot' : selectedFolder ? 'Thư mục nhóm' : 'Quyền của nhóm'}>
         ${selectedFolder
-          ? html`<${FolderEditor} key=${selected} folder=${selectedFolder} perms=${perms} list=${list}
+          ? html`<${FolderEditor} key=${selected} folder=${selectedFolder} perms=${perms} list=${list} admin=${me?.role === 'admin'}
               onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} onDeleted=${() => { setDirty(false); setSelected(null); }} />`
           : selected === DM_KEY
-          ? html`<${DmEditor} key=${DM_KEY} dm=${perms.dm} features=${perms.dmFeatures} studioFeatures=${perms.studioFeatures || []}
+          ? html`<${DmEditor} key=${DM_KEY} dm=${perms.dm} folders=${perms.folders || []} features=${perms.dmFeatures} studioFeatures=${perms.studioFeatures || []}
               studioPolicy=${perms.studioPolicy} admin=${me?.role === 'admin'} onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} />`
           : selected === CALL_KEY
           ? html`<${CallWordsEditor} key=${CALL_KEY} onDirty=${setDirty} onBack=${() => choose(null)} />`

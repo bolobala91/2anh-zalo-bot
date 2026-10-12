@@ -1047,3 +1047,15 @@ test('Cấu hình: câu "có hiệu lực ngay" / "cần khởi động lại"',
   assert.equal(restartText(['sidecar']), 'đổi xong cần khởi động lại kết nối Zalo');
   assert.equal(restartText(['assistant', 'sidecar']), 'đổi xong cần khởi động lại trợ lý và kết nối Zalo');
 });
+
+test('nhắn riêng: người trong thư mục được tính là có trong danh sách; nhãn "Theo thư mục"', async () => {
+  const { dmStatus } = await import('./views/chat-perms.js');
+  const { folderOfPeople, folderSummary } = await import('./views/dm-permissions.js');
+  const folders = [{ id: 'a', name: 'BCH', people: [{ uid: '1111111111111111111' }], features: { web: false } }, { id: 'b', name: 'Lớp', people: [{ uid: '1111111111111111111' }] }];
+  const folder = folderOfPeople(folders).get('1111111111111111111');
+  assert.equal(folder.name, 'BCH', 'thư mục đầu giữ người');
+  assert.equal(dmStatus({ who: 'list', people: [] }, '1111111111111111111', folder).allowed, true);
+  assert.equal(dmStatus({ who: 'list', people: [] }, '1111111111111111111').allowed, false);
+  const F = [{ key: 'web', label: 'Web' }, { key: 'kb', label: 'Kho' }];
+  assert.equal(folderSummary(folder, F).text, 'Theo thư mục "BCH" · 1/2');
+});

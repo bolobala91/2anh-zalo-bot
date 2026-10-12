@@ -2,6 +2,17 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.22.0] — 2026-10-12
+
+### Thêm
+
+- **Thư mục chứa được cả người, không chỉ nhóm** (Phân quyền Bot › Thư mục › Người trong thư mục): chọn nhanh người đã nhắn với bot hoặc nhập UID.
+  - Người trong thư mục **được nhắn riêng với bot** (khi đang để "Chủ nhân và những người trong danh sách").
+  - Khi nhắn riêng, họ dùng **đúng các tính năng và xưởng của thư mục**, kể cả hạn mức xưởng. Các nút chỉ dành cho nhóm (bật bot, chỉ trả lời khi tag) không áp cho người.
+  - Người chỉnh riêng ở Nhắn riêng thì phần riêng thắng. Mỗi người thuộc một thư mục.
+- Trang Nhắn riêng hiện "Theo thư mục X · …" cho người trong thư mục, kèm khối "Được nhắn riêng qua thư mục" để nhìn một chỗ thấy hết ai được nhắn. Bảng Quyền trong Phiên chat cũng báo người đó đang theo thư mục nào.
+- Nhãn thư mục ghi cả số người, vd. "3 nhóm · 5 người".
+
 ## [2.21.3] — 2026-10-12
 
 ### Sửa

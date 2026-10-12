@@ -808,6 +808,26 @@ class FolderPermissionsTest(PermissionsFile, unittest.TestCase):
         self.assertEqual(gp.disabled_features(GROUP_B), ["voice"])
         self.assertFalse(gp.group_settings(GROUP_A)["active"])
 
+    def test_person_in_folder_may_dm_and_gets_folder_features_and_studio(self):
+        other = "1111111111111111111"
+        self.write({"version": 1,
+                    "defaults": {"features": {"kb": False, "studioDocs": True}},
+                    "folders": {"bch": {"name": "BCH", "groups": [GROUP_A], "people": [{"uid": MEMBER, "name": "Lan"}, other],
+                                        "features": {"web": False, "studioSlides": True}, "studioQuota": 7}},
+                    "dm": {"who": "list", "features": {"voice": False}, "people": {other: {"features": {"web": True}}}}})
+        s = gp.dm_settings(MEMBER)
+        self.assertTrue(s["listed"], "vào thư mục = có trong danh sách nhắn riêng")
+        self.assertTrue(gp.dm_allows(MEMBER))
+        self.assertEqual((s["features"]["web"], s["features"]["kb"], s["features"]["voice"]), (False, False, True),
+                         "thấy sao áp vậy: mặc định ← thư mục, không theo tính năng chung nhắn riêng")
+        self.assertEqual(set(s["features"]), set(gp.DM_FEATURES))
+        studio = gp.studio_settings(MEMBER, MEMBER, False)
+        self.assertEqual((studio["features"]["studioSlides"], studio["features"]["studioDocs"], studio["quota"]), (True, True, 7))
+        self.assertTrue(gp.dm_settings(other)["features"]["web"], "chỉnh riêng của người thắng thư mục")
+        outsider = gp.dm_settings("2222222222222222222")
+        self.assertEqual((outsider["listed"], outsider["features"]["voice"]), (False, False))
+        self.assertFalse(gp.dm_allows("2222222222222222222"))
+
 
 class StudioPermissionsTest(PermissionsFile, unittest.TestCase):
     """Xưởng tạo sản phẩm (spec §17): thiếu khoá/lỗi = tắt; hạn mức người ← nhóm ← mặc định ← 3."""

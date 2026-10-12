@@ -9,6 +9,8 @@
  *   "people": { "<uid>": { "name": "Cô Lan", "features": { "voice": false } } }
  * }
  * Không có mục `dm` → null: mọi nơi giữ hành vi cũ (ZALO_DM_POLICY, mọi tính năng bật).
+ * Thư mục (`folders[fid].people`) cũng chứa người: vào thư mục = có trong danh sách, và nhận đúng các nút thư mục
+ * đang hiện (mặc định nhóm ← thư mục). Dữ liệu này chỉ gắn vào bản đọc ở kết nối Zalo (`folderPeople`), không ghi lại.
  * Chủ nhân không bao giờ bị mục này chặn — bên gọi tự miễn trừ trước.
  */
 import { readFileSync, statSync } from 'node:fs';
@@ -57,11 +59,27 @@ export function dmVerdict(dm, uid) {
   const key = String(uid ?? '');
   // Object.hasOwn: "constructor", "__proto__"… không được tính là người trong danh sách qua prototype.
   const person = dm?.people && Object.hasOwn(dm.people, key) ? dm.people[key] : undefined;
+  const inFolder = dm?.folderPeople && Object.hasOwn(dm.folderPeople, key) ? dm.folderPeople[key] : undefined;
   const features = Object.fromEntries(DM_FEATURE_KEYS.map((k) => [k, true]));
-  Object.assign(features, bools(dm?.features, DM_FEATURE_KEYS), bools(person?.features, DM_FEATURE_KEYS));
+  Object.assign(features, inFolder ? bools(inFolder, DM_FEATURE_KEYS) : bools(dm?.features, DM_FEATURE_KEYS), bools(person?.features, DM_FEATURE_KEYS));
   const who = dm?.who;
-  const allowed = who == null ? null : who === 'everyone' || (who === 'list' && Boolean(person));
+  const allowed = who == null ? null : who === 'everyone' || (who === 'list' && Boolean(person || inFolder));
   return { allowed, features };
+}
+
+/** `{ uid: nút đã gộp (mặc định nhóm ← thư mục) }` cho mọi người nằm trong thư mục; người ở nhiều thư mục → thư mục đầu. */
+export function folderPeople(data) {
+  const out = {};
+  const defaults = bools(isObj(data?.defaults) ? data.defaults.features : null, DM_FEATURE_KEYS);
+  for (const [fid, f] of Object.entries(isObj(data?.folders) ? data.folders : {})) {
+    if (!/^[a-z0-9]{1,16}$/.test(fid) || !isObj(f) || !Array.isArray(f.people)) continue;
+    const merged = { ...defaults, ...bools(f.features, DM_FEATURE_KEYS) };
+    for (const p of f.people) {
+      const uid = String((isObj(p) ? p.uid : p) ?? '');
+      if (UID_KEY.test(uid) && !Object.hasOwn(out, uid)) out[uid] = merged;
+    }
+  }
+  return out;
 }
 
 /** Đường dẫn permissions.json mà plugin cũng đọc: ZALO_PERMISSIONS_FILE hoặc <HERMES_HOME>/zalo/permissions.json. */
@@ -88,7 +106,11 @@ export function createDmRules({ file, statImpl = statSync, readImpl = (p) => rea
     key = next;
     try {
       const data = JSON.parse(String(readImpl(file)).replace(/^\uFEFF/, ''));
-      value = isObj(data) && data.version === 1 ? normalizeDm(data.dm) : null;
+      if (isObj(data) && data.version === 1) {
+        const fp = folderPeople(data);
+        const dm = normalizeDm(data.dm);
+        value = dm || Object.keys(fp).length ? { ...(dm || { features: {}, people: {} }), folderPeople: fp } : null;
+      } else value = null;
     } catch (err) {
       warn(`[dm] ${file} hỏng — bỏ qua quyền nhắn riêng trong tệp: ${err.message}`);
       value = null;

@@ -5,7 +5,7 @@ import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Notice, SaveBar, Spinner, Toggle } from '../ui.js';
 import { Editor, baseOfGroup, mergeGroups } from './permissions.js';
-import { addPerson, dmDraft, dmPayload, sameDm, WHO_OPTIONS } from './dm-permissions.js';
+import { addPerson, dmDraft, dmPayload, folderOfPeople, sameDm, WHO_OPTIONS } from './dm-permissions.js';
 import { lockedByPolicy } from './studio-box.js';
 import { tintOf } from './shell.js';
 
@@ -19,9 +19,10 @@ const UID = /^[1-9]\d{14,21}$/;
 const LEAVE = 'Bạn có thay đổi quyền chưa lưu. Bỏ thay đổi và đóng?';
 
 /** Người này đang được nhắn riêng với bot không (chủ nhân luôn được — không xét ở đây). */
-export function dmStatus(dm, uid) {
+export function dmStatus(dm, uid, folder = null) {
   const person = dm.people.find((p) => p.uid === uid) || null;
-  return { person, allowed: dm.who === 'everyone' || (dm.who === 'list' && Boolean(person)) };
+  // Người trong thư mục được tính là có trong danh sách nhắn riêng (giống kết nối Zalo và plugin).
+  return { person, allowed: dm.who === 'everyone' || (dm.who === 'list' && Boolean(person || folder)) };
 }
 
 /**
@@ -47,8 +48,9 @@ function DmQuick({ conv, perms, onSaved, onDirty }) {
   if (!UID.test(uid)) return html`<${Notice} kind="info">Hội thoại này không có UID Zalo hợp lệ nên không chỉnh quyền được ở đây.<//>`;
   if ((perms.ownerUids || []).includes(uid)) return html`<${Notice} kind="info"><strong>${conv.name}</strong> là chủ nhân bot — luôn nhắn riêng được và dùng được mọi tính năng, không cần phân quyền.<//>`;
 
-  const { person, allowed } = dmStatus(draft, uid);
-  const was = dmStatus(perms.dm, uid).allowed;
+  const folder = folderOfPeople(perms.folders).get(uid) || null;
+  const { person, allowed } = dmStatus(draft, uid, folder);
+  const was = dmStatus(perms.dm, uid, folder).allowed;
   const everyone = draft.who === 'everyone';
   const features = perms.dmFeatures || [];
   const studioFeatures = perms.studioFeatures || [];
@@ -84,12 +86,13 @@ function DmQuick({ conv, perms, onSaved, onDirty }) {
             hint="Bot đang trả lời mọi người khi nhắn riêng. Bật để đặt tính năng riêng cho người này." />`
         : html`<${Toggle} id="cp-in-list" checked=${allowed} onChange=${toggle} label="Cho nhắn riêng với bot"
             hint=${allowed ? 'Người này nhắn riêng thì bot trả lời.' : 'Người này nhắn riêng thì bot không trả lời.'} />`}
+      ${folder ? html`<${Notice} kind="info">Người này nằm trong thư mục <strong>${folder.name}</strong> nên được nhắn riêng và dùng cài đặt của thư mục${person?.custom ? ' (đang chỉnh riêng — phần riêng thắng)' : ''}. Bỏ khỏi thư mục ở Phân quyền Bot › Thư mục.<//>` : null}
       ${switchedFromOwners ? html`<${Notice} kind="info">Đang ở chế độ <strong>Chỉ chủ nhân</strong> — lưu sẽ chuyển sang <strong>Chủ nhân và những người trong danh sách</strong>. Người khác vẫn bị chặn như cũ.<//>` : null}
     </fieldset>
     ${person ? html`<fieldset class="perm-box">
       <legend>Tính năng của người này</legend>
       <${Toggle} id="cp-custom" checked=${person.custom} label="Dùng tính năng riêng"
-        hint=${person.custom ? 'Các nút dưới đây chỉ áp cho người này.' : 'Đang theo Tính năng chung khi nhắn riêng (Phân quyền Bot › Nhắn riêng) — không phải cài đặt của nhóm.'}
+        hint=${person.custom ? 'Các nút dưới đây chỉ áp cho người này.' : folder ? `Đang theo thư mục "${folder.name}".` : 'Đang theo Tính năng chung khi nhắn riêng (Phân quyền Bot › Nhắn riêng) — không phải cài đặt của nhóm.'}
         onChange=${(v) => setP({ custom: v, features: { ...(v ? draft.features : person.features) }, ...(draft.studio ? { studio: { ...(v ? draft.studio : person.studio || draft.studio) } } : {}) })} />
       ${person.custom ? html`<div class="perm-grid">
         ${features.map((f) => html`<${Toggle} key=${f.key} id=${`cp-${f.key}`} checked=${person.features[f.key]} label=${f.label} hint=${f.hint}

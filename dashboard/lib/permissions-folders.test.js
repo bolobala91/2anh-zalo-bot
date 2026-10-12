@@ -86,3 +86,21 @@ test('dữ liệu sai bị chặn bằng câu tiếng Việt; tệp sửa tay: n
   assert.deepEqual(folders.b2, { name: 'Thư mục', groups: [B] });
   assert.equal(normalize({ version: 1 }).folders, undefined, 'tệp cũ không có thư mục vẫn y như cũ');
 });
+
+test('người trong thư mục: đặt, chuyển giữa thư mục, lưu cài đặt thư mục không làm rơi người', (t) => {
+  const { store, disk } = fresh(t);
+  const P = '1111111111111111111'; const Q = '2222222222222222222';
+  const { id: f1 } = store.createFolder('BCH');
+  const { id: f2 } = store.createFolder('Lớp');
+  store.setFolderPeople(f1, [{ uid: P, name: 'Lan' }, { uid: Q }, { uid: P }]);
+  assert.deepEqual(disk().folders[f1].people, [{ uid: P, name: 'Lan' }, { uid: Q }]);
+  store.setFolderSettings(f1, body({}, { web: false }));
+  assert.equal(disk().folders[f1].people.length, 2, 'lưu cài đặt thư mục giữ danh sách người');
+  const state = store.setFolderPeople(f2, [{ uid: Q, name: 'Minh' }]);
+  assert.deepEqual(disk().folders[f1].people, [{ uid: P, name: 'Lan' }]);
+  assert.deepEqual(state.folders.find((f) => f.id === f2).people, [{ uid: Q, name: 'Minh' }]);
+  store.setFolderPeople(f1, []);
+  assert.equal(disk().folders[f1].people, undefined);
+  assert.throws(() => store.setFolderPeople(f1, [{ uid: '0123' }]), InvalidPermissions);
+  assert.deepEqual(normalizeFolders({ a: { groups: [], people: [P, { uid: P }, 'x'] }, b: { groups: [], people: [P] } }).a.people, [{ uid: P }]);
+});

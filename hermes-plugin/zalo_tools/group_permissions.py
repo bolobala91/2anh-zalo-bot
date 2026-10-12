@@ -188,14 +188,16 @@ def _tools_off(raw: Any) -> frozenset:
 _FOLDER_ID = re.compile(r"^[a-z0-9]{1,16}$")
 
 
-def _folders(raw: Any) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
-    """Mục ``folders`` (thư mục nhóm): ``{fid: lớp}`` và ``{group_id: fid}`` — giống ``normalizeFolders`` bên dashboard.
+def _folders(raw: Any) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str], Dict[str, str]]:
+    """Mục ``folders``: ``{fid: lớp}``, ``{group_id: fid}`` và ``{uid: fid}`` — giống ``normalizeFolders`` bên dashboard.
 
-    Mỗi nhóm thuộc tối đa một thư mục: nhóm có ở nhiều thư mục (tệp sửa tay) thì thư mục đứng trước giữ nhóm."""
+    Thư mục chứa cả nhóm lẫn người (``people``: ``[{uid, name}]`` hoặc chuỗi UID). Mỗi nhóm/người thuộc tối đa một
+    thư mục: có ở nhiều thư mục (tệp sửa tay) thì thư mục đứng trước giữ."""
     if not isinstance(raw, dict):
-        return {}, {}
+        return {}, {}, {}
     layers: Dict[str, Dict[str, Any]] = {}
     owner: Dict[str, str] = {}
+    person_owner: Dict[str, str] = {}
     for fid, entry in raw.items():
         if not _FOLDER_ID.match(str(fid)) or not isinstance(entry, dict):
             continue
@@ -203,7 +205,11 @@ def _folders(raw: Any) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
         for gid in entry.get("groups") if isinstance(entry.get("groups"), list) else []:
             if isinstance(gid, str) and gid.isascii() and gid.isdigit() and gid not in owner:
                 owner[gid] = str(fid)
-    return layers, owner
+        for p in entry.get("people") if isinstance(entry.get("people"), list) else []:
+            uid = str((p.get("uid") if isinstance(p, dict) else p) or "")
+            if uid.isascii() and uid.isdigit() and len(uid) <= 32 and uid not in person_owner:
+                person_owner[uid] = str(fid)
+    return layers, owner, person_owner
 
 
 def _parse(text: str) -> Dict[str, Any]:
@@ -211,11 +217,12 @@ def _parse(text: str) -> Dict[str, Any]:
     if not isinstance(data, dict) or data.get("version") != 1:
         raise ValueError("không phải permissions.json phiên bản 1")
     groups = data.get("groups") if isinstance(data.get("groups"), dict) else {}
-    folders, folder_of = _folders(data.get("folders"))
+    folders, folder_of, person_folder = _folders(data.get("folders"))
     return {
         "defaults": _layer(data.get("defaults")),
         "folders": folders,
         "folder_of": folder_of,
+        "person_folder": person_folder,
         "groups": {str(gid): _layer(entry) for gid, entry in groups.items()},
         "dm": _dm(data.get("dm")),
         "studio": _studio_section(data.get("studio")),
@@ -277,6 +284,12 @@ def _folder_layer(data: Dict[str, Any], group_id: str) -> Dict[str, Any]:
     return ((data.get("folders") or {}).get(fid) or {}) if fid else {}
 
 
+def _person_folder_layer(data: Dict[str, Any], uid: str) -> Optional[Dict[str, Any]]:
+    """Lớp thư mục chứa người này (None = không ở thư mục nào)."""
+    fid = (data.get("person_folder") or {}).get(str(uid or ""))
+    return ((data.get("folders") or {}).get(fid) or {}) if fid else None
+
+
 def tool_off(tool_name: str) -> bool:
     """Chủ bot đã tắt riêng công cụ này với thành viên/người nhắn riêng chưa (chồng lên các nút tính năng)."""
     return str(tool_name or "") in (_load().get("tools_off") or frozenset())
@@ -295,13 +308,22 @@ def dm_settings(uid: str) -> Dict[str, Any]:
     ``ZALO_DM_POLICY`` của adapter). ``listed``: người này có trong danh sách.
     ``features``: đủ 8 nút — mặc định bật ← ``dm.features`` ← ``dm.people[uid].features``.
     """
-    dm = _load().get("dm") or {}
+    data = _load()
+    dm = data.get("dm") or {}
     person = (dm.get("people") or {}).get(str(uid or ""))
+    folder = _person_folder_layer(data, uid)
     features = {feature: True for feature in DM_FEATURES}
-    features.update(dm.get("features") or {})
+    if folder is not None:
+        # Người trong thư mục nhận đúng các nút thư mục đang hiện: mặc định ← thư mục (thấy sao áp vậy).
+        features.update((data.get("defaults") or {}).get("features") or {})
+        features.update(folder.get("features") or {})
+    else:
+        features.update(dm.get("features") or {})
     if person:
         features.update(person.get("features") or {})
-    return {"who": dm.get("who"), "listed": person is not None, "features": features}
+    features = {k: bool(features[k]) for k in DM_FEATURES}
+    # Vào thư mục = có trong danh sách nhắn riêng.
+    return {"who": dm.get("who"), "listed": person is not None or folder is not None, "features": features}
 
 
 def dm_allows(uid: str) -> Optional[bool]:
@@ -378,7 +400,13 @@ def studio_settings(uid: str, thread_id: str, is_group: bool) -> Dict[str, Any]:
     else:
         dm = data.get("dm") or {}
         person = (dm.get("people") or {}).get(str(uid or ""))
-        features.update(dm.get("studio") or {})
+        folder = _person_folder_layer(data, uid)
+        if folder is not None:
+            features.update((data.get("defaults") or {}).get("studio") or {})
+            features.update(folder.get("studio") or {})
+            quota = folder.get("studioQuota")
+        else:
+            features.update(dm.get("studio") or {})
         if person:
             features.update(person.get("studio") or {})
     if video_policy()["videoBlocked"]:
