@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.24.1] — 2026-10-12
+
+### Sửa
+
+- Số cạnh menu "Phiên chat" hiện đúng số hội thoại có tin hôm nay. Ở bản 2.24.0, máy chủ chưa gửi số này nên menu vẫn hiện số tin.
+
 ## [2.24.0] — 2026-10-12
 
 ### Thêm

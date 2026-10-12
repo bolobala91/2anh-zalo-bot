@@ -16,7 +16,7 @@ export function statusRoutes({ sidecar, linker, store, threadNames, health = nul
       if (!store?.available()) return null;
       const s = store.todayStats(startOfDayVN(now()));
       const names = threadNames?.cached() || new Map();
-      return { received: s.received, sent: s.sent, hourly: s.hourly, topGroups: s.topGroups.map((g) => ({ ...g, name: names.get(g.threadId) || fallbackName(g.threadId, 1) })) };
+      return { received: s.received, sent: s.sent, threads: s.threads, hourly: s.hourly, topGroups: s.topGroups.map((g) => ({ ...g, name: names.get(g.threadId) || fallbackName(g.threadId, 1) })) };
     } catch (err) {
       console.error('[dashboard] đọc số liệu hôm nay lỗi:', err);
       return null;
