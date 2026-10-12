@@ -1241,3 +1241,14 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .thread-stats { flex-basis: 100%; order: 10; margin: 2px 0 0; }
 .rs-toggle { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .rs-toggle input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+
+/* Agent › Tính cách: chọn mẫu vai trò. */
+.soul-group { border: 0; padding: 0; margin: 0 0 12px; }
+.soul-group legend { font-weight: 700; font-size: 14px; margin-bottom: 6px; padding: 0; }
+.soul-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.soul-card { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); cursor: pointer; }
+.soul-card input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.soul-card span { display: flex; flex-direction: column; gap: 2px; }
+.soul-card.on { border-color: var(--brand); background: var(--brand-soft); }
+.soul-advanced > summary { cursor: pointer; list-style: revert; }
+.soul-advanced h2.inline { display: inline; font-size: 16px; }

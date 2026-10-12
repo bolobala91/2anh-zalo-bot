@@ -123,6 +123,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     agentConfig: createAgentConfig({ configFile: paths.hermesConfigFile, envValue: (k) => readEnvKey(paths.hermesEnvFile, k) }),
     aiKeys: createAiKeys({ envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, poolFile: join(paths.hermesHome, 'zalo', 'key-pool.json') }),
     aiModels: createAiModels({ configFile: paths.hermesConfigFile, envValue: (k) => readEnvKey(paths.hermesEnvFile, k) }),
+    soulPresetsFile: join(paths.hermesHome, 'zalo', 'soul-presets.json'),
     soul: createSoul({ hermesHome: paths.hermesHome, historyDir: paths.soulHistoryDir }),
     toolsManifestFile: paths.toolsManifestFile,
     agentTrace: createAgentTrace({ dbPath: paths.hermesStateDb }),

@@ -41,3 +41,29 @@ test('Agent: chỉ Quản trị; đổi model không cần khởi động lại;
   assert.deepEqual(deps.activity.list().map((e) => e.action).filter((a) => a.startsWith('agent_')),
     ['agent_soul_restore', 'agent_reasoning', 'agent_soul', 'agent_model']);
 });
+
+test('Agent: chọn nhiều mẫu tính cách + phần riêng → ghép SOUL.md có lịch sử; mẫu lạ/quá nhiều/trống bị từ chối; mở lại đúng lựa chọn', async (t) => {
+  const deps = withAgent(t);
+  deps.soulPresetsFile = join(deps.dir, 'zalo', 'soul-presets.json');
+  const { call } = await startApp(t, deps);
+  const admin = await loginAs(t, deps, call);
+  const put = (body) => call('/api/admin/agent/soul-presets', { method: 'PUT', cookie: admin, body });
+  const v = await call('/api/admin/agent', { cookie: admin });
+  assert.equal(v.json.soulPresets.groups.length, 6);
+  assert.ok(v.json.soulPresets.presets.length >= 15);
+  assert.deepEqual(v.json.soulPresets.selected, []);
+  for (const body of [{ selected: ['khong-co'], custom: '' }, { selected: [], custom: '' }, { selected: 'edu-teacher', custom: '' },
+    { selected: v.json.soulPresets.presets.slice(0, 9).map((p) => p.id), custom: '' }]) {
+    assert.equal((await put(body)).status, 400, JSON.stringify(body).slice(0, 60));
+  }
+  const r = await put({ selected: ['org-youth', 'edu-teacher'], custom: 'Tên: Uyển Nhi. Gọi chủ nhân là "sếp".' });
+  assert.equal(r.status, 200);
+  const soulText = readFileSync(join(deps.dir, 'SOUL.md'), 'utf8');
+  assert.match(soulText, /^# Bạn là ai\nTên: Uyển Nhi/);
+  assert.match(soulText, /Bạn đảm nhận 2 vai trò/);
+  assert.match(soulText, /## Giáo viên – tổ chuyên môn[\s\S]*## Đoàn – Hội – Đội/, 'theo thứ tự trong thư viện');
+  assert.equal(r.json.soul.history.length >= 1, true, 'bản cũ vào lịch sử');
+  assert.deepEqual(r.json.soulPresets.selected, ['org-youth', 'edu-teacher']);
+  assert.equal(r.json.soulPresets.custom, 'Tên: Uyển Nhi. Gọi chủ nhân là "sếp".');
+  assert.ok(deps.restartFlags.get().assistant);
+});

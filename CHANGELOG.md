@@ -2,6 +2,24 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.26.0] — 2026-10-13
+
+### Thêm
+
+- **Mẫu tính cách tiếng Việt cho bot** (Agent › Tính cách): 6 nhóm, 15 vai trò.
+  - Giáo dục: Giáo viên – tổ chuyên môn; Lớp học – GVCN; Trợ giảng học sinh; Trung tâm đào tạo.
+  - Đoàn thể, tổ chức: Đoàn – Hội – Đội; Hành chính – văn phòng; CLB – cộng đồng.
+  - Kinh doanh, bán hàng: Shop bán lẻ – online; Chăm sóc khách hàng; Tư vấn dịch vụ.
+  - Y tế: Phòng khám – nhà thuốc.
+  - Dịch vụ địa phương: Nhà hàng – quán – spa – homestay; Bất động sản.
+  - Cá nhân: Trợ lý cá nhân – gia đình; Nhóm bạn bè – giải trí.
+- **Chọn được nhiều vai trò** (tối đa 8). Bot nhìn nhóm và người đang trò chuyện để dùng đúng vai trò; giới hạn an toàn của mọi vai trò đã chọn luôn áp dụng. Mỗi mẫu theo khung: là ai · tính cách · làm được · cách trả lời · không làm · an toàn. Ngành dễ gây hậu quả có giới hạn bắt buộc (phòng khám: không chẩn đoán, không kê đơn; bất động sản: không cam kết lợi nhuận; trợ giảng: không làm hộ bài).
+- **Phần riêng của bot viết bằng tiếng Việt** (tên, tự giới thiệu, chủ nhân, cách gọi), ghép với các vai trò thành SOUL.md. Có xem trước SOUL sẽ áp dụng; bản cũ vẫn vào lịch sử. Sửa tay toàn bộ SOUL chuyển vào mục "Nâng cao".
+
+### Sửa
+
+- Trang Agent: dòng "Khoá API &amp;amp; Model" hiện đúng thành "Khoá API & Model".
+
 ## [2.25.0] — 2026-10-12
 
 ### Thêm

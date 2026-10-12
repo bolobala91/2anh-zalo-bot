@@ -1082,3 +1082,17 @@ test('phiên chat: dòng thống kê hội thoại — số tin, hôm nay, phiê
     '1.234 tin · 56 hôm nay · 3 phiên AI · phiên hiện tại từ 09/10 (120 lượt)');
   assert.equal(convStats({ total: 5, today: 0, ai: null }), '5 tin · chưa có phiên AI');
 });
+
+test('mẫu tính cách: đủ 6 nhóm, mỗi mẫu có đủ khung; ghép một/nhiều vai trò; ngành y tế có giới hạn bắt buộc', async () => {
+  const { SOUL_GROUPS, SOUL_PRESETS, composeSoul } = await import('./soul-presets.js');
+  assert.equal(SOUL_GROUPS.length, 6);
+  for (const g of SOUL_GROUPS) assert.ok(SOUL_PRESETS.some((p) => p.group === g.id), g.id);
+  assert.equal(new Set(SOUL_PRESETS.map((p) => p.id)).size, SOUL_PRESETS.length);
+  for (const p of SOUL_PRESETS) for (const part of ['Là:', 'Tính cách:', 'Làm được:', 'Cách trả lời:', 'Không làm', 'An toàn:']) assert.ok(p.body.includes(part), `${p.id} thiếu ${part}`);
+  assert.match(SOUL_PRESETS.find((p) => p.id === 'health-clinic').body, /KHÔNG chẩn đoán/);
+  assert.equal(composeSoul('', []), '');
+  const one = composeSoul('', ['biz-shop']);
+  assert.match(one, /^# Vai trò\nLà: nhân viên tư vấn bán hàng/);
+  assert.doesNotMatch(one, /đảm nhận/);
+  assert.match(composeSoul('Tên: Nhi', ['biz-shop', 'personal-friends']), /# Bạn là ai\nTên: Nhi[\s\S]*đảm nhận 2 vai trò[\s\S]*# Luôn nhớ/);
+});
