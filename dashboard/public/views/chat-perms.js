@@ -89,7 +89,7 @@ function DmQuick({ conv, perms, onSaved, onDirty }) {
     ${person ? html`<fieldset class="perm-box">
       <legend>Tính năng của người này</legend>
       <${Toggle} id="cp-custom" checked=${person.custom} label="Dùng tính năng riêng"
-        hint=${person.custom ? 'Các nút dưới đây chỉ áp cho người này.' : 'Đang theo Tính năng chung ở tab Phân quyền Bot › Nhắn riêng.'}
+        hint=${person.custom ? 'Các nút dưới đây chỉ áp cho người này.' : 'Đang theo Tính năng chung khi nhắn riêng (Phân quyền Bot › Nhắn riêng) — không phải cài đặt của nhóm.'}
         onChange=${(v) => setP({ custom: v, features: { ...(v ? draft.features : person.features) }, ...(draft.studio ? { studio: { ...(v ? draft.studio : person.studio || draft.studio) } } : {}) })} />
       ${person.custom ? html`<div class="perm-grid">
         ${features.map((f) => html`<${Toggle} key=${f.key} id=${`cp-${f.key}`} checked=${person.features[f.key]} label=${f.label} hint=${f.hint}

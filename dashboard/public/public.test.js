@@ -352,7 +352,7 @@ const ALL_ON = Object.fromEntries(DM_F.map((f) => [f.key, true]));
 
 test('nhắn riêng: tóm tắt từng người trên hàng gập', async () => {
   const { personSummary } = await import('./views/dm-permissions.js');
-  assert.deepEqual(personSummary({ custom: false, features: { ...ALL_ON, web: false } }, DM_F), { kind: 'idle', text: 'Theo cài đặt chung', detail: '' });
+  assert.deepEqual(personSummary({ custom: false, features: { ...ALL_ON, web: false } }, DM_F), { kind: 'idle', text: 'Theo chung nhắn riêng', detail: '' });
   assert.deepEqual(personSummary({ custom: true, features: ALL_ON }, DM_F), { kind: 'ok', text: 'Riêng · bật tất cả', detail: '' });
   assert.deepEqual(personSummary({ custom: true, features: { ...ALL_ON, voice: false, video: false } }, DM_F),
     { kind: 'warn', text: 'Riêng · 2 tính năng tắt', detail: 'Đang tắt: Tin nhắn thoại, Video' });
@@ -567,7 +567,10 @@ test('xưởng: hàng gập của một người nhắn riêng tóm tắt cả n
     { kind: 'ok', text: 'Riêng · bật tất cả · xưởng 1/4', detail: 'Xưởng bật: Slide PowerPoint' });
   assert.deepEqual(personSummary({ custom: true, features: { ...ALL_ON, voice: false }, studio: S_OFF }, DM_F, SFL),
     { kind: 'warn', text: 'Riêng · 1 tính năng tắt · xưởng 0/4', detail: 'Đang tắt: Tin nhắn thoại. Xưởng tắt hết' });
-  assert.equal(personSummary({ custom: false, features: ALL_ON, studio: S_OFF }, DM_F, SFL).text, 'Theo cài đặt chung');
+  assert.equal(personSummary({ custom: false, features: ALL_ON, studio: S_OFF }, DM_F, SFL).text, 'Theo chung nhắn riêng');
+  // Có cài đặt chung nhắn riêng → nói rõ đang bật bao nhiêu, không nhầm với cài đặt của nhóm.
+  assert.equal(personSummary({ custom: false, features: ALL_ON }, DM_F, SFL, undefined, { ...ALL_ON, voice: false }, S_OFF).text,
+    `Theo chung nhắn riêng · ${DM_F.length - 1}/${DM_F.length} · xưởng 0/4`);
 });
 
 test('xưởng: lượt đã dùng hôm nay và lượt còn (giờ Việt Nam), chỉ khi sổ có số của hôm nay', async () => {

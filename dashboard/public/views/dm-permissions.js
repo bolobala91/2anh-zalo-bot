@@ -117,8 +117,15 @@ export function dmBadge(dm) {
  * Tóm tắt một người trên hàng gập: theo chung / riêng bật hết / riêng tắt N (detail = các tính năng tắt),
  * thêm "xưởng a/b" khi có nút xưởng (nút máy chủ khoá tính là tắt).
  */
-export function personSummary(p, features, studioFeatures = [], policy) {
-  if (!p.custom) return { kind: 'idle', text: 'Theo cài đặt chung', detail: '' };
+export function personSummary(p, features, studioFeatures = [], policy, base = null, baseStudio = null) {
+  if (!p.custom) {
+    // Theo "Tính năng chung khi nhắn riêng" (không phải cài đặt của nhóm) — kèm luôn đang bật bao nhiêu.
+    if (!base) return { kind: 'idle', text: 'Theo chung nhắn riêng', detail: '' };
+    const on = features.filter((f) => base[f.key]).length;
+    const st = studioFeatures.length && baseStudio
+      ? ` · xưởng ${studioFeatures.filter((f) => effectiveStudio(baseStudio, studioFeatures, policy)[f.key]).length}/${studioFeatures.length}` : '';
+    return { kind: 'idle', text: `Theo chung nhắn riêng · ${on}/${features.length}${st}`, detail: 'Đang theo Tính năng chung khi nhắn riêng và Xưởng tạo sản phẩm ở trên' };
+  }
   const off = features.filter((f) => !p.features[f.key]).map((f) => f.label);
   let studioText = '';
   let studioDetail = '';
@@ -144,7 +151,7 @@ export function filterPeople(people, { q = '', customOnly = false, names = new M
 
 function Person({ p, known, base, baseStudio, features, studioFeatures, policy, open, onToggle, onChange, onRemove }) {
   const id = `dm-p-${p.uid}`;
-  const s = personSummary(p, features, studioFeatures, policy);
+  const s = personSummary(p, features, studioFeatures, policy, base, baseStudio);
   // Bật/tắt "tính năng riêng" hoặc đặt lại: nút xưởng đi cùng nút tính năng.
   const withStudio = (st) => (baseStudio && st ? { studio: { ...st } } : {});
   const name = p.name || known || 'Chưa rõ tên';
@@ -158,7 +165,7 @@ function Person({ p, known, base, baseStudio, features, studioFeatures, policy, 
     ${open ? html`<div class="dm-panel" id=${`${id}-panel`}>
       ${s.detail ? html`<p class="muted small">${s.detail}.</p>` : null}
       <${Toggle} id=${`${id}-custom`} checked=${p.custom} label="Dùng tính năng riêng"
-        hint=${p.custom ? 'Các nút dưới đây chỉ áp cho người này.' : 'Đang theo Tính năng chung ở trên.'}
+        hint=${p.custom ? 'Các nút dưới đây chỉ áp cho người này.' : 'Đang theo Tính năng chung khi nhắn riêng ở trên.'}
         onChange=${(v) => onChange({ custom: v, features: { ...(v ? base : p.features) }, ...withStudio(v ? baseStudio : p.studio) })} />
       ${p.custom ? html`<div class="perm-grid">
         ${features.map((f) => html`<${Toggle} key=${f.key} id=${`${id}-${f.key}`} checked=${p.features[f.key]} label=${f.label}
@@ -280,9 +287,9 @@ export function DmEditor({ dm, features, studioFeatures = [], studioPolicy, admi
       <p id="dm-who-hint" class="muted small">${who?.hint}</p>
     </fieldset>
 
-    ${ownersOnly ? html`<${Notice} kind="info">Chỉ chủ nhân nhắn riêng được, nên Tính năng chung, Xưởng tạo sản phẩm và Danh sách người chưa dùng tới. Chọn lựa chọn khác ở trên để chỉnh.<//>` : null}
+    ${ownersOnly ? html`<${Notice} kind="info">Chỉ chủ nhân nhắn riêng được, nên Tính năng chung khi nhắn riêng, Xưởng tạo sản phẩm và Danh sách người chưa dùng tới. Chọn lựa chọn khác ở trên để chỉnh.<//>` : null}
     <details class="perm-box" open=${!ownersOnly}>
-      <summary><span>Tính năng chung</span><span class="muted perm-box-sum">· ${onText(draft.features, features)}</span></summary>
+      <summary><span>Tính năng chung khi nhắn riêng</span><span class="muted perm-box-sum">· ${onText(draft.features, features)}</span></summary>
       <fieldset class="perm-grid" disabled=${ownersOnly}>
         <legend class="sr-only">Tính năng chung khi nhắn riêng</legend>
         ${features.map((f) => html`<${Toggle} key=${f.key} id=${`dm-${f.key}`} checked=${draft.features[f.key]}

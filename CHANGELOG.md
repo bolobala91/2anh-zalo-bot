@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.21.3] — 2026-10-12
+
+### Sửa
+
+- **Phân quyền Bot › Nhắn riêng:** người không chỉnh riêng giờ hiện "Theo chung nhắn riêng · 9/9 · xưởng 0/4" thay vì "Theo cài đặt chung". Trước đây dễ hiểu nhầm là theo cài đặt của nhóm. Khối "Tính năng chung" đổi tên thành "Tính năng chung khi nhắn riêng", và câu gợi ý trong bảng Quyền ở Phiên chat cũng nói rõ.
+
 ## [2.21.2] — 2026-10-12
 
 ### Sửa
