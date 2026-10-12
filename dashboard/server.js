@@ -35,6 +35,7 @@ import { createHermesAdmin } from './lib/hermes-admin.js';
 import { createMaintenance } from './lib/maintenance.js';
 import { createCallWords } from './lib/call-words.js';
 import { createReplyStyle } from './lib/reply-style.js';
+import { createMemoryTags } from './lib/memory-tags.js';
 import { createKbStore } from './lib/kb-store.js';
 import { createInsightAi } from './lib/insight-ai.js';
 import { createAgentConfig, createSoul } from './lib/agent-config.js';
@@ -77,6 +78,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     restartSidecar,
     stateFile: paths.watchdogFile, publicUrl: config.publicUrl, botName: () => botName,
   });
+  const agentMemory = createHermesMemory({ hermesHome: paths.hermesHome, configFile: paths.hermesConfigFile });
   const threadNames = createThreadNames({ loadGroups: () => sidecar.groups(), file: join(paths.dataDir, 'group-names.json') });
   const owners = createOwnersStore({ envFile: paths.hermesEnvFile, sidecarEnvFile: paths.sidecarEnvFile, pendingFile: paths.pendingRestartFile, inheritedValue: inheritedOwners });
   const people = createPeopleStore({ file: readEnvKey(paths.hermesEnvFile, 'ZALO_PEOPLE_FILE') || paths.peopleFile });
@@ -110,7 +112,9 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     brand: createBrandStore({ file: paths.brandFile, logoFile: paths.brandLogoFile }),
     // Cùng tệp plugin đọc: ZALO_PEOPLE_FILE trong .env của Hermes (nếu đặt) thắng đường mặc định.
     people,
-    agentMemory: createHermesMemory({ hermesHome: paths.hermesHome, configFile: paths.hermesConfigFile }),
+    agentMemory,
+    // Thẻ phân loại bộ nhớ + "Sắp xếp lại bằng AI" (plugin zalo_tools/memory_tags.py giữ khoá AI).
+    memoryTags: createMemoryTags({ hermesHome: paths.hermesHome, agentMemory }),
     schedules: createSchedules({ hermesHome: paths.hermesHome, bin: hermesBin({ hermesHome: paths.hermesHome, env }) }),
     // Đọc lại .env mỗi lần: người cài đặt đổi ZALO_KB_DIR thì không cần khởi động lại dashboard.
     kb: createKbStore({ kbDir: () => readEnvKey(paths.hermesEnvFile, 'ZALO_KB_DIR'), publicDirs: () => readEnvKey(paths.hermesEnvFile, 'ZALO_KB_PUBLIC_DIRS'),

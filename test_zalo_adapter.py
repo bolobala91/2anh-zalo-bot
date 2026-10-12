@@ -1765,6 +1765,10 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
                     file_maker.make_file(fmt, "T", directory=tmp, **kwargs)
 
     async def test_make_file_tool_sends_to_current_group_limits_members_and_cleans_up(self):
+        from plugins.zalo_tools import reply_style
+        # Không đọc cài đặt thật của máy chạy test (chủ bot có thể đã đổi mẫu tên tệp).
+        self.enterContext(patch.object(reply_style, "load", lambda home=None: dict(reply_style.DEFAULTS)))
+
         class FakeAdapter:
             def __init__(self):
                 self.calls = []

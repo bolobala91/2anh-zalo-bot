@@ -1589,6 +1589,9 @@ class StudioQueueTest(unittest.IsolatedAsyncioTestCase):
         self.book.take(job_id=job.id, uid=job.uid, name="Lan", kind=job.kind, thread_id=GROUP, is_group=True, quota=3)
 
     async def test_finished_job_is_sent_to_the_captured_thread_recorded_and_cleaned(self):
+        from plugins.zalo_tools import reply_style
+        # Không đọc cài đặt thật của máy chạy test (chủ bot có thể đã đổi mẫu tên tệp).
+        self.enterContext(patch.object(reply_style, "load", lambda home=None: dict(reply_style.DEFAULTS)))
         job = make_job("de_kiem_tra")
         self.take(job)
         where = recipes.Places(studio=None, python=None, skills=self.tmp, node=None)

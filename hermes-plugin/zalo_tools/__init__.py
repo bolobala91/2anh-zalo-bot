@@ -48,6 +48,14 @@ def register(ctx) -> None:
         ctx.register_hook("pre_llm_call", memory_drift.pre_llm_call)
     except Exception:  # cố hết sức — thiếu thì phiên đang chạy chỉ thấy bộ nhớ mới khi bắt đầu phiên mới
         logger.warning("[zalo] không bật được báo bộ nhớ vừa cập nhật", exc_info=True)
+    # Thẻ phân loại bộ nhớ: bot vừa ghi nhớ → AI tách thành thẻ một ý + gắn loại (luồng nền); dashboard xin đề xuất
+    # "Sắp xếp lại" qua cùng hàng đợi — xem memory_tags.py.
+    try:
+        from . import memory_tags
+        memory_tags.start_worker(lambda: getattr(ctx, "llm", None))
+        ctx.register_hook("post_tool_call", memory_tags.post_tool_call)
+    except Exception:  # cố hết sức — thiếu thì bộ nhớ vẫn chạy, chỉ không tự gắn thẻ
+        logger.warning("[zalo] không bật được gắn thẻ bộ nhớ", exc_info=True)
     # Cài đặt trả lời (xưng hô, độ dài, màu…) + giờ hiện tại: đính mỗi lượt Zalo, sửa là áp dụng ngay — xem reply_style.py.
     try:
         from . import reply_style

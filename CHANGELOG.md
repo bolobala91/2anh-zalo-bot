@@ -2,6 +2,24 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.21.0] — 2026-10-12
+
+### Thêm
+
+- **Thẻ phân loại cho bộ nhớ trợ lý** (Trí nhớ › Bộ nhớ của trợ lý). Mỗi mục là một ý và có nhãn loại màu ("Về chủ nhân", "Dịch vụ & giá", "Link & kênh"…).
+  - Có hàng nút lọc theo loại.
+  - Thẻ nằm ngay đầu mục (`[Dịch vụ & giá] …`) nên Hermes đọc bình thường, và bot hiểu ngữ cảnh tốt hơn.
+- **Loại thẻ tuỳ biến:** có sẵn 7 loại; chủ bot thêm, đổi tên, đổi màu, xoá được (nút "Loại thẻ"). Đổi tên thì mọi mục mang loại đó đổi theo; xoá loại thì mục chuyển về "Khác".
+- **Thêm hoặc sửa có ô chọn loại.** Chọn "Tự phân loại" thì AI của bot tách điều vừa dặn thành nhiều thẻ một ý và gắn loại.
+- **Bot tự ghi nhớ thì tự tách và gắn thẻ ngay.** Plugin bắt lúc bot dùng công cụ `memory`, nhờ AI tách mục gộp nhiều ý rồi ghi lại.
+  - Ghi dưới khoá tệp của Hermes và đọc lại tệp trước khi ghi.
+  - Mục mới vẫn qua bộ quét chèn lệnh.
+  - Bộ nhớ gần đầy thì chỉ gắn thẻ, không tách.
+  - Tắt bằng `ZALO_MEMORY_AUTOTAG=off`.
+- **"Sắp xếp lại bằng AI":** AI đề xuất tách và gắn thẻ cho cả tệp. Chủ bot xem bản trước–sau rồi bấm Áp dụng mới ghi; bộ nhớ đổi trong lúc chờ thì không ghi đè.
+- **Lịch sử tự sắp xếp, kèm Hoàn tác** cho từng lần bot tự tách hoặc chủ bot áp dụng.
+- Trần 40 lần sắp xếp bằng AI mỗi ngày.
+
 ## [2.20.4] — 2026-10-12
 
 ### Sửa

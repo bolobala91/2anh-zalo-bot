@@ -89,6 +89,16 @@ export function createHermesMemory({ hermesHome, configFile }) {
       if (entries.includes(next)) throw err(409, 'Trợ lý đã nhớ đúng điều này rồi.');
       save(target, file, stamp, [...entries, next]);
     },
+    /** Danh sách mục hiện tại của một tệp. */
+    entries(target) { return load(target).entries; },
+    /** Thay cả danh sách — chỉ khi danh sách hiện tại đúng bằng `expected` (người dùng đã xem bản đó), không thì 409. */
+    setEntries(target, expected, next, { allowOver = false } = {}) {
+      const { file, stamp, entries } = load(target);
+      if (JSON.stringify(entries) !== JSON.stringify(expected)) throw err(409, 'Bộ nhớ vừa đổi — tải lại trang rồi thử lại.');
+      const clean = next.map((e) => String(e ?? '').replace(/\r\n/g, '\n').trim()).filter(Boolean);
+      if (clean.some((e) => e.includes(DELIMITER) || /^§$/m.test(e))) throw err(400, 'Nội dung không được có dòng chỉ gồm dấu §.');
+      save(target, file, stamp, clean, { allowOver });
+    },
     remove(target, index, old) {
       const { file, stamp, entries } = load(target);
       checkEntry(entries, index, old);

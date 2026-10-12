@@ -5,6 +5,7 @@ import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { Dialog, html, fmtTime, Icon, Live, PageHead, Spinner } from '../ui.js';
 import { LearnedMemory } from './learned-memory.js';
+import { AgentMemory } from './agent-memory.js';
 
 /** Gợi ý tên mục hay dùng — bấm là thêm dòng, khỏi nghĩ tên. */
 export const FIELD_PRESETS = ['Xưng hô', 'Chức vụ', 'Lớp', 'Môn dạy', 'Đơn vị', 'Sở thích', 'Ngày sinh'];
@@ -26,11 +27,7 @@ export function personPayload(d, updatedAt) {
   return out;
 }
 
-/** "1.234/2.200 ký tự (56 %)" cho thanh dung lượng bộ nhớ. */
-export function usageText(used, limit) {
-  const n = new Intl.NumberFormat('vi-VN');
-  return `${n.format(used)}/${n.format(limit)} ký tự (${limit ? Math.min(100, Math.round((used / limit) * 100)) : 0} %)`;
-}
+export { usageText } from './agent-memory.js';
 
 /** Nhãn "dùng ở đâu" của một mục: danh sách nơi, rỗng = chỉ khi nhắn riêng với chính người đó. */
 export const placesText = (places) => (places && places.length ? places.join(', ') : 'Chỉ khi nhắn riêng');
@@ -125,62 +122,6 @@ function People() {
       <small class="muted">Sửa ${fmtTime(p.updatedAt)}</small>
     </button>`)}</div>
     ${open ? html`<${PersonDialog} person=${open} onDone=${done} onStale=${stale} onClose=${() => setOpen(null)} />` : null}
-  </section>`;
-}
-
-/** Cửa sổ thêm/sửa một điều trợ lý cần nhớ. */
-function EntryDialog({ target, label, entry, onSaved, onClose }) {
-  const [text, setText] = useState(entry?.text || '');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  async function save(e) {
-    e.preventDefault(); setBusy(true); setError('');
-    try {
-      const r = entry ? await api(`/api/admin/agent-memory/${target}/${entry.index}`, { method: 'PUT', body: { old: entry.text, text } })
-        : await api(`/api/admin/agent-memory/${target}`, { method: 'POST', body: { text } });
-      onSaved(r, entry ? 'Đã lưu.' : 'Đã thêm.');
-    } catch (err) { setError(err.message); setBusy(false); }
-  }
-  async function remove() {
-    if (!confirm('Xoá điều này khỏi bộ nhớ của trợ lý?')) return;
-    setBusy(true); setError('');
-    try { onSaved(await api(`/api/admin/agent-memory/${target}/${entry.index}`, { method: 'DELETE', body: { old: entry.text } }), 'Đã xoá.'); } catch (err) { setError(err.message); setBusy(false); }
-  }
-  return html`<${Dialog} title=${entry ? `Sửa — ${label}` : `Thêm vào ${label}`} onClose=${onClose} dirty=${() => !busy && text !== (entry?.text || '')} wide>
-    <form class="stack" onSubmit=${save}>
-      <label class="field"><span>Điều trợ lý cần nhớ</span>
-        <textarea rows="5" required value=${text} placeholder="Ví dụ: Chủ nhân dạy Hoá, thích câu trả lời ngắn gọn có gạch đầu dòng." onInput=${(e) => setText(e.currentTarget.value)}></textarea>
-        <small class="muted">Viết như dặn một người trợ lý: một ý, rõ ràng. Áp dụng từ phiên trò chuyện mới.</small></label>
-      <${Live} error=${error} />
-      <div class="dialog-actions">
-        <button class="btn btn-primary" disabled=${busy || !text.trim()}>${busy ? 'Đang lưu…' : entry ? 'Lưu' : 'Thêm'}</button>
-        ${entry ? html`<button type="button" class="btn btn-danger-outline" disabled=${busy} onClick=${remove}>Xoá</button>` : null}
-      </div>
-    </form>
-  <//>`;
-}
-
-function AgentMemory() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState('');
-  const [ok, setOk] = useState('');
-  const [open, setOpen] = useState(null); // { target, entry|null }
-  useEffect(() => { api('/api/admin/agent-memory').then(setData).catch((e) => setError(e.message)); }, []);
-  const saved = (r, text) => { setData(r); setOpen(null); setOk(text); };
-  return html`<section class="card">
-    <h2>Bộ nhớ của trợ lý <span class="badge">Quản trị</span></h2>
-    <p class="muted small">Những điều trợ lý luôn nhớ ở mọi cuộc trò chuyện. Bấm một dòng để sửa hoặc xoá.</p>
-    <${Live} error=${error} ok=${ok} />
-    ${!data && !error ? html`<${Spinner} />` : null}
-    ${data ? ['user', 'memory'].map((t) => html`<div key=${t} class="mem-block">
-      <div class="toolbar"><h3>${data[t].label} <small class="muted">${usageText(data[t].used, data[t].limit)}</small></h3>
-        <button type="button" class="btn btn-secondary btn-sm" onClick=${() => setOpen({ target: t, entry: null })}><${Icon} name="plus" size=${14} /> Thêm điều cần nhớ</button></div>
-      <progress class="mem-usage" max=${data[t].limit} value=${Math.min(data[t].used, data[t].limit)} aria-label=${`Dung lượng ${data[t].label}`}></progress>
-      ${data[t].entries.length ? null : html`<p class="muted">Chưa có điều nào.</p>`}
-      <ul class="mem-list">${data[t].entries.map((text, i) => html`<li key=${`${t}-${i}-${text.length}`}>
-        <button type="button" class="mem-line" onClick=${() => setOpen({ target: t, entry: { index: i, text } })}>${text}</button></li>`)}</ul>
-    </div>`) : null}
-    ${open ? html`<${EntryDialog} target=${open.target} label=${data[open.target].label} entry=${open.entry} onSaved=${saved} onClose=${() => setOpen(null)} />` : null}
   </section>`;
 }
 
