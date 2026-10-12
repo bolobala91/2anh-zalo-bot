@@ -16,7 +16,7 @@ export const CHOICES = {
 export const TEXT_LIMITS = { self_name: 20, owner_name: 30, others_name: 30, extra: 500 };
 export const DEFAULTS = Object.freeze({
   self_name: 'em', owner_name: 'anh/chị', others_name: 'anh/chị', tone: 'friendly', length: 'medium', emoji: 'few',
-  colors: [...COLORS], color_level: 'normal', file_name: 'name_time', extra: '',
+  colors: [...COLORS], color_level: 'normal', file_name: 'name_time', extra: '', auto_lookup: true,
 });
 
 const bad = (message) => Object.assign(new Error(message), { statusCode: 400 });
@@ -38,6 +38,10 @@ export function normalizeStyle(raw, { strict = false } = {}) {
     if (!(key in src)) continue;
     if (allowed.includes(src[key])) out[key] = src[key];
     else if (strict) throw bad(`Giá trị "${key}" không hợp lệ.`);
+  }
+  if ('auto_lookup' in src) {
+    if (typeof src.auto_lookup === 'boolean') out.auto_lookup = src.auto_lookup;
+    else if (strict) throw bad('Tự tra cứu chỉ nhận bật/tắt.');
   }
   if ('colors' in src) {
     const picked = Array.isArray(src.colors) ? src.colors : null;

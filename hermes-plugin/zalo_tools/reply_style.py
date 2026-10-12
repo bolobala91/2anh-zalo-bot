@@ -41,6 +41,7 @@ DEFAULTS: Dict[str, Any] = {
     "color_level": "normal",
     "file_name": "name_time",
     "extra": "",
+    "auto_lookup": True,
 }
 
 _TONE = {"friendly": "thân thiện, tự nhiên", "playful": "vui vẻ, dí dỏm (việc nghiêm túc vẫn nghiêm túc)",
@@ -90,6 +91,11 @@ def normalize(raw: Any, *, strict: bool = False) -> Dict[str, Any]:
                 out[key] = raw[key]
             elif strict:
                 raise StyleError(f"{key} chỉ nhận: {', '.join(allowed)}")
+    if "auto_lookup" in raw:
+        if isinstance(raw["auto_lookup"], bool):
+            out["auto_lookup"] = raw["auto_lookup"]
+        elif strict:
+            raise StyleError("auto_lookup chỉ nhận true/false")
     if "colors" in raw:
         picked = raw["colors"] if isinstance(raw["colors"], list) else None
         if strict and (picked is None or any(c not in COLORS for c in picked)):

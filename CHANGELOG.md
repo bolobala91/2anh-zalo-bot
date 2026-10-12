@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.25.0] — 2026-10-12
+
+### Thêm
+
+- **Tự tra cứu trước khi trả lời câu hỏi cần thông tin mới** (tin tức, giá cả, quy định, nghị định, phác đồ, chỉ đạo, kết quả, tuyển sinh, "mới nhất", "hiện nay", "hôm nay"…).
+  - Plugin tự tra web **trước**, rồi đính tối đa 5 kết quả (nguồn, link, đoạn trích, giờ tra) vào câu hỏi gửi cho bot, kèm luật: dựa vào nguồn chứ không dựa vào trí nhớ mô hình, đối chiếu từ 2 nguồn, ghi nguồn ở cuối, số liệu có ngày khác hôm nay thì ghi rõ "cập nhật ngày …".
+  - Lý do: chỉ dặn "hãy tra trước" là chưa đủ — đo trên dữ liệu thật, 4/6 câu "mới nhất" ở một bot được trả lời bằng kiến thức cũ của mô hình.
+  - Thời tiết và tỉ giá thì bắt buộc dùng công cụ riêng, và ghi đúng ngày của số liệu. Trước đây bot từng gọi tỉ giá ngày 11/10 là "hôm nay" vào ngày 12/10.
+  - Bật/tắt ở Cấu hình › Phong cách trả lời › Tự tra cứu trước khi trả lời (mặc định bật), hoặc dặn bot qua `zalo_reply_style`.
+
 ## [2.24.1] — 2026-10-12
 
 ### Sửa

@@ -3240,6 +3240,7 @@ TOOLS = [
             "file_name": {"type": "string", "enum": ["name_time", "name_date", "name"],
                           "description": "Tên tệp: Tên_YYYYMMDD-HHMMSS / Tên_YYYYMMDD / chỉ Tên."},
             "extra": {"type": "string", "description": "Lời dặn thêm về cách trả lời (tối đa 500 ký tự; '' để xoá)."},
+            "auto_lookup": {"type": "boolean", "description": "Tự tra web trước khi trả lời câu hỏi cần thông tin mới (mặc định bật)."},
         },
         [],
     ), zalo_reply_style, TOOLSET_OWNER),

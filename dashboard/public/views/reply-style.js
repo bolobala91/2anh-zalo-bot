@@ -59,6 +59,10 @@ export function ReplyStyle() {
         <${Select} id="rs-emoji" label="Emoji" value=${draft.emoji} options=${STYLE_OPTIONS.emoji} onChange=${set('emoji')} />
       </div>
     </fieldset>
+    <fieldset class="mem-block"><legend><h3>Thông tin mới</h3></legend>
+      <label class="rs-toggle"><input type="checkbox" checked=${draft.auto_lookup !== false} onChange=${(e) => set('auto_lookup')(e.currentTarget.checked)} />
+        <span><strong>Tự tra cứu trước khi trả lời</strong><small class="muted"> — câu hỏi về tin tức, giá cả, quy định, "mới nhất"…: bot tra web trước, đối chiếu nguồn và ghi nguồn. Mô hình AI chỉ biết tới lúc huấn luyện nên nên để bật.</small></span></label>
+    </fieldset>
     <fieldset class="mem-block"><legend><h3>Màu chữ</h3></legend>
       <${Select} id="rs-color-level" label="Mức tô màu" value=${draft.color_level} options=${STYLE_OPTIONS.color_level} onChange=${set('color_level')} />
       <div class="field" role="group" aria-label="Màu được dùng"><span class="rs-label">Màu được dùng</span>

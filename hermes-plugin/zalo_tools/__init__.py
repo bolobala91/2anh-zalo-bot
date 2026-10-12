@@ -56,6 +56,13 @@ def register(ctx) -> None:
         ctx.register_hook("post_tool_call", memory_tags.post_tool_call)
     except Exception:  # cố hết sức — thiếu thì bộ nhớ vẫn chạy, chỉ không tự gắn thẻ
         logger.warning("[zalo] không bật được gắn thẻ bộ nhớ", exc_info=True)
+    # Câu hỏi cần thông tin mới ("mới nhất", giá, quy định…): plugin tự tra web trước rồi đính kết quả + luật dùng nguồn
+    # vào tin của lượt — mô hình không thể "quên tra" (xem freshness.py). Tắt ở Cấu hình › Phong cách trả lời.
+    try:
+        from . import freshness
+        ctx.register_hook("pre_llm_call", freshness.pre_llm_call)
+    except Exception:  # cố hết sức — thiếu thì bot vẫn trả lời, chỉ không tự tra trước
+        logger.warning("[zalo] không bật được tra cứu trước khi trả lời", exc_info=True)
     # Cài đặt trả lời (xưng hô, độ dài, màu…) + giờ hiện tại: đính mỗi lượt Zalo, sửa là áp dụng ngay — xem reply_style.py.
     try:
         from . import reply_style
