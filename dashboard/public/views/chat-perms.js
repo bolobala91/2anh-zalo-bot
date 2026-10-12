@@ -4,7 +4,7 @@
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Notice, SaveBar, Spinner, Toggle } from '../ui.js';
-import { Editor, mergeGroups } from './permissions.js';
+import { Editor, baseOfGroup, mergeGroups } from './permissions.js';
 import { addPerson, dmDraft, dmPayload, sameDm, WHO_OPTIONS } from './dm-permissions.js';
 import { lockedByPolicy } from './studio-box.js';
 import { tintOf } from './shell.js';
@@ -126,9 +126,11 @@ export function PermsPanel({ conv, onClose }) {
     const id = String(conv.threadId);
     const target = mergeGroups([{ id, name: conv.name, members: null }], perms).find((g) => g.id === id);
     const pick = (s) => ({ active: s.active, replyOnlyTagged: s.replyOnlyTagged, features: { ...s.features }, studio: { ...(s.studio || {}) }, studioQuota: s.studioQuota ?? null });
-    body = html`<${Editor} key=${id} head=${false} target=${target} value=${pick(target)} defaults=${pick(perms.defaults)}
+    body = html`<${Editor} key=${id} head=${false} target=${target} value=${pick(target)} defaults=${pick(baseOfGroup(perms, id))}
       features=${perms.features} studioFeatures=${perms.studioFeatures || []} studioPolicy=${perms.studioPolicy}
-      defaultQuota=${perms.studio?.quota ?? 3} onSaved=${(r) => { setPerms(r); return true; }} onDirty=${setDirty} onBack=${close} />`;
+      defaultQuota=${perms.studio?.quota ?? 3} onSaved=${(r) => { setPerms(r); return true; }} onDirty=${setDirty} onBack=${close}
+      baseLabel=${target.folder ? 'Theo thư mục' : 'Dùng mặc định'}
+      note=${target.folder ? `Nhóm thuộc thư mục "${target.folder.name}": mục nào chưa chỉnh riêng thì theo thư mục — chỉnh thư mục ở trang Phân quyền Bot.` : null} />`;
   } else body = html`<${DmQuick} key=${conv.threadId} conv=${conv} perms=${perms} onSaved=${setPerms} onDirty=${setDirty} />`;
 
   return html`<aside class="side-panel perms-panel" aria-label=${group ? 'Quyền của nhóm' : 'Quyền nhắn riêng'} onKeyDown=${(e) => { if (e.key === 'Escape') close(); }}>

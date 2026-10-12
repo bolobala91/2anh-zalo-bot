@@ -1163,3 +1163,17 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .thread-head > .head-perms { gap: 6px; }
 .thread-head > .head-perms.active { background: color-mix(in srgb, var(--tint) 12%, transparent); color: var(--tint); }
 .perms-title { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Thư mục nhóm (Phân quyền Bot): tiêu đề mục trong danh sách, nhãn thư mục của nhóm, danh sách chọn nhóm. */
+.conv-list > .folder-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 4px 4px;
+  font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.conv-list > .folder-empty { padding: 4px 8px 8px; }
+.conv-folder .conv-name { display: inline-flex; align-items: center; gap: 6px; }
+.folder-tag { display: inline-flex; align-items: center; gap: 3px; color: var(--brand-dark); font-weight: 600; }
+.folder-members { list-style: none; margin: 8px 0; padding: 0; max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+.folder-members li + li { border-top: 1px solid var(--border); }
+.folder-members label { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; min-height: 44px; }
+.folder-members label:hover { background: var(--bg); }
+.folder-edit .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.folder-edit .thread-head h2 { display: inline-flex; align-items: center; gap: 8px; }
+.folder-settings-head { margin: 16px 0 4px; font-size: 15px; }

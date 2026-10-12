@@ -2,6 +2,19 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.18.0] — 2026-10-12
+
+### Thêm
+**Thư mục nhóm** (Phân quyền Bot), giống thư mục chat của Telegram: gom các nhóm cùng chủ đề để chỉnh và bật/tắt hàng loạt.
+- **Tạo, đổi tên, xoá thư mục.** Chọn nhóm cho thư mục bằng danh sách có ô lọc. Mỗi nhóm thuộc một thư mục; chọn nhóm đang ở thư mục khác thì nhóm chuyển sang.
+- **Cài đặt chung của thư mục** gồm đủ những gì một nhóm có: Hoạt động, Chỉ trả lời khi được tag, 10 tính năng, xưởng tạo sản phẩm và số lượt. Mọi nhóm trong thư mục **thừa hưởng ngay khi lưu**, kể cả nhóm thêm vào sau.
+- **Bật/Tắt bot cả thư mục** bằng một nút. Nút này áp cho mọi nhóm bên trong, bỏ cả phần "Hoạt động" mà từng nhóm đã chỉnh riêng.
+- **Nhóm vẫn chỉnh riêng được.** Mục nào nhóm chỉnh riêng thì mục đó của nhóm thắng; nút "Theo thư mục" bỏ phần chỉnh riêng. Danh sách nhóm hiện nhãn thư mục của từng nhóm.
+- **Thứ tự ưu tiên:** Mặc định ← Thư mục ← Nhóm. Bot áp dụng ngay, không cần khởi động lại.
+- **Xoá thư mục:** các nhóm bên trong quay về theo Mặc định, phần chỉnh riêng của từng nhóm giữ nguyên.
+- Mọi thao tác với thư mục đều được ghi Nhật ký kèm tên người làm.
+- Bảng Quyền trong Phiên chat cũng biết nhóm đang thuộc thư mục nào.
+
 ## [2.17.1] — 2026-10-12
 
 ### Sửa

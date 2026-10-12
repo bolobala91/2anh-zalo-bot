@@ -1,9 +1,11 @@
 /**
  * Phân quyền Bot theo nhóm (spec §8): đọc/ghi/kiểm `<HERMES_HOME>/zalo/permissions.json`.
  * Plugin Python (hermes-plugin/zalo_tools/group_permissions.py) đọc nóng tệp này — hai bên
- * phải cùng lược đồ: lớp gộp mặc định gốc ← `defaults` ← `groups[id]`, khoá thiếu rơi xuống lớp dưới.
+ * phải cùng lược đồ: lớp gộp mặc định gốc ← `defaults` ← thư mục chứa nhóm (`folders[fid]`, mỗi nhóm tối đa một
+ * thư mục) ← `groups[id]`, khoá thiếu rơi xuống lớp dưới.
  * Ghi nguyên tử (tệp tạm rồi đổi tên), quyền 600, giữ bản trước ở `.bak`.
  */
+import { randomBytes } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { parseEnv } from 'node:util';
 import YAML from 'yaml';
@@ -60,6 +62,9 @@ const SWITCHES = ['active', 'replyOnlyTagged'];
 export const GROUP_ID = /^\d{1,32}$/;
 const MAX_NAME = 120;
 const MAX_GROUPS = 500;
+export const FOLDER_ID = /^[a-z0-9]{1,16}$/;
+export const MAX_FOLDERS = 50;
+const MAX_FOLDER_NAME = 60;
 const MAX_DM_PEOPLE = 200;
 const MAX_PERSON_NAME = 80;
 
@@ -176,6 +181,22 @@ function normalizeStudio(raw) {
   return out;
 }
 
+/**
+ * Mục `folders` (thư mục nhóm), giống `_folders` bên Python: `{ fid: { name, groups: [id], ...lớp } }`.
+ * Mỗi nhóm thuộc tối đa một thư mục — nhóm có ở nhiều thư mục (tệp sửa tay) thì thư mục đứng trước giữ nhóm.
+ */
+export function normalizeFolders(raw) {
+  const out = {};
+  const taken = new Set();
+  for (const [fid, entry] of Object.entries(isObj(raw) ? raw : {})) {
+    if (!FOLDER_ID.test(fid) || !isObj(entry) || Object.keys(out).length >= MAX_FOLDERS) continue;
+    const groups = (Array.isArray(entry.groups) ? entry.groups : []).filter((id) => typeof id === 'string' && GROUP_ID.test(id) && !taken.has(id)).slice(0, MAX_GROUPS);
+    groups.forEach((id) => taken.add(id));
+    out[fid] = { name: tidy(entry.name, MAX_FOLDER_NAME) || 'Thư mục', groups, ...layer(entry) };
+  }
+  return out;
+}
+
 /** Chuẩn hoá nội dung tệp; ném lỗi khi không phải lược đồ phiên bản 1. */
 export function normalize(raw) {
   if (!isObj(raw) || raw.version !== 1) throw new Error('không phải permissions.json phiên bản 1');
@@ -191,7 +212,9 @@ export function normalize(raw) {
   const studio = normalizeStudio(raw.studio);
   // Mục `tools` (giai đoạn 7B, spec §18.6): công cụ tắt riêng với người không phải chủ nhân — cũng phải sống qua mọi lần lưu.
   const tools = normalizeTools(raw.tools);
-  return { version: 1, defaults: layer(raw.defaults), groups, ...(dm ? { dm } : {}), ...(studio ? { studio } : {}), ...(tools ? { tools } : {}) };
+  const folders = normalizeFolders(raw.folders);
+  return { version: 1, defaults: layer(raw.defaults), groups, ...(Object.keys(folders).length ? { folders } : {}),
+    ...(dm ? { dm } : {}), ...(studio ? { studio } : {}), ...(tools ? { tools } : {}) };
 }
 
 export const TOOL_NAME = /^[a-z0-9_]{1,64}$/;
@@ -362,12 +385,49 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
     people: Object.entries(st?.people || {}).map(([uid, p]) => ({ uid, name: p.name || '', quota: p.quota })),
   });
 
+  /** Thư mục chứa nhóm (id) hoặc null. */
+  const folderOf = (data, groupId) => Object.entries(data.folders || {}).find(([, f]) => f.groups.includes(groupId))?.[0] || null;
+  /** Cài đặt nền của nhóm: thư mục đã gộp (nếu nhóm thuộc thư mục) hoặc mặc định. Hạn mức xưởng của thư mục đi kèm. */
+  const baseOf = (data, defaults, groupId) => {
+    const fid = folderOf(data, groupId);
+    const f = fid ? data.folders[fid] : null;
+    return f ? { ...merge(defaults, f), studioQuota: f.studioQuota ?? null, folder: fid } : { ...defaults, studioQuota: null, folder: null };
+  };
+
   const view = ({ data, exists, corrupt }) => {
     const defaults = merge(builtin(), data.defaults);
-    const groups = Object.fromEntries(Object.entries(data.groups).map(([id, g]) => [id, {
-      name: g.name || '', custom: true, ...merge(defaults, g), studioQuota: g.studioQuota ?? null,
-    }]));
-    return { exists, corrupt, defaults, groups, dm: dmView(data.dm), studio: studioView(data.studio), toolsOff: data.tools?.off || [] };
+    const groups = Object.fromEntries(Object.entries(data.groups).map(([id, g]) => {
+      const base = baseOf(data, defaults, id);
+      return [id, { name: g.name || '', custom: true, folder: base.folder, ...merge(base, g), studioQuota: g.studioQuota ?? base.studioQuota }];
+    }));
+    const folders = Object.entries(data.folders || {}).map(([id, f]) => ({
+      id, name: f.name, groups: [...f.groups], ...merge(defaults, f), studioQuota: f.studioQuota ?? null,
+    }));
+    return { exists, corrupt, defaults, groups, folders, dm: dmView(data.dm), studio: studioView(data.studio), toolsOff: data.tools?.off || [] };
+  };
+
+  /** Lớp chỉ giữ khoá khác `base` (đã gộp) — dùng cho nhóm (nền: thư mục/mặc định) và thư mục (nền: mặc định). */
+  const diffLayer = (settings, base, prev) => {
+    const entry = {};
+    for (const k of SWITCHES) if (settings[k] !== base[k]) entry[k] = settings[k];
+    const features = Object.fromEntries(FEATURE_KEYS.filter((k) => settings.features[k] !== base.features[k]).map((k) => [k, settings.features[k]]));
+    const studio = settings.studio ?? { ...base.studio, ...pickBools(prev.features, STUDIO_KEYS) };
+    for (const k of STUDIO_KEYS) if (studio[k] !== base.studio[k]) features[k] = studio[k];
+    if (Object.keys(features).length) entry.features = features;
+    const quota = settings.studioQuota === undefined ? prev.studioQuota ?? null : settings.studioQuota;
+    if (quota !== null && quota !== base.studioQuota) entry.studioQuota = quota;
+    const changed = [...SWITCHES.filter((k) => settings[k] !== base[k]), ...Object.keys(features), ...('studioQuota' in entry ? ['studioQuota'] : [])];
+    return { entry, changed };
+  };
+
+  const folderOrThrow = (data, fid) => {
+    if (!FOLDER_ID.test(String(fid)) || !data.folders?.[fid]) throw new InvalidPermissions('Không thấy thư mục này — tải lại trang rồi thử lại.');
+    return data.folders[fid];
+  };
+  const folderName = (name) => {
+    const clean = tidy(name, MAX_FOLDER_NAME);
+    if (!clean) throw new InvalidPermissions('Thư mục cần một cái tên — vd. "Lớp học", "Đoàn trường".');
+    return clean;
   };
 
   return {
@@ -392,17 +452,9 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       const { data } = read();
       const prevName = data.groups[groupId]?.name;
       seedReplyOnlyTagged(data);
-      const defaults = merge(builtin(), data.defaults);
-      const entry = {};
-      for (const k of SWITCHES) if (settings[k] !== defaults[k]) entry[k] = settings[k];
-      const features = Object.fromEntries(FEATURE_KEYS.filter((k) => settings.features[k] !== defaults.features[k]).map((k) => [k, settings.features[k]]));
-      const prev = data.groups[groupId] || {};
-      const studio = settings.studio ?? { ...defaults.studio, ...pickBools(prev.features, STUDIO_KEYS) };
-      for (const k of STUDIO_KEYS) if (studio[k] !== defaults.studio[k]) features[k] = studio[k];
-      if (Object.keys(features).length) entry.features = features;
-      const quota = settings.studioQuota === undefined ? prev.studioQuota ?? null : settings.studioQuota;
-      if (quota !== null) entry.studioQuota = quota;
-      const changed = [...SWITCHES.filter((k) => settings[k] !== defaults[k]), ...Object.keys(features), ...(quota !== null ? ['studioQuota'] : [])];
+      // Nền của nhóm: thư mục chứa nó (nếu có), không thì mặc định — nhóm chỉ ghi khoá khác nền.
+      const base = baseOf(data, merge(builtin(), data.defaults), groupId);
+      const { entry, changed } = diffLayer(settings, base, data.groups[groupId] || {});
       const cleanName = String(name || prevName || '').trim().slice(0, MAX_NAME);
       if (Object.keys(entry).length && !data.groups[groupId] && Object.keys(data.groups).length >= MAX_GROUPS) {
         throw new InvalidPermissions(`Đã có ${MAX_GROUPS} nhóm được chỉnh riêng, chưa thêm được nhóm nữa — đưa bớt nhóm về mặc định rồi thử lại.`);
@@ -413,6 +465,77 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       else delete data.groups[groupId];
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), changed };
+    },
+    /** Tạo thư mục rỗng (theo mặc định). Trả `{ state, id }`. */
+    createFolder(name) {
+      const clean = folderName(name);
+      const { data } = read();
+      data.folders = data.folders || {};
+      if (Object.keys(data.folders).length >= MAX_FOLDERS) throw new InvalidPermissions(`Tối đa ${MAX_FOLDERS} thư mục — xoá bớt rồi tạo mới.`);
+      let id;
+      do { id = randomBytes(5).toString('hex').slice(0, 8); } while (data.folders[id]);
+      data.folders[id] = { name: clean, groups: [] };
+      write(data);
+      return { state: view({ data, exists: true, corrupt: false }), id };
+    },
+    renameFolder(fid, name) {
+      const clean = folderName(name);
+      const { data } = read();
+      folderOrThrow(data, fid).name = clean;
+      write(data);
+      return view({ data, exists: true, corrupt: false });
+    },
+    /** Xoá thư mục: nhóm bên trong quay về theo mặc định, phần chỉnh riêng của từng nhóm giữ nguyên. */
+    deleteFolder(fid) {
+      const { data } = read();
+      folderOrThrow(data, fid);
+      delete data.folders[fid];
+      write(data);
+      return view({ data, exists: true, corrupt: false });
+    },
+    /** Đặt danh sách nhóm của thư mục; nhóm đang ở thư mục khác thì chuyển sang (mỗi nhóm một thư mục). */
+    setFolderMembers(fid, ids) {
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !GROUP_ID.test(id))) throw new InvalidPermissions('Danh sách nhóm không hợp lệ — tải lại trang rồi thử lại.');
+      const unique = [...new Set(ids)];
+      if (unique.length > MAX_GROUPS) throw new InvalidPermissions(`Một thư mục tối đa ${MAX_GROUPS} nhóm.`);
+      const { data } = read();
+      const folder = folderOrThrow(data, fid);
+      for (const [other, f] of Object.entries(data.folders)) if (other !== fid) f.groups = f.groups.filter((id) => !unique.includes(id));
+      folder.groups = unique;
+      write(data);
+      return view({ data, exists: true, corrupt: false });
+    },
+    /** Lưu cài đặt thư mục (đã qua parseSettings): chỉ ghi khoá khác mặc định — nhóm bên trong thừa hưởng ngay. */
+    setFolderSettings(fid, settings) {
+      const { data } = read();
+      const folder = folderOrThrow(data, fid);
+      seedReplyOnlyTagged(data);
+      const defaults = { ...merge(builtin(), data.defaults), studioQuota: null };
+      const { entry, changed } = diffLayer(settings, defaults, folder);
+      data.folders[fid] = { name: folder.name, groups: folder.groups, ...entry };
+      write(data);
+      return { state: view({ data, exists: true, corrupt: false }), changed };
+    },
+    /**
+     * Bật/tắt nhanh cả thư mục: đặt "Hoạt động" của thư mục và bỏ "Hoạt động" chỉnh riêng của các nhóm bên trong,
+     * để mọi nhóm trong thư mục cùng theo một trạng thái. Trả `{ state, cleared }` (số nhóm vừa bỏ chỉnh riêng).
+     */
+    setFolderActive(fid, active) {
+      if (typeof active !== 'boolean') throw new InvalidPermissions('Thiếu trạng thái bật/tắt — tải lại trang rồi thử lại.');
+      const { data } = read();
+      const folder = folderOrThrow(data, fid);
+      const defaults = merge(builtin(), data.defaults);
+      if (active === defaults.active) delete folder.active; else folder.active = active;
+      let cleared = 0;
+      for (const id of folder.groups) {
+        const g = data.groups[id];
+        if (!g || g.active === undefined) continue;
+        const { active: _drop, ...rest } = g;
+        cleared += 1;
+        if (Object.keys(rest).some((k) => k !== 'name')) data.groups[id] = rest; else delete data.groups[id];
+      }
+      write(data);
+      return { state: view({ data, exists: true, corrupt: false }), cleared };
     },
     /**
      * Lưu mục nhắn riêng (đã qua parseDm): `who` + đủ 8 nút chung; mỗi người chỉ ghi nút khác nút chung.

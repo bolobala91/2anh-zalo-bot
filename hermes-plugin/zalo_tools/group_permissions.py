@@ -9,8 +9,8 @@ Tệp chỉ **bớt** quyền trong bộ công cụ công khai, không bao giờ
 nhân. Không có tệp → y như trước khi có tính năng này. Tệp hỏng → ghi cảnh báo
 và dùng mặc định (mọi tính năng bật), không bao giờ làm bot im.
 
-Lớp gộp: mặc định gốc ← ``defaults`` trong tệp ← ``groups[<id>]``. Khoá nào
-thiếu hoặc sai kiểu thì rơi xuống lớp dưới. ``reply_only_tagged`` = None nghĩa
+Lớp gộp: mặc định gốc ← ``defaults`` trong tệp ← thư mục chứa nhóm (``folders[<fid>]``,
+mỗi nhóm thuộc tối đa một thư mục) ← ``groups[<id>]``. Khoá nào thiếu hoặc sai kiểu thì rơi xuống lớp dưới. ``reply_only_tagged`` = None nghĩa
 là "theo cờ toàn cục" ``ZALO_GROUP_REPLY_ONLY_TAGGED`` của adapter.
 """
 
@@ -21,7 +21,7 @@ import re
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -185,13 +185,37 @@ def _tools_off(raw: Any) -> frozenset:
     return frozenset(str(n) for n in raw["off"][:200] if isinstance(n, str) and _TOOL_NAME.match(n))
 
 
+_FOLDER_ID = re.compile(r"^[a-z0-9]{1,16}$")
+
+
+def _folders(raw: Any) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
+    """Mục ``folders`` (thư mục nhóm): ``{fid: lớp}`` và ``{group_id: fid}`` — giống ``normalizeFolders`` bên dashboard.
+
+    Mỗi nhóm thuộc tối đa một thư mục: nhóm có ở nhiều thư mục (tệp sửa tay) thì thư mục đứng trước giữ nhóm."""
+    if not isinstance(raw, dict):
+        return {}, {}
+    layers: Dict[str, Dict[str, Any]] = {}
+    owner: Dict[str, str] = {}
+    for fid, entry in raw.items():
+        if not _FOLDER_ID.match(str(fid)) or not isinstance(entry, dict):
+            continue
+        layers[str(fid)] = _layer(entry)
+        for gid in entry.get("groups") if isinstance(entry.get("groups"), list) else []:
+            if isinstance(gid, str) and gid.isascii() and gid.isdigit() and gid not in owner:
+                owner[gid] = str(fid)
+    return layers, owner
+
+
 def _parse(text: str) -> Dict[str, Any]:
     data = json.loads(text)
     if not isinstance(data, dict) or data.get("version") != 1:
         raise ValueError("không phải permissions.json phiên bản 1")
     groups = data.get("groups") if isinstance(data.get("groups"), dict) else {}
+    folders, folder_of = _folders(data.get("folders"))
     return {
         "defaults": _layer(data.get("defaults")),
+        "folders": folders,
+        "folder_of": folder_of,
         "groups": {str(gid): _layer(entry) for gid, entry in groups.items()},
         "dm": _dm(data.get("dm")),
         "studio": _studio_section(data.get("studio")),
@@ -232,17 +256,25 @@ def _load() -> Dict[str, Any]:
 def group_settings(group_id: str) -> Dict[str, Any]:
     """Quyền đã gộp của một nhóm: ``{active, reply_only_tagged, features, custom}``.
 
-    ``custom``: nhóm có mục riêng trong tệp — phân quyền riêng này thắng danh sách cũ ``owner_only_groups``.
+    ``custom``: nhóm có mục riêng trong tệp hoặc nằm trong một thư mục — phân quyền đã chọn này thắng danh sách
+    cũ ``owner_only_groups``.
     """
     data = _load()
     defaults = data.get("defaults") or {}
+    folder = _folder_layer(data, group_id)
     entry = (data.get("groups") or {}).get(str(group_id or "")) or {}
     features = {feature: True for feature in FEATURES}
-    features.update(defaults.get("features") or {})
-    features.update(entry.get("features") or {})
-    active = entry.get("active", defaults.get("active", True))
-    reply = entry.get("replyOnlyTagged", defaults.get("replyOnlyTagged"))
-    return {"active": active, "reply_only_tagged": reply, "features": features, "custom": bool(entry)}
+    for layer in (defaults, folder, entry):
+        features.update(layer.get("features") or {})
+    active = entry.get("active", folder.get("active", defaults.get("active", True)))
+    reply = entry.get("replyOnlyTagged", folder.get("replyOnlyTagged", defaults.get("replyOnlyTagged")))
+    return {"active": active, "reply_only_tagged": reply, "features": features,
+            "custom": bool(entry) or str(group_id or "") in (data.get("folder_of") or {})}
+
+
+def _folder_layer(data: Dict[str, Any], group_id: str) -> Dict[str, Any]:
+    fid = (data.get("folder_of") or {}).get(str(group_id or ""))
+    return ((data.get("folders") or {}).get(fid) or {}) if fid else {}
 
 
 def tool_off(tool_name: str) -> bool:
@@ -329,18 +361,20 @@ def publish_video_policy(path: Optional[Path] = None) -> Optional[Dict[str, Any]
 def studio_settings(uid: str, thread_id: str, is_group: bool) -> Dict[str, Any]:
     """Quyền xưởng của một người KHÔNG phải chủ nhân trong hội thoại này (bên gọi tự miễn trừ chủ nhân).
 
-    ``features``: đủ 4 nút — TẮT ← ``defaults``/``dm`` ← nhóm/người (khoá thiếu rơi xuống lớp dưới;
+    ``features``: đủ 4 nút — TẮT ← ``defaults``/``dm`` ← thư mục ← nhóm/người (khoá thiếu rơi xuống lớp dưới;
     không có tệp, tệp hỏng, không đọc được → cả 4 tắt). ``quota``: số việc mỗi ngày —
-    ``studio.people[uid]`` ← (trong nhóm) ``groups[id].studioQuota`` ← ``studio.quota`` ← 3.
+    ``studio.people[uid]`` ← (trong nhóm) ``groups[id].studioQuota`` ← thư mục ← ``studio.quota`` ← 3.
     """
     data = _load()
     features = {feature: False for feature in STUDIO_FEATURES}
     quota: Optional[int] = None
     if is_group:
         entry = (data.get("groups") or {}).get(str(thread_id or "")) or {}
+        folder = _folder_layer(data, thread_id)
         features.update((data.get("defaults") or {}).get("studio") or {})
+        features.update(folder.get("studio") or {})
         features.update(entry.get("studio") or {})
-        quota = entry.get("studioQuota")
+        quota = entry.get("studioQuota", folder.get("studioQuota"))
     else:
         dm = data.get("dm") or {}
         person = (dm.get("people") or {}).get(str(uid or ""))

@@ -108,6 +108,60 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity, 
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
 
+  // Thư mục nhóm: nhóm trong thư mục thừa hưởng cài đặt thư mục (mặc định ← thư mục ← nhóm); mỗi nhóm một thư mục.
+  const full = (state) => ({ ok: true, features: FEATURES, dmFeatures: DM_FEATURES, studioFeatures: STUDIO_FEATURES, studioPolicy: policy(),
+    legacyOwnerOnly: legacyOwnerOnly(), ownerUids: ownerUids(), ...state });
+  const folderLabel = (state, fid) => state.folders.find((f) => f.id === fid)?.name || fid;
+  const logFolder = (req, detail) => {
+    try { activity.append({ actor: req.user.username, action: 'permissions_folder', detail }); } catch (err) { console.error('[dashboard] không ghi được Nhật ký phân quyền:', err); }
+  };
+  r.post('/permissions/folders', requireAuth, (req, res) => {
+    try {
+      const { state, id } = permissions.createFolder(req.body?.name);
+      logFolder(req, `tạo thư mục "${folderLabel(state, id)}"`);
+      res.json({ ...full(state), created: id });
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
+  r.put('/permissions/folders/:fid', requireAuth, (req, res) => {
+    try {
+      const state = permissions.renameFolder(req.params.fid, req.body?.name);
+      logFolder(req, `đổi tên thư mục thành "${folderLabel(state, req.params.fid)}"`);
+      res.json(full(state));
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
+  r.delete('/permissions/folders/:fid', requireAuth, (req, res) => {
+    try {
+      const name = folderLabel(permissions.get(), req.params.fid);
+      const state = permissions.deleteFolder(req.params.fid);
+      logFolder(req, `xoá thư mục "${name}" — các nhóm bên trong về theo mặc định`);
+      res.json(full(state));
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
+  r.put('/permissions/folders/:fid/members', requireAuth, (req, res) => {
+    try {
+      const state = permissions.setFolderMembers(req.params.fid, req.body?.groups);
+      const f = state.folders.find((x) => x.id === req.params.fid);
+      logFolder(req, `thư mục "${f?.name}": ${f?.groups.length ?? 0} nhóm`);
+      res.json(full(state));
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
+  r.put('/permissions/folders/:fid/settings', requireAuth, (req, res) => {
+    let s;
+    try { s = parseSettings(req.body); } catch (err) { return fail(res, err, SAVE_FAIL); }
+    try {
+      const { state, changed } = permissions.setFolderSettings(req.params.fid, s);
+      logFolder(req, `thư mục "${folderLabel(state, req.params.fid)}": ${changed.length ? describeSettings(s) : 'theo mặc định'}`);
+      res.json(full(state));
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
+  r.put('/permissions/folders/:fid/active', requireAuth, (req, res) => {
+    try {
+      const { state, cleared } = permissions.setFolderActive(req.params.fid, req.body?.active);
+      logFolder(req, `${req.body.active ? 'bật' : 'tắt'} bot cả thư mục "${folderLabel(state, req.params.fid)}"${cleared ? ` (bỏ chỉnh riêng ở ${cleared} nhóm)` : ''}`);
+      res.json({ ...full(state), cleared });
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
+
   r.put('/permissions/groups/:groupId', requireAuth, async (req, res) => {
     const { groupId } = req.params;
     if (!GROUP_ID.test(groupId)) return res.status(400).json({ ok: false, error: 'Nhóm không hợp lệ — chọn lại từ danh sách.' });

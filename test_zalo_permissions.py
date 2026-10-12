@@ -769,6 +769,46 @@ class AdapterDmTest(PermissionsFile, AdapterHarness, unittest.IsolatedAsyncioTes
 REAL_SANDBOX_MODE = gp.sandbox_mode
 
 
+class FolderPermissionsTest(PermissionsFile, unittest.TestCase):
+    """Thư mục nhóm: mặc định ← thư mục ← nhóm; mỗi nhóm một thư mục; nhóm trong thư mục thắng danh sách cũ."""
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(patch.object(gp, "VIDEO_BLOCKED", False))
+        self.enterContext(patch.object(gp, "sandbox_mode", lambda: "systemd"))
+
+    def test_group_inherits_folder_and_own_keys_win(self):
+        self.write({"version": 1,
+                    "defaults": {"active": True, "replyOnlyTagged": True, "features": {"studioSlides": True}},
+                    "folders": {"lop": {"name": "Lớp học", "groups": [GROUP_A, GROUP_B], "active": False,
+                                        "replyOnlyTagged": False, "features": {"web": False, "studioSlides": False},
+                                        "studioQuota": 1}},
+                    "groups": {GROUP_B: {"active": True, "features": {"web": True}, "studioQuota": 5}}})
+        a, b = gp.group_settings(GROUP_A), gp.group_settings(GROUP_B)
+        self.assertEqual((a["active"], a["reply_only_tagged"], a["features"]["web"], a["custom"]), (False, False, False, True))
+        self.assertEqual((b["active"], b["reply_only_tagged"], b["features"]["web"]), (True, False, True))
+        self.assertEqual(gp.disabled_features(GROUP_A), ["web"])
+        self.assertEqual(gp.studio_settings(MEMBER, GROUP_A, True), {"features": {**{f: False for f in gp.STUDIO_FEATURES}}, "quota": 1})
+        self.assertEqual(gp.studio_settings(MEMBER, GROUP_B, True)["quota"], 5)
+        outside = gp.group_settings("1111111111")
+        self.assertEqual((outside["active"], outside["custom"]), (True, False))
+        self.assertTrue(gp.studio_settings(MEMBER, "1111111111", True)["features"]["studioSlides"])
+
+    def test_group_in_two_folders_follows_the_first_and_bad_entries_ignored(self):
+        self.write({"version": 1,
+                    "folders": {"a1": {"groups": [GROUP_A], "features": {"kb": False}},
+                                "b2": {"groups": [GROUP_A, "x1", 5], "features": {"kb": True, "video": False}},
+                                "BAD ID": {"groups": [GROUP_B], "active": False}, "c3": "hỏng"}})
+        self.assertFalse(gp.group_settings(GROUP_A)["features"]["kb"])
+        self.assertTrue(gp.group_settings(GROUP_A)["features"]["video"])
+        self.assertTrue(gp.group_settings(GROUP_B)["active"])
+
+    def test_file_without_folders_behaves_as_before(self):
+        self.write({"version": 1, "defaults": {"features": {"voice": False}}, "groups": {GROUP_A: {"active": False}}})
+        self.assertEqual(gp.disabled_features(GROUP_B), ["voice"])
+        self.assertFalse(gp.group_settings(GROUP_A)["active"])
+
+
 class StudioPermissionsTest(PermissionsFile, unittest.TestCase):
     """Xưởng tạo sản phẩm (spec §17): thiếu khoá/lỗi = tắt; hạn mức người ← nhóm ← mặc định ← 3."""
 

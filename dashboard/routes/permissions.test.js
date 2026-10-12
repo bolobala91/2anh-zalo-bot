@@ -26,6 +26,31 @@ test('phân quyền trả kèm UID chủ nhân (bảng Quyền trong Phiên chat
   assert.deepEqual((await call('/api/permissions', { cookie })).json.ownerUids, ['123456789012345678']);
 });
 
+test('thư mục nhóm qua API: tạo → đặt nhóm → cài đặt → tắt nhanh → xoá; ghi Nhật ký; dữ liệu sai → 400; chưa đăng nhập → 401', async (t) => {
+  const { deps, call, owner, disk } = await ready(t);
+  const G2 = '2054797107487294811';
+  assert.equal((await call('/api/permissions/folders', { method: 'POST', body: { name: 'X' } })).status, 401);
+  const made = await call('/api/permissions/folders', { method: 'POST', cookie: owner, body: { name: 'Lớp học' } });
+  assert.equal(made.status, 200);
+  const fid = made.json.created;
+  assert.equal(made.json.folders[0].name, 'Lớp học');
+  assert.equal((await call(`/api/permissions/folders/${fid}/members`, { method: 'PUT', cookie: owner, body: { groups: [G, G2] } })).status, 200);
+  const set = await call(`/api/permissions/folders/${fid}/settings`, { method: 'PUT', cookie: owner, body: body({}, { web: false }) });
+  assert.equal(set.status, 200);
+  assert.equal(disk().folders[fid].features.web, false);
+  const off = await call(`/api/permissions/folders/${fid}/active`, { method: 'PUT', cookie: owner, body: { active: false } });
+  assert.equal(off.status, 200);
+  assert.equal(disk().folders[fid].active, false);
+  assert.equal((await call(`/api/permissions/folders/${fid}`, { method: 'PUT', cookie: owner, body: { name: '  ' } })).status, 400);
+  assert.equal((await call(`/api/permissions/folders/${fid}/members`, { method: 'PUT', cookie: owner, body: { groups: ['abc'] } })).status, 400);
+  assert.equal((await call('/api/permissions/folders/khongco/settings', { method: 'PUT', cookie: owner, body: body() })).status, 400);
+  assert.equal((await call(`/api/permissions/folders/${fid}`, { method: 'DELETE', cookie: owner })).status, 200);
+  assert.equal(disk().folders?.[fid], undefined);
+  const log = deps.activity.list ? deps.activity.list({}) : null;
+  const lines = JSON.stringify(log ?? readFileSync(join(deps.dir, 'activity.jsonl'), 'utf8'));
+  for (const bit of ['tạo thư mục \\"Lớp học\\"', 'tắt bot cả thư mục', 'xoá thư mục']) assert.ok(lines.includes(bit), bit);
+});
+
 test('chưa đăng nhập → 401 ở mọi route phân quyền', async (t) => {
   const { call } = await ready(t);
   for (const [path, method] of [['/api/permissions', 'GET'], ['/api/groups', 'GET'],
@@ -44,7 +69,7 @@ test('Chủ bot xem và sửa được phân quyền (spec §6), có hiệu lự
 
   const saved = await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: owner, body: body({ active: false }, { web: false }) });
   assert.equal(saved.status, 200);
-  assert.deepEqual(saved.json.groups[G], { name: 'Tổ Hoá', custom: true, active: false, replyOnlyTagged: true, features: { ...allOn(), web: false },
+  assert.deepEqual(saved.json.groups[G], { name: 'Tổ Hoá', custom: true, folder: null, active: false, replyOnlyTagged: true, features: { ...allOn(), web: false },
     studio: { studioSlides: false, studioDocs: false, studioExams: false, studioVideo: false }, studioQuota: null });
   assert.deepEqual(disk().groups[G], { name: 'Tổ Hoá', active: false, features: { web: false } });
   // Lần lưu đầu ghi cờ tag thật của bot vào mặc định một lần, không ghi vào nhóm.

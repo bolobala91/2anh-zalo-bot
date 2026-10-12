@@ -14,6 +14,8 @@ export const DEFAULTS_KEY = 'defaults';
 export const DM_KEY = 'dm';
 export const QUOTA_KEY = 'studio';
 export const CALL_KEY = 'call';
+// Thư mục nhóm: khoá chọn `f:<mã>` (mã nhóm Zalo luôn là số nên không trùng).
+export const FOLDER_PREFIX = 'f:';
 const pick = (s) => ({ active: s.active, replyOnlyTagged: s.replyOnlyTagged, features: { ...s.features },
   studio: { ...(s.studio || {}) }, studioQuota: s.studioQuota ?? null });
 const sameBools = (a = {}, b = {}) => Object.keys({ ...a, ...b }).every((k) => a[k] === b[k]);
@@ -23,6 +25,15 @@ const quotaText = (v) => (v === null || v === undefined ? '' : String(v));
  * Gộp danh sách nhóm của bot với permissions.json: nhóm bot đang ở (theo thứ tự bot trả) trước,
  * rồi nhóm chỉ còn trong tệp (bot đã rời hoặc Zalo đang tắt). Mỗi nhóm mang quyền đang hiệu lực.
  */
+export function folderOfGroup(perms, id) {
+  return (perms.folders || []).find((f) => f.groups.includes(id)) || null;
+}
+
+/** Cài đặt nền của nhóm: thư mục chứa nó (nếu có), không thì mặc định. */
+export function baseOfGroup(perms, id) {
+  return folderOfGroup(perms, id) || perms.defaults;
+}
+
 export function mergeGroups(groups, perms) {
   const seen = new Set();
   const out = [];
@@ -30,11 +41,14 @@ export function mergeGroups(groups, perms) {
     if (seen.has(id)) return;
     seen.add(id);
     const own = perms.groups[id];
-    // Mục trong tệp có thể trùng hẳn mặc định (tệp của bản cũ từng ghi cờ tag vào từng nhóm) — khi đó không coi là chỉnh riêng.
-    const custom = Boolean(own) && !sameSettings(own, perms.defaults);
-    // Danh sách cũ ở Cấu hình chỉ còn tác dụng với nhóm chưa có mục riêng trong tệp (bot: mục riêng thắng).
-    const ownerOnly = !own && (perms.legacyOwnerOnly || []).includes(id);
-    out.push({ id, name: name || `Nhóm …${id.slice(-4)}`, members, custom, ownerOnly, ...pick(own || perms.defaults) });
+    const folder = folderOfGroup(perms, id);
+    const base = folder || perms.defaults;
+    // Mục trong tệp có thể trùng hẳn nền (tệp của bản cũ từng ghi cờ tag vào từng nhóm) — khi đó không coi là chỉnh riêng.
+    const custom = Boolean(own) && !sameSettings(own, base);
+    // Danh sách cũ ở Cấu hình chỉ còn tác dụng với nhóm chưa có mục riêng trong tệp và không thuộc thư mục nào.
+    const ownerOnly = !own && !folder && (perms.legacyOwnerOnly || []).includes(id);
+    out.push({ id, name: name || `Nhóm …${id.slice(-4)}`, members, custom, ownerOnly,
+      folder: folder ? { id: folder.id, name: folder.name } : null, ...pick(own || base) });
   };
   for (const g of groups || []) add(g.id, g.name, g.members);
   for (const [id, g] of Object.entries(perms.groups)) add(id, g.name, null);
@@ -81,11 +95,13 @@ export function mayLeave(dirty, ask) {
 
 /** Sau khi lưu, nhóm còn trong danh sách không — nhóm chỉ có trong tệp, đưa về mặc định thì mất mục trong tệp. */
 export function staysListed(id, perms, groups) {
-  return id === DEFAULTS_KEY || id === DM_KEY || id === QUOTA_KEY || Boolean(perms.groups[id]) || (groups || []).some((g) => g.id === id);
+  return id === DEFAULTS_KEY || id === DM_KEY || id === QUOTA_KEY || String(id).startsWith(FOLDER_PREFIX)
+    || Boolean(perms.groups[id]) || Boolean(folderOfGroup(perms, id)) || (groups || []).some((g) => g.id === id);
 }
 
 /** Sửa quyền một nhóm/mặc định. `head=false` khi nhúng vào bảng Quyền của Phiên chat (bảng đã có tiêu đề). */
-export function Editor({ target, value, defaults, features, studioFeatures, studioPolicy, defaultQuota, onSaved, onBack, onDirty, head = true }) {
+export function Editor({ target, value, defaults, features, studioFeatures, studioPolicy, defaultQuota, onSaved, onBack, onDirty, head = true,
+  path: savePath = null, baseLabel = 'Dùng mặc định', note = null }) {
   const isGroup = target.id !== DEFAULTS_KEY;
   const [draft, setDraft] = useState(() => pick(value));
   const [qText, setQText] = useState(() => quotaText(value.studioQuota));
@@ -104,7 +120,7 @@ export function Editor({ target, value, defaults, features, studioFeatures, stud
     if (quota.error) { setMsg({ error: `Số lượt xưởng: ${quota.error} Sửa ô đó rồi lưu lại, hoặc để trống để theo mặc định.` }); return; }
     setBusy(true); setMsg({});
     try {
-      const path = isGroup ? `/api/permissions/groups/${encodeURIComponent(target.id)}` : '/api/permissions/defaults';
+      const path = savePath || (isGroup ? `/api/permissions/groups/${encodeURIComponent(target.id)}` : '/api/permissions/defaults');
       const r = await api(path, { method: 'PUT', body: settingsPayload(draft, { isGroup, studioFeatures, policy: studioPolicy }) });
       if (onSaved(r, target.id)) setMsg({ ok: 'Đã lưu — bot áp dụng ngay, không cần khởi động lại.' });
     } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
@@ -119,11 +135,11 @@ export function Editor({ target, value, defaults, features, studioFeatures, stud
     </header>` : null}
     ${isGroup && target.ownerOnly ? html`<${Notice} kind="warn">Nhóm này đang nằm trong danh sách cũ <strong>Nhóm chỉ chủ nhân gọi được bot</strong> (trang Cấu hình): thành viên tag bot thì bot im. Lưu phân quyền riêng cho nhóm ở đây thì phân quyền này thắng danh sách đó.<//>` : null}
     <div class="perm-note-row">
-      <p class="muted small perm-note">${isGroup
+      <p class="muted small perm-note">${note || (isGroup
         ? 'Chỉ áp cho thành viên trong nhóm này. Chủ nhân bot luôn dùng được mọi tính năng.'
-        : 'Áp cho mọi nhóm. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng chỉnh ở mục Nhắn riêng.'}</p>
+        : 'Áp cho mọi nhóm. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng chỉnh ở mục Nhắn riêng.')}</p>
       ${isGroup ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy || sameSettings(draft, defaults)}
-        onClick=${() => { set(pick(defaults)); setQText(''); }}>Dùng mặc định</button>` : null}
+        onClick=${() => { set(pick(defaults)); setQText(quotaText(defaults.studioQuota)); }}>${baseLabel}</button>` : null}
     </div>
     <fieldset class="perm-box">
       <legend>Cách bot trả lời</legend>
@@ -152,6 +168,81 @@ export function Editor({ target, value, defaults, features, studioFeatures, stud
     <${SaveBar} count=${changeCount(draft, value) || (dirty ? 1 : 0)} busy=${busy} canSave=${dirty && !quota.error} msg=${msg}
       onUndo=${() => { setDraft(pick(value)); setQText(quotaText(value.studioQuota)); setMsg({}); }} />
   </form>`;
+}
+
+/** Nhãn của thư mục ở danh sách bên trái. */
+export function folderBadge(f) {
+  if (!f.active) return { kind: 'danger', text: `Đang tắt · ${f.groups.length} nhóm` };
+  return { kind: 'idle', text: `${f.groups.length} nhóm` };
+}
+
+function FolderEditor({ folder, perms, list, onSaved, onBack, onDirty, onDeleted }) {
+  const [name, setName] = useState(folder.name);
+  const [picked, setPicked] = useState(() => new Set(folder.groups));
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState({});
+  const membersDirty = picked.size !== folder.groups.length || folder.groups.some((id) => !picked.has(id));
+  const base = `/api/permissions/folders/${encodeURIComponent(folder.id)}`;
+  async function run(key, path, method, body, ok) {
+    setBusy(key); setMsg({});
+    try { const r = await api(path, { method, body }); onSaved(r); setMsg({ ok: typeof ok === 'function' ? ok(r) : ok }); return r; }
+    catch (err) { setMsg({ error: err.message }); return null; } finally { setBusy(''); }
+  }
+  const needle = fold(q.trim());
+  const shown = list.filter((g) => !needle || fold(g.name).includes(needle));
+  const toggle = (id) => setPicked((cur) => { const next = new Set(cur); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  return html`<div class="perm-form folder-edit">
+    <header class="thread-head">
+      <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
+      <h2><${Icon} name="folder" size=${18} /> ${folder.name}</h2>
+      <span class=${`badge badge-${folderBadge(folder).kind}`}>${folderBadge(folder).text}</span>
+    </header>
+    <${Live} error=${msg.error} ok=${msg.ok} />
+    <fieldset class="perm-box">
+      <legend>Bật / tắt nhanh</legend>
+      <p class="muted small">Áp cho mọi nhóm trong thư mục ngay lập tức, bỏ cả phần "Hoạt động" từng nhóm chỉnh riêng.</p>
+      <div class="row">
+        <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== '' || !folder.groups.length}
+          onClick=${() => run('on', `${base}/active`, 'PUT', { active: true }, (r) => `Đã bật bot ở ${folder.groups.length} nhóm${r.cleared ? ` (bỏ chỉnh riêng ở ${r.cleared} nhóm)` : ''}.`)}>Bật bot cả thư mục</button>
+        <button type="button" class="btn btn-danger-outline btn-sm" disabled=${busy !== '' || !folder.groups.length}
+          onClick=${() => run('off', `${base}/active`, 'PUT', { active: false }, (r) => `Đã tắt bot ở ${folder.groups.length} nhóm${r.cleared ? ` (bỏ chỉnh riêng ở ${r.cleared} nhóm)` : ''}.`)}>Tắt bot cả thư mục</button>
+      </div>
+    </fieldset>
+    <details class="perm-box" open=${!folder.groups.length}>
+      <summary><span>Nhóm trong thư mục</span><span class="muted perm-box-sum">· ${picked.size} nhóm${membersDirty ? ' (chưa lưu)' : ''}</span></summary>
+      <p class="muted small">Mỗi nhóm thuộc một thư mục — chọn nhóm đang ở thư mục khác sẽ chuyển nó sang đây.</p>
+      <label for="folder-q" class="sr-only">Lọc nhóm theo tên</label>
+      <input id="folder-q" type="search" maxlength="100" placeholder="Lọc nhóm theo tên" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
+      <ul class="folder-members">${shown.map((g) => html`<li key=${g.id}><label>
+        <input type="checkbox" checked=${picked.has(g.id)} onChange=${() => toggle(g.id)} />
+        <span>${g.name}</span>${g.folder && g.folder.id !== folder.id ? html`<small class="muted"> · đang ở "${g.folder.name}"</small>` : null}
+      </label></li>`)}</ul>
+      ${!shown.length ? html`<p class="muted small">Không có nhóm nào khớp.</p>` : null}
+      <div class="row">
+        <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== '' || !membersDirty}
+          onClick=${() => run('members', `${base}/members`, 'PUT', { groups: [...picked] }, `Đã lưu ${picked.size} nhóm vào thư mục.`)}>Lưu danh sách nhóm</button>
+        <button type="button" class="btn btn-ghost btn-sm" disabled=${busy !== '' || !membersDirty} onClick=${() => setPicked(new Set(folder.groups))}>Hoàn tác</button>
+      </div>
+    </details>
+    <details class="perm-box">
+      <summary><span>Tên và xoá thư mục</span></summary>
+      <div class="row">
+        <label for="folder-name" class="sr-only">Tên thư mục</label>
+        <input id="folder-name" maxlength="60" value=${name} onInput=${(e) => setName(e.currentTarget.value)} />
+        <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== '' || !name.trim() || name.trim() === folder.name}
+          onClick=${() => run('name', base, 'PUT', { name }, 'Đã đổi tên thư mục.')}>Đổi tên</button>
+      </div>
+      <button type="button" class="btn btn-danger-outline btn-sm" disabled=${busy !== ''}
+        onClick=${async () => { if (!window.confirm(`Xoá thư mục "${folder.name}"? ${folder.groups.length} nhóm bên trong sẽ quay về theo Mặc định (phần chỉnh riêng của từng nhóm giữ nguyên).`)) return; if (await run('del', base, 'DELETE', undefined, 'Đã xoá thư mục.')) onDeleted(); }}>Xoá thư mục</button>
+    </details>
+    <h3 class="folder-settings-head">Cài đặt chung của thư mục</h3>
+    <${Editor} key=${`fs-${folder.id}`} head=${false} target=${{ id: `${FOLDER_PREFIX}${folder.id}`, name: folder.name, members: null }}
+      value=${pick(folder)} defaults=${pick(perms.defaults)} features=${perms.features} studioFeatures=${perms.studioFeatures || []}
+      studioPolicy=${perms.studioPolicy} defaultQuota=${perms.studio?.quota ?? 3} path=${`${base}/settings`}
+      note=${`Mọi nhóm trong thư mục thừa hưởng các cài đặt này ngay khi lưu, kể cả nhóm thêm vào sau. Nhóm chỉnh riêng mục nào thì mục đó của nhóm thắng. Chủ nhân bot luôn dùng được mọi tính năng.`}
+      onSaved=${(r) => { onSaved(r); return true; }} onDirty=${onDirty} onBack=${onBack} />
+  </div>`;
 }
 
 export function Permissions({ me }) {
@@ -213,6 +304,14 @@ export function Permissions({ me }) {
   if (!perms || groups === null) return html`<${PageHead} title="Phân quyền Bot" /><${Spinner} />`;
 
   const list = mergeGroups(groups, perms);
+  const folders = perms.folders || [];
+  const selectedFolder = String(selected || '').startsWith(FOLDER_PREFIX) ? folders.find((f) => `${FOLDER_PREFIX}${f.id}` === selected) || null : null;
+  async function newFolder() {
+    const name = window.prompt('Tên thư mục mới (vd. "Lớp học", "Đoàn trường"):', '');
+    if (!name || !name.trim()) return;
+    try { const r = await api('/api/permissions/folders', { method: 'POST', body: { name } }); setPerms(r); choose(`${FOLDER_PREFIX}${r.created}`); }
+    catch (err) { setFlash(''); window.alert(err.message); }
+  }
   const needle = fold(query.trim());
   const shown = list.filter((g) => !needle || fold(g.name).includes(needle));
   const defaultsTarget = { id: DEFAULTS_KEY, name: 'Mặc định cho nhóm mới', members: null, ...pick(perms.defaults) };
@@ -227,7 +326,7 @@ export function Permissions({ me }) {
     ${perms.corrupt ? html`<${Notice} kind="warn">Tệp phân quyền bị hỏng nên bot đang dùng mặc định (mọi tính năng bật). Lưu lại một mục bất kỳ để ghi tệp mới.<//>` : null}
     ${groupsError ? html`<${Notice} kind="warn">Chưa lấy được danh sách nhóm: ${groupsError} Danh sách dưới đây chỉ có nhóm đã chỉnh trước đó hoặc đã có trong Phiên chat.<//>` : null}
     <${Live} ok=${flash} />
-    <div class=${`perm${target || selected === DM_KEY || selected === QUOTA_KEY || selected === CALL_KEY ? ' has-sel' : ''}`}>
+    <div class=${`perm${target || selectedFolder || selected === DM_KEY || selected === QUOTA_KEY || selected === CALL_KEY ? ' has-sel' : ''}`}>
       <section class="card perm-list" aria-label="Nhóm">
         <div class="chat-search">
           <label for="perm-q" class="sr-only">Lọc nhóm theo tên</label>
@@ -258,21 +357,37 @@ export function Permissions({ me }) {
             <span class="conv-top"><span class="conv-name"><${Icon} name="shield" size=${16} /> Mặc định cho nhóm mới</span></span>
             <span class="conv-preview">Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định.</span>
           </button></li>
+          <li class="folder-head"><span>Thư mục</span>
+            <button type="button" class="btn btn-ghost btn-sm" onClick=${newFolder}><${Icon} name="plus" size=${14} /> Thư mục mới</button></li>
+          ${folders.length ? folders.map((f) => {
+            const key = `${FOLDER_PREFIX}${f.id}`;
+            const badge = folderBadge(f);
+            return html`<li key=${key}><button type="button" class=${`conv conv-folder${selected === key ? ' active' : ''}`}
+              aria-current=${selected === key ? 'true' : undefined} onClick=${() => choose(key)}>
+              <span class="conv-top"><span class="conv-name"><${Icon} name="folder" size=${16} /> ${f.name}</span>
+                <span class=${`badge badge-${badge.kind}`}>${badge.text}</span></span>
+              <span class="conv-preview">Cài đặt chung cho các nhóm bên trong · bật/tắt hàng loạt</span>
+            </button></li>`;
+          }) : html`<li class="muted small folder-empty">Gom các nhóm cùng chủ đề vào thư mục để chỉnh và bật/tắt hàng loạt.</li>`}
+          <li class="folder-head"><span>Nhóm</span></li>
           ${shown.map((g) => {
             const badge = groupBadge(g);
             return html`<li key=${g.id}><button type="button" class=${`conv${selected === g.id ? ' active' : ''}`}
               aria-current=${selected === g.id ? 'true' : undefined} onClick=${() => choose(g.id)}>
               <span class="conv-top"><span class="conv-name">${g.name}</span>
                 ${badge ? html`<span class=${`badge badge-${badge.kind}`}>${badge.text}</span>` : null}</span>
-              <span class="conv-preview">${sub(g)}</span>
+              <span class="conv-preview">${g.folder ? html`<span class="folder-tag"><${Icon} name="folder" size=${12} /> ${g.folder.name}</span> · ` : null}${sub(g)}</span>
             </button></li>`;
           })}
         </ul>
         ${list.length && !shown.length ? html`<p class="muted small">Không có nhóm nào trùng tên — xoá bớt chữ trong ô lọc.</p>` : null}
         ${!list.length && !groupsError ? html`<p class="muted small">Bot chưa ở nhóm nào — thêm bot vào nhóm Zalo rồi tải lại trang.</p>` : null}
       </section>
-      <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : selected === QUOTA_KEY ? 'Hạn mức xưởng' : selected === CALL_KEY ? 'Cách gọi bot' : 'Quyền của nhóm'}>
-        ${selected === DM_KEY
+      <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : selected === QUOTA_KEY ? 'Hạn mức xưởng' : selected === CALL_KEY ? 'Cách gọi bot' : selectedFolder ? 'Thư mục nhóm' : 'Quyền của nhóm'}>
+        ${selectedFolder
+          ? html`<${FolderEditor} key=${selected} folder=${selectedFolder} perms=${perms} list=${list}
+              onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} onDeleted=${() => { setDirty(false); setSelected(null); }} />`
+          : selected === DM_KEY
           ? html`<${DmEditor} key=${DM_KEY} dm=${perms.dm} features=${perms.dmFeatures} studioFeatures=${perms.studioFeatures || []}
               studioPolicy=${perms.studioPolicy} admin=${me?.role === 'admin'} onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} />`
           : selected === CALL_KEY
@@ -282,8 +397,10 @@ export function Permissions({ me }) {
               onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} />`
           : target
           ? html`<${Editor} key=${target.id} target=${target} value=${pick(target)}
-              defaults=${pick(perms.defaults)} features=${perms.features} studioFeatures=${perms.studioFeatures || []} studioPolicy=${perms.studioPolicy}
-              defaultQuota=${perms.studio?.quota ?? 3} onSaved=${onSaved} onDirty=${setDirty} onBack=${() => choose(null)} />`
+              defaults=${pick(target.folder ? baseOfGroup(perms, target.id) : perms.defaults)} features=${perms.features} studioFeatures=${perms.studioFeatures || []} studioPolicy=${perms.studioPolicy}
+              defaultQuota=${perms.studio?.quota ?? 3} onSaved=${onSaved} onDirty=${setDirty} onBack=${() => choose(null)}
+              baseLabel=${target.folder ? 'Theo thư mục' : 'Dùng mặc định'}
+              note=${target.folder ? `Nhóm thuộc thư mục "${target.folder.name}": mục nào chưa chỉnh riêng thì theo thư mục. Chủ nhân bot luôn dùng được mọi tính năng.` : null} />`
           : html`<p class="muted chat-empty">Chọn "Nhắn riêng", "Hạn mức xưởng", "Mặc định" hoặc một nhóm bên trái để chỉnh.</p>`}
       </section>
     </div>`;
