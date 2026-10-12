@@ -218,7 +218,7 @@ ZALO_GROUP_REPLY_ONLY_TAGGED=true
 
 A Zalo UID is normally a long 17–21 digit value and is not a phone number.
 
-The installer also ships a default message style guide (`hermes-plugin/zalo-style-guide.md`), distilled from months of running the bot for real — bold labels, dash/bullet nesting, sparing color, no `---`. It writes that content into `platform_hints.zalo.append` on first install, and never overwrites it if you've already written your own. Edit `platform_hints.zalo.append` in `config.yaml` directly to change it. Tone and in-group behavior (formal vs. casual, whether it greets itself in new groups) are customer-specific, so they are not baked in — the installer asks you about those two before finishing, per `AGENTS.md`.
+The plugin ships a message style guide and fixed rules (`hermes-plugin/zalo/style-guide.md`), distilled from months of running the bot for real: formatting, LaTeX, look things up before stating facts, use the real current time, keep internal chatter out of groups, wait for explicit orders on risky actions. It travels with the plugin and updates with every release; the installer removes old copies it once wrote into `platform_hints.zalo.append` and keeps whatever you wrote yourself. Customisable parts — how the bot addresses people, tone, length, emoji, text colours, file-name pattern, extra notes — live in the dashboard under Cấu hình › **Phong cách trả lời**, apply immediately and do not use the bot's memory. Memory is for facts only (about you, links, prices).
 
 ## Agent tools
 

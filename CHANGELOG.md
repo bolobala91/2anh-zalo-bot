@@ -2,6 +2,28 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.20.0] — 2026-10-12
+
+### Thêm
+
+- **Cấu hình › Phong cách trả lời:** chỉnh cách bot nói chuyện bằng giao diện, không cần dặn vào trí nhớ. Lưu là có hiệu lực ngay ở mọi cuộc trò chuyện, kể cả cuộc đang diễn ra. Các mục chỉnh được:
+  - Xưng hô: bot tự xưng gì, gọi chủ nhân là gì, gọi người khác là gì.
+  - Giọng điệu, độ dài trả lời, mức dùng emoji.
+  - Màu chữ: chọn màu được dùng (đỏ, xanh, cam, vàng) và mức tô màu.
+  - Mẫu tên tệp: `Tên_YYYYMMDD-HHMMSS`, `Tên_YYYYMMDD` hoặc chỉ tên. Áp dụng cho tệp tạo bằng công cụ tạo tệp và tệp của xưởng 2Anh Studio.
+  - Lời dặn thêm, tối đa 500 ký tự.
+- **Bot tự phân loại khi chủ nhân dặn qua Zalo:** dặn về cách trả lời (vd. "trả lời ngắn thôi", "gọi anh là sếp") thì bot đổi cài đặt bằng công cụ mới `zalo_reply_style`, không ghi vào trí nhớ. Trí nhớ chỉ để thông tin (về chủ nhân, link, giá…).
+- **Mỗi lượt bot biết giờ thật** ("Bây giờ: Thứ Hai, 12/10/2026 15:30"). Trước đây cuộc trò chuyện kéo dài nhiều ngày có thể dùng nhầm ngày lúc bắt đầu.
+
+### Đổi
+
+- **Quy tắc cố định đi theo plugin** (`hermes-plugin/zalo/style-guide.md`) và tự cập nhật mỗi bản phát hành. Trước đây trình cài chỉ chép vào `config.yaml` một lần, nên bot cài lâu vẫn dùng bản cũ. Có thêm các quy tắc mới:
+  - Tra cứu trước khi khẳng định (web, học thuật, API dữ liệu, kho tài liệu, lịch sử chat). Việc quan trọng phải đối chiếu hai nguồn; không chắc thì nói không chắc.
+  - Dùng giờ thật của máy.
+  - Không gửi chuyện nội bộ (gọi công cụ, lỗi kỹ thuật) vào nhóm.
+  - Việc rủi ro và việc quản trị chỉ làm khi có lệnh rõ.
+- Trình cài gỡ các bản hướng dẫn cũ đã chép vào `platform_hints.zalo.append` và giữ nguyên phần khách tự viết (vd. giới thiệu bản thân bot). `doctor` báo nếu còn sót bản cũ.
+
 ## [2.19.3] — 2026-10-12
 
 ### Sửa

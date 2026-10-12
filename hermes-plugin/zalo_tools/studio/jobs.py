@@ -101,6 +101,20 @@ class Outcome:
     images: int = 0
 
 
+def stamp_names(files: List[Path]) -> List[Path]:
+    """Đổi tên tệp gửi đi theo mẫu tên tệp chủ bot đã cài (vd. ``van-ban_20261012-153000.docx``)."""
+    from ..reply_style import file_name
+
+    out = []
+    for f in files:
+        target = f.with_name(file_name(f.stem, f.suffix))
+        try:
+            out.append(f.rename(target) if target != f and not target.exists() else f)
+        except OSError:
+            out.append(f)
+    return out
+
+
 def spent(usage: author.Usage, images: int) -> bool:
     """Việc đã tốn tiền thật chưa: có ảnh, token vượt ngưỡng nhỏ, hoặc đã gọi AI mà không biết số token."""
     tokens = usage.input_tokens + usage.output_tokens
@@ -760,7 +774,7 @@ class Studio:
                 caption += " Cần soát: " + "; ".join(outcome.notes)
             if left is not None:
                 caption += f" Hôm nay còn {left} lượt."
-            sent = await self.deliver(job, outcome.files, caption)
+            sent = await self.deliver(job, stamp_names(outcome.files), caption)
             if sent is None:
                 keep = True  # Zalo chưa xác nhận: tệp có thể vẫn đang gửi — xoá sau
             elif not sent:

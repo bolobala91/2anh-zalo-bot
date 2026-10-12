@@ -34,6 +34,7 @@ import { createSchedules, hermesBin } from './lib/schedules.js';
 import { createHermesAdmin } from './lib/hermes-admin.js';
 import { createMaintenance } from './lib/maintenance.js';
 import { createCallWords } from './lib/call-words.js';
+import { createReplyStyle } from './lib/reply-style.js';
 import { createKbStore } from './lib/kb-store.js';
 import { createInsightAi } from './lib/insight-ai.js';
 import { createAgentConfig, createSoul } from './lib/agent-config.js';
@@ -129,6 +130,8 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     callWords: createCallWords({ file: readEnvKey(paths.hermesEnvFile, 'ZALO_CALL_WORDS_FILE') || join(paths.hermesHome, 'zalo', 'call-words.json') }),
     maintenance: createMaintenance({ hermesBin: hermesBin({ hermesHome: paths.hermesHome, env }), dataDir: paths.dataDir, sidecarRoot: paths.sidecarRoot,
       pluginYaml: () => { try { return readFileSync(join(hermesAdmin.root(), 'plugins', 'zalo_tools', 'plugin.yaml'), 'utf8'); } catch { return ''; } } }),
+    // Phong cách trả lời: cùng tệp plugin đọc (zalo_tools/reply_style.py).
+    replyStyle: createReplyStyle({ file: join(paths.hermesHome, 'zalo', 'reply-style.json') }),
     settings: createSettings({ envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, inherited: inheritedSettings }),
     // Lời chào thành viên mới: cùng tệp kết nối Zalo đọc (zalo-welcome.js); ZALO_WELCOME_FILE của kết nối Zalo thắng.
     welcomeFile: env.ZALO_WELCOME_FILE || join(paths.sidecarRoot, 'data', 'welcome.json'),

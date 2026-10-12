@@ -571,7 +571,9 @@ def make_file(
     if fmt not in FORMATS:
         raise FileSpecError("chỉ tạo được tệp docx, pptx, xlsx hoặc pdf")
     title = str(title or "").strip()
-    path = Path(directory) / safe_filename(filename or title, fmt)
+    from .reply_style import file_name
+
+    path = Path(directory) / file_name(safe_filename(filename or title, fmt)[: -len(fmt) - 1], fmt)
     if fmt in ("docx", "pdf"):
         text = str(content or "")
         _check_text(title, text)

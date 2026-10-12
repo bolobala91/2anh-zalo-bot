@@ -1595,7 +1595,8 @@ class StudioQueueTest(unittest.IsolatedAsyncioTestCase):
         with patch.object(recipes, "places", return_value=where):
             await self.studio.run_job(job)
         self.assertEqual(self.sent[0][0], GROUP)
-        self.assertEqual(self.sent[0][1], ["de.docx"])
+        self.assertEqual(len(self.sent[0][1]), 1)
+        self.assertRegex(self.sent[0][1][0], r"^de_\d{8}-\d{6}\.docx$", "tên tệp theo mẫu mặc định Tên_YYYYMMDD-HHMMSS")
         self.assertIn("Hôm nay còn 2 lượt", self.sent[0][2])
         record = json.loads(self.book.path.read_text(encoding="utf-8"))["jobs"][-1]
         self.assertEqual((record["status"], record["input_tokens"]), ("ok", 100))

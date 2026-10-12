@@ -43,7 +43,7 @@ function fixture(t) {
   writeFileSync(join(sidecar, 'hermes-plugin', 'zalo_tools', 'plugin.yaml'), 'name: zalo-tools\n');
   writeFileSync(join(sidecar, 'hermes-plugin', 'zalo_tools', 'tools.py'), '# tools\n');
   writeFileSync(join(sidecar, 'tts', 'vieneu_provider.py'), '# vieneu provider\n');
-  writeFileSync(join(sidecar, 'hermes-plugin', 'zalo-style-guide.md'), '# Hướng dẫn trình bày Zalo\n\nNội dung mặc định dùng cho kiểm thử.\n');
+  writeFileSync(join(sidecar, 'hermes-plugin', 'zalo', 'style-guide.md'), '# Hướng dẫn trình bày Zalo\n\nNội dung mặc định dùng cho kiểm thử.\n\n## Sự thật: tra trước rồi mới khẳng định\n\nTra trước.\n');
   mkdirSync(join(hermesRepo, 'plugins', 'platforms'), { recursive: true });
   mkdirSync(join(hermesRepo, 'gateway'), { recursive: true });
   writeFileSync(join(hermesRepo, 'pyproject.toml'), '[project]\nname="hermes-agent"\n');
@@ -288,24 +288,48 @@ test('doctor fails when Hermes and sidecar bridge tokens drift apart', async (t)
   assert.equal(diagnosis.checks.find((check) => check.name === 'bridge-token').ok, false);
 });
 
-test('install lần đầu ghi hướng dẫn trình bày mặc định vào platform_hints.zalo.append', async (t) => {
+test('install không chép hướng dẫn trình bày vào config.yaml — hướng dẫn đi theo plugin', async (t) => {
   const fx = fixture(t);
   await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
   const config = parse(readFileSync(join(fx.hermesHome, 'config.yaml'), 'utf8'));
-  const guide = readFileSync(join(fx.sidecar, 'hermes-plugin', 'zalo-style-guide.md'), 'utf8').trim();
-  assert.equal(config.platform_hints.zalo.append, guide);
+  assert.equal(config.platform_hints?.zalo?.append, undefined);
 });
 
-test('install không đè lên platform_hints.zalo.append mà khách đã tự viết', async (t) => {
+test('install gỡ bản hướng dẫn cũ đã chép tay, giữ nguyên phần khách tự viết', async (t) => {
   const fx = fixture(t);
-  const customerText = 'Giọng điệu tự viết của khách — trang trọng, xưng "em", chào khi vào nhóm mới.';
-  writeFileSync(
-    join(fx.hermesHome, 'config.yaml'),
-    `platform_hints:\n  zalo:\n    append: ${JSON.stringify(customerText)}\n`,
-  );
+  const legacy = [
+    'Giọng điệu riêng: vui vẻ, hoà đồng.',
+    '',
+    '# Trình bày tin nhắn Zalo — đúc từ thực chiến',
+    '',
+    'Đây là những gì chủ nhân đã học được.',
+    '',
+    '## Màu chữ: đỏ, xanh, cam — đúng chỗ, đúng ngữ cảnh',
+    '',
+    'Tô 2–5 chỗ.',
+    '',
+    '## Sự thật: tra trước rồi mới khẳng định',
+    '',
+    'Bản cũ của mục mới.',
+    '',
+    '---',
+    '',
+    '## Đây là bộ mặc định — sửa được',
+    '',
+    'Muốn sửa thì sửa config.yaml.',
+    '',
+    '## Bạn là ai',
+    'Tên: Uyển Nhi.',
+  ].join('\n');
+  writeFileSync(join(fx.hermesHome, 'config.yaml'), `platform_hints:\n  zalo:\n    append: ${JSON.stringify(legacy)}\n`);
   await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
   const config = parse(readFileSync(join(fx.hermesHome, 'config.yaml'), 'utf8'));
-  assert.equal(config.platform_hints.zalo.append, customerText);
+  assert.equal(config.platform_hints.zalo.append, 'Giọng điệu riêng: vui vẻ, hoà đồng.\n\n## Bạn là ai\nTên: Uyển Nhi.');
+
+  const customerText = 'Giọng điệu tự viết của khách — trang trọng, xưng "em", chào khi vào nhóm mới.';
+  writeFileSync(join(fx.hermesHome, 'config.yaml'), `platform_hints:\n  zalo:\n    append: ${JSON.stringify(customerText)}\n`);
+  await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  assert.equal(parse(readFileSync(join(fx.hermesHome, 'config.yaml'), 'utf8')).platform_hints.zalo.append, customerText);
 });
 
 test('doctor nhắc MCP chỉ chủ nhân dùng được cho tới khi khai ZALO_PUBLIC_MCP', async (t) => {
@@ -329,23 +353,22 @@ test('doctor nhắc MCP chỉ chủ nhân dùng được cho tới khi khai ZALO
   assert.match(check.detail, /gọi được MCP khớp: rag/);
 });
 
-test('doctor báo đúng mục style-guide: đã ghi bản mặc định rồi báo khách đang dùng bản riêng', async (t) => {
+test('doctor báo mục style-guide: plugin có hướng dẫn, và nhắc khi config.yaml còn bản cũ chép tay', async (t) => {
   const fx = fixture(t);
   await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
   let diagnosis = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
   let check = diagnosis.checks.find((c) => c.name === 'style-guide');
   assert.equal(check.ok, true);
-  assert.match(check.detail, /mặc định/);
+  assert.match(check.detail, /theo plugin/);
 
   const configPath = join(fx.hermesHome, 'config.yaml');
   const config = parse(readFileSync(configPath, 'utf8'));
-  config.platform_hints.zalo.append = 'Giọng điệu riêng của khách, không phải bản mặc định.';
+  config.platform_hints = { zalo: { append: 'Giọng riêng.\n\n## Độ dài và chỗ ngắt tin\n\nTrần 3000 byte.' } };
   writeFileSync(configPath, stringify(config));
-
   diagnosis = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
   check = diagnosis.checks.find((c) => c.name === 'style-guide');
-  assert.equal(check.ok, true);
-  assert.match(check.detail, /riêng/);
+  assert.equal(check.ok, false);
+  assert.match(check.detail, /bản hướng dẫn cũ/);
 });
 
 test('installHermes wires the dashboard service, setup link and Caddy block without touching the system', async (t) => {

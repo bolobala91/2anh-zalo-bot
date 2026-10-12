@@ -2371,6 +2371,20 @@ def _env_enablement() -> Optional[dict]:
     return extra
 
 
+
+def _style_guide() -> str:
+    """Hướng dẫn trình bày + quy tắc cố định (``style-guide.md`` cạnh tệp này) — đi theo bản phát hành, không chép vào
+    config.yaml nữa. Phần riêng của khách vẫn ở ``platform_hints.zalo.append``."""
+    try:
+        guide = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style-guide.md")
+        with open(guide, encoding="utf-8") as fh:
+            text = fh.read().strip()
+    except OSError:
+        logger.warning("[zalo] thiếu style-guide.md — bot chỉ có gợi ý định dạng tối thiểu")
+        return ""
+    return "\n\n" + text if text else ""
+
+
 def register(ctx) -> None:
     """Plugin entry point — called by the Hermes plugin loader at startup."""
     # Công cụ do plugin `zalo-tools` đăng ký, không phải ở đây: platform
@@ -2410,5 +2424,5 @@ def register(ctx) -> None:
             "[orange]caution[/orange]. Zalo has no code-block styling, so keep "
             "code short. Use emoji freely — they render natively. Long replies "
             "are split into several messages automatically."
-        ),
+        ) + _style_guide(),
     )

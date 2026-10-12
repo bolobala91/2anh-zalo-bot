@@ -7,7 +7,7 @@ import { GROUP_ID } from '../lib/permissions.js';
 
 const show = (v) => (Array.isArray(v) ? (v.join(', ') || 'trống') : typeof v === 'boolean' ? (v ? 'bật' : 'tắt') : String(v));
 
-export function settingsRoutes({ settings, restartFlags, activity, welcomeFile, sidecar }) {
+export function settingsRoutes({ settings, restartFlags, activity, welcomeFile, sidecar, replyStyle }) {
   const r = express.Router();
   const guard = [requireAuth, requireRole('admin')];
   const fail = (res, err, fallback) => {
@@ -34,6 +34,19 @@ export function settingsRoutes({ settings, restartFlags, activity, welcomeFile, 
       fail(res, err, 'Chưa lưu được cài đặt — thử lại, nếu vẫn lỗi hãy báo người cài đặt.');
     }
   });
+
+  // Phong cách trả lời: tệp plugin đọc lại mỗi lượt — có hiệu lực ngay từ tin kế tiếp.
+  if (replyStyle) {
+    r.get('/admin/reply-style', ...guard, (req, res) => { try { res.json({ ok: true, style: replyStyle.view() }); } catch (err) { fail(res, err, 'Chưa đọc được phong cách trả lời.'); } });
+    r.put('/admin/reply-style', ...guard, (req, res) => {
+      try {
+        const { before, after } = replyStyle.save(req.body?.values);
+        const changed = Object.keys(after).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+        if (changed.length) log(req, 'reply_style_update', changed.map((k) => `${k}: ${show(before[k])} → ${show(after[k])}`).join(' · '));
+        res.json({ ok: true, style: after });
+      } catch (err) { fail(res, err, 'Chưa lưu được phong cách trả lời — thử lại.'); }
+    });
+  }
 
   r.get('/admin/welcome', ...guard, async (req, res) => {
     try {

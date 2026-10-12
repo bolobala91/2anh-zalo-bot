@@ -48,6 +48,12 @@ def register(ctx) -> None:
         ctx.register_hook("pre_llm_call", memory_drift.pre_llm_call)
     except Exception:  # cố hết sức — thiếu thì phiên đang chạy chỉ thấy bộ nhớ mới khi bắt đầu phiên mới
         logger.warning("[zalo] không bật được báo bộ nhớ vừa cập nhật", exc_info=True)
+    # Cài đặt trả lời (xưng hô, độ dài, màu…) + giờ hiện tại: đính mỗi lượt Zalo, sửa là áp dụng ngay — xem reply_style.py.
+    try:
+        from . import reply_style
+        ctx.register_hook("pre_llm_call", reply_style.pre_llm_call)
+    except Exception:  # cố hết sức — thiếu thì bot trả lời theo hướng dẫn mặc định
+        logger.warning("[zalo] không bật được cài đặt trả lời", exc_info=True)
     # Kho khoá dự phòng (trang Khoá API & Model): đồng bộ khoá đang dùng vào os.environ trước mỗi lời gọi công cụ,
     # và đổi sang khoá kế khi kết quả công cụ báo lỗi khoá / hết lượt — không cần khởi động lại.
     try:

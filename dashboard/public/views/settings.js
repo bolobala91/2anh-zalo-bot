@@ -3,6 +3,7 @@ import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Live, PageHead, SaveBar, Spinner, Toggle } from '../ui.js';
 import { RestartBanner } from './restart-banner.js';
+import { ReplyStyle } from './reply-style.js';
 
 /** Câu cho biết đổi xong cần làm gì. */
 export function restartText(restart) {
@@ -91,5 +92,6 @@ export function Settings() {
       </fieldset>`)}
       <${SaveBar} count=${count} busy=${busy} canSave=${count > 0} onUndo=${() => take({ settings: list })} msg=${msg} />
     </form>
+    <${ReplyStyle} />
     <${Welcome} />`;
 }

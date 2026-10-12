@@ -1807,7 +1807,8 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
         method, args, existed, path = fake.calls[0]
         self.assertEqual(method, "sendMessage")
         self.assertEqual(args[1:], ["7903718250465581275", 1])
-        self.assertTrue(existed and path.endswith("Đề kiểm tra.docx"))
+        self.assertTrue(existed)
+        self.assertRegex(os.path.basename(path), r"^Đề kiểm tra_\d{8}-\d{6}\.docx$")
         self.assertFalse(os.path.exists(path), "thư mục tạm phải được xoá sau khi gửi")
 
     async def test_poll_vote_and_add_option_tools_send_numeric_ids(self):
@@ -1927,7 +1928,7 @@ class ZaloToolSchemaTest(unittest.TestCase):
             zalo_tools.TOOLSET_PUBLIC, zalo_tools.TOOLSET_OWNER, zalo_tools.TOOLSET_CRON,
         })
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_PUBLIC), 26)
-        self.assertEqual(assignments.count(zalo_tools.TOOLSET_OWNER), 40)
+        self.assertEqual(assignments.count(zalo_tools.TOOLSET_OWNER), 41)
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_CRON), 1)
 
     def test_zalo_ids_remain_strings_through_hermes_argument_coercion(self):

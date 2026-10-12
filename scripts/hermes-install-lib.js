@@ -100,7 +100,7 @@ export function resolveHermesLayout({ hermesHome = null, env = process.env, cwd 
   throw new Error('Không tự tìm thấy Hermes Agent; hãy truyền --hermes-home <đường-dẫn>');
 }
 
-export function mergeHermesConfig(text, { bridgeToken, vieneu = null, styleGuide = null } = {}) {
+export function mergeHermesConfig(text, { bridgeToken, vieneu = null, guideHeadings = null } = {}) {
   // Sửa ngay trên Document chứ không parse ra object rồi stringify lại: cách cũ
   // làm mất sạch comment của khách và làm tròn số nguyên lớn (ID kênh 19 chữ số
   // thành một số khác, trỏ sai kênh). intAsBigInt giữ nguyên từng chữ số.
@@ -151,11 +151,16 @@ export function mergeHermesConfig(text, { bridgeToken, vieneu = null, styleGuide
   setDefault(['platforms', 'zalo', 'extra', 'reply_only_tagged'], true);
   if (bridgeToken) setValue(['platforms', 'zalo', 'extra', 'bridge_token'], bridgeToken);
 
-  if (styleGuide) {
-    // Không đè: khách có thể đã tự viết giọng điệu riêng, chỉ ghi khi trống.
+  if (guideHeadings) {
+    // Hướng dẫn trình bày giờ nằm trong plugin (zalo/style-guide.md, cập nhật theo bản phát hành). Bản cũ trình
+    // cài từng chép vào đây thì gỡ đi, chỉ giữ phần khách tự viết (giọng điệu, "Bạn là ai"…).
     const existingAppend = doc.getIn(['platform_hints', 'zalo', 'append']);
-    if (typeof existingAppend !== 'string' || existingAppend.trim() === '') {
-      setValue(['platform_hints', 'zalo', 'append'], styleGuide);
+    if (typeof existingAppend === 'string') {
+      const kept = stripStyleGuide(existingAppend, guideHeadings);
+      if (kept !== existingAppend.trim()) {
+        if (kept) setValue(['platform_hints', 'zalo', 'append'], kept);
+        else doc.deleteIn(['platform_hints', 'zalo', 'append']);
+      }
     }
   }
 
@@ -409,13 +414,51 @@ function ensureJxlDecoder(repoRoot, hermesHome, { skipPython = false } = {}) {
 }
 
 function styleGuidePath(sidecarRoot) {
-  return join(resolve(sidecarRoot), 'hermes-plugin', 'zalo-style-guide.md');
+  return join(resolve(sidecarRoot), 'hermes-plugin', 'zalo', 'style-guide.md');
 }
 
-function readStyleGuide(sidecarRoot) {
+// Tiêu đề các mục của mọi bản hướng dẫn trình bày từng được trình cài chép vào platform_hints.zalo.append (≤ 2.19).
+const LEGACY_GUIDE_HEADINGS = [
+  'Trình bày tin nhắn Zalo — đúc từ thực chiến',
+  'Bị gọi suông trong nhóm: đọc ngữ cảnh rồi nói vào việc',
+  'Công thức: viết bằng ký tự Unicode, không dùng LaTeX',
+  'Đăng Fanpage: chỉ đi bằng công cụ, và phải kiểm tra trước khi báo xong',
+  'Đây là bộ mặc định — sửa được',
+  'Độ dài và chỗ ngắt tin',
+  'Đừng dùng `---` để tạo khoảng trắng',
+  'Ghi chú kỹ thuật',
+  'Hỏi về tài liệu, văn bản: tra kho trước',
+  'In đậm tiêu đề, nhãn mục và từ khoá',
+  'Màu chữ: đỏ, xanh, cam — đúng chỗ, đúng ngữ cảnh',
+  'Màu chữ: dùng đỏ để nhấn mạnh, còn lại tuỳ ngữ cảnh',
+  'Nhờ soạn nội dung: bản soạn đứng riêng một tin',
+  'Phân tầng như văn bản hành chính',
+  'Sticker: nhóm vui thì dùng, đang làm việc thì đừng',
+  'Tag người trong nhóm: chỉ khi thật sự cần gọi',
+  'Tin thoại: chỉ gửi khi được yêu cầu',
+  'Tổng hợp thảo luận nhóm: chỉ khi chủ nhân yêu cầu, và đọc hết trước khi viết',
+];
+
+const HEADING = /^#{1,2}\s+(.+?)\s*$/;
+
+/** Tiêu đề mục (# / ##) của hướng dẫn hiện tại cộng mọi bản cũ — để nhận ra phần trình cài từng chép. */
+export function styleGuideHeadings(sidecarRoot) {
   const source = styleGuidePath(sidecarRoot);
   if (!existsSync(source)) throw new Error(`Thiếu hướng dẫn trình bày Zalo trong bộ cài: ${source}`);
-  return readFileSync(source, 'utf8').trim();
+  const current = readFileSync(source, 'utf8').split(/\r?\n/).map((l) => HEADING.exec(l)?.[1]).filter(Boolean);
+  return new Set([...LEGACY_GUIDE_HEADINGS, ...current]);
+}
+
+/** Bỏ khỏi ``text`` các mục có tiêu đề thuộc ``headings`` (cả nội dung tới tiêu đề kế tiếp); giữ nguyên phần còn lại. */
+export function stripStyleGuide(text, headings) {
+  const kept = [];
+  let skipping = false;
+  for (const line of String(text ?? '').split(/\r?\n/)) {
+    const heading = HEADING.exec(line);
+    if (heading) skipping = headings.has(heading[1]);
+    if (!skipping) kept.push(line);
+  }
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function configObject(configPath) {
@@ -520,17 +563,17 @@ export function doctorHermes({
   const known = config?.known_plugin_toolsets?.zalo || [];
   add('config', Boolean(config) && enabled.includes(PLATFORM_KEY) && enabled.includes(TOOLS_KEY)
     && known.includes('zalo_owner') && known.includes('zalo_public') && known.includes('zalo_cron'));
+  const installedGuide = existsSync(join(platformDir, 'style-guide.md'));
   const configuredAppend = config?.platform_hints?.zalo?.append;
-  const hasAppend = typeof configuredAppend === 'string' && configuredAppend.trim() !== '';
-  if (!hasAppend) {
-    add('style-guide', false, 'chưa có platform_hints.zalo.append — chạy lại install:hermes để ghi hướng dẫn mặc định');
-  } else {
-    const canonical = existsSync(styleGuidePath(root)) ? readFileSync(styleGuidePath(root), 'utf8').trim() : null;
-    const isDefault = canonical !== null && configuredAppend.trim() === canonical;
-    add('style-guide', true, isDefault
-      ? 'đã ghi hướng dẫn trình bày mặc định'
-      : 'khách đang dùng bản hướng dẫn riêng — giữ nguyên');
+  let leftover = false;
+  if (installedGuide && typeof configuredAppend === 'string') {
+    try { leftover = stripStyleGuide(configuredAppend, styleGuideHeadings(root)) !== configuredAppend.trim(); } catch { /* thiếu bộ cài */ }
   }
+  add('style-guide', installedGuide && !leftover, !installedGuide
+    ? 'plugin thiếu style-guide.md — chạy lại install:hermes'
+    : leftover
+      ? 'platform_hints.zalo.append còn bản hướng dẫn cũ chép tay — chạy lại install:hermes để gỡ'
+      : 'hướng dẫn trình bày đi theo plugin');
   const sidecarToken = readBridgeToken(join(root, '.env'));
   const hermesToken = config?.platforms?.zalo?.extra?.bridge_token;
   add('bridge-token', Boolean(sidecarToken && hermesToken && sidecarToken === String(hermesToken)));
@@ -694,9 +737,9 @@ export async function installHermes({
   writeFileSync(manifestPath, renderPlatformManifest(readFileSync(manifestPath, 'utf8'), root), 'utf8');
 
   const vieneu = vieneuTts ? ensureVieneu(root, layout, { skipPython, commandProbe }) : null;
-  const styleGuide = readStyleGuide(root);
+  const guideHeadings = styleGuideHeadings(root);
   const currentConfig = existsSync(layout.configPath) ? readFileSync(layout.configPath, 'utf8') : '';
-  const nextConfig = mergeHermesConfig(currentConfig, { bridgeToken: token, vieneu, styleGuide });
+  const nextConfig = mergeHermesConfig(currentConfig, { bridgeToken: token, vieneu, guideHeadings });
   if (nextConfig !== currentConfig) {
     // Giữ bản cũ cạnh bản mới: config.yaml là của khách, lỡ trình cài ghi sai
     // thì vẫn còn đường khôi phục.

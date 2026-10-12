@@ -388,7 +388,7 @@ platform_hints:
 
 Mục 1 và 2 quan trọng dù đã tự động, nên vẫn cần hiểu vì sao: Hermes mặc định **bật** mọi toolset plugin mà nó chưa từng thấy; thiếu khai báo thì `zalo_owner` — bộ công cụ dành riêng chủ nhân — được cấp cho cả người lạ nhắn vào nhóm, dù adapter đã giới hạn. Đồng thời cấu hình `display.platforms.zalo` giúp các bong bóng tin nhắn trong nhóm luôn sạch sẽ, không bị bắn rác thông báo hệ thống. Việc trình cài tự làm hai mục này không phải để bạn khỏi quan tâm — nếu tự cài thủ công mà bỏ sót, hệ quả bảo mật vẫn y như trên.
 
-Mục 3 (`platform_hints.zalo.append`): trình cài tự ghi bộ hướng dẫn trình bày mặc định (`hermes-plugin/zalo-style-guide.md`) khi mục này còn trống, và không đè nếu bạn đã tự viết. Giọng điệu như ví dụ trên là riêng của từng khách nên trình cài không viết hộ — muốn thì tự thêm vào cùng mục này.
+Mục 3 (`platform_hints.zalo.append`): chỉ để phần **riêng của bot** (giới thiệu bản thân, giọng điệu như ví dụ trên). Bộ hướng dẫn trình bày và quy tắc cố định (`hermes-plugin/zalo/style-guide.md`) đi theo plugin, tự cập nhật mỗi bản phát hành; trình cài gỡ bản cũ từng chép vào mục này, giữ nguyên phần bạn tự viết. Xưng hô, độ dài, emoji, màu chữ, mẫu tên tệp thì chỉnh ở dashboard › Cấu hình › **Phong cách trả lời** (có hiệu lực ngay).
 
 **Bước 4 — thêm UID** vào file `.env` **của Hermes** (`%LOCALAPPDATA%\hermes\.env` trên Windows, `~/.hermes/.env` trên Linux/macOS):
 
@@ -718,7 +718,7 @@ Sidecar không còn tệp cấu hình nào. Ai được dùng bot, trả lời k
 
 > **UID Zalo là dãy số dài 17–21 chữ số, không bắt đầu bằng `0`.** Số điện thoại thì ngược lại. Điền nhầm số điện thoại vào `ZALO_ALLOWED_USERS` thì người đó đơn giản là không khớp với ai — không mở quyền cho ai khác.
 
-Sản phẩm cài sẵn một bộ hướng dẫn trình bày tin nhắn Zalo đúc từ thực chiến nhiều tháng (`hermes-plugin/zalo-style-guide.md`) — trình cài tự ghi nội dung này vào `platform_hints.zalo.append` khi cài lần đầu, không đè nếu bạn đã tự viết. Muốn sửa cách trình bày thì sửa trực tiếp `platform_hints.zalo.append` trong `config.yaml`. Còn giọng điệu và hành vi trong nhóm (trang trọng hay thân mật, có tự chào khi vào nhóm mới không) là riêng của từng khách nên không cài sẵn — trình cài sẽ hỏi bạn hai điều đó trước khi hoàn tất, theo `AGENTS.md`.
+Sản phẩm có sẵn một bộ hướng dẫn trình bày tin nhắn Zalo và quy tắc cố định đúc từ thực chiến nhiều tháng (`hermes-plugin/zalo/style-guide.md`): định dạng, LaTeX, tra cứu trước khi khẳng định, dùng giờ thật, không gửi chuyện nội bộ vào nhóm, chờ lệnh rõ với việc rủi ro. Bộ này đi theo plugin nên tự cập nhật mỗi bản phát hành. Phần **tuỳ chỉnh được** — xưng hô, giọng, độ dài, emoji, màu chữ, mẫu tên tệp, lời dặn thêm — nằm ở dashboard › Cấu hình › **Phong cách trả lời**, lưu là có hiệu lực ngay, không chiếm chỗ trí nhớ của bot; chủ nhân dặn qua Zalo thì bot cũng tự đổi ở đó. Trí nhớ chỉ để thông tin (về bạn, link, giá…). Phần giới thiệu riêng của bot (tên, tính cách) để ở trang Agent hoặc `platform_hints.zalo.append`.
 
 ---
 

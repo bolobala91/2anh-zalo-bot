@@ -1066,6 +1066,21 @@ def _memory_scope_or_error(turn: Dict[str, Any]):
     return scope, None
 
 
+async def zalo_reply_style(args: Dict[str, Any], **_kw) -> str:
+    """Chủ nhân dặn cách trả lời (xưng hô, độ dài, màu, tên tệp…): đổi CÀI ĐẶT, không ghi vào trí nhớ."""
+    from . import reply_style
+
+    changes = {k: v for k, v in (args or {}).items() if k in reply_style.DEFAULTS}
+    if not changes:
+        return _ok(reply_style.load())
+    try:
+        return _ok({"saved": reply_style.save(changes)})
+    except reply_style.StyleError as exc:
+        return _err(str(exc))
+    except OSError as exc:
+        return _err(f"không ghi được cài đặt: {exc}")
+
+
 async def zalo_memory_remember(args: Dict[str, Any], **_kw) -> str:
     """Chủ nhân dặn "nhớ giúp…": ghi vào trí nhớ dài hạn của CHÍNH cuộc trò chuyện này."""
     from . import memory_store
@@ -3205,6 +3220,29 @@ TOOLS = [
         },
         [],
     ), zalo_thread_history, TOOLSET_PUBLIC),
+
+    ("zalo_reply_style", "🎨", _schema(
+        "zalo_reply_style",
+        "CHỈ CHỦ NHÂN: xem/đổi CÀI ĐẶT cách trả lời của bot — xưng hô, giọng, độ dài, emoji, màu chữ, mẫu tên tệp, "
+        "lời dặn thêm. Chủ nhân dặn kiểu \"từ giờ trả lời ngắn thôi\", \"gọi anh là sếp\", \"đừng tô màu đỏ\", "
+        "\"tên file đừng thêm giờ\" thì đổi ở ĐÂY, KHÔNG ghi vào trí nhớ (memory) — trí nhớ chỉ để thông tin như "
+        "thông tin cá nhân, link, giá. Gọi không tham số để xem cài đặt hiện tại; chỉ truyền mục cần đổi.",
+        {
+            "self_name": {"type": "string", "description": "Bot tự xưng (vd. 'em')."},
+            "owner_name": {"type": "string", "description": "Gọi chủ nhân là gì (vd. 'sếp', 'anh')."},
+            "others_name": {"type": "string", "description": "Gọi người khác là gì (vd. 'anh/chị', 'thầy cô')."},
+            "tone": {"type": "string", "enum": ["friendly", "playful", "formal"]},
+            "length": {"type": "string", "enum": ["short", "medium", "detailed"]},
+            "emoji": {"type": "string", "enum": ["none", "few", "many"]},
+            "colors": {"type": "array", "items": {"type": "string", "enum": ["red", "green", "orange", "yellow"]},
+                       "description": "Các màu chữ được dùng."},
+            "color_level": {"type": "string", "enum": ["none", "few", "normal"], "description": "Mức tô màu."},
+            "file_name": {"type": "string", "enum": ["name_time", "name_date", "name"],
+                          "description": "Tên tệp: Tên_YYYYMMDD-HHMMSS / Tên_YYYYMMDD / chỉ Tên."},
+            "extra": {"type": "string", "description": "Lời dặn thêm về cách trả lời (tối đa 500 ký tự; '' để xoá)."},
+        },
+        [],
+    ), zalo_reply_style, TOOLSET_OWNER),
 
     ("zalo_memory_remember", "🧠", _schema(
         "zalo_memory_remember",
