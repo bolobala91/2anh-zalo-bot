@@ -8,6 +8,9 @@
   <a href="https://www.facebook.com/luonghaianh1208"><img alt="Facebook Lương Hải Anh" src="https://img.shields.io/badge/Facebook-L%C6%B0%C6%A1ng%20H%E1%BA%A3i%20Anh-1877F2?style=for-the-badge"></a>
 </p>
 
+<!-- CTA-ZALO -->
+<p align="center"><strong>💬 Tham gia nhóm Zalo cộng đồng 2Anh để dùng thử bot miễn phí, hỏi cách cài và đặt bot riêng:</strong><br><a href="https://zalo.me/g/5fli05n11mnwu4ntdqhq"><strong>zalo.me/g/5fli05n11mnwu4ntdqhq</strong></a></p>
+
 Cầu nối đưa **Zalo** vào [Hermes Agent](https://github.com/NousResearch/hermes-agent) như một nền tảng đầy đủ — ngang hàng với Telegram, Discord, Slack.
 
 Nhắn tin trên Zalo là nói chuyện với chính con agent đang chạy trên máy bạn: đủ tools, memory, skills và cron.

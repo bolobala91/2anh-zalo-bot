@@ -8,6 +8,9 @@
   <a href="https://www.facebook.com/luonghaianh1208"><img alt="Facebook Lương Hải Anh" src="https://img.shields.io/badge/Facebook-L%C6%B0%C6%A1ng%20H%E1%BA%A3i%20Anh-1877F2?style=for-the-badge"></a>
 </p>
 
+<!-- CTA-ZALO -->
+<p align="center"><strong>💬 Join the 2Anh Zalo community to try the bot for free, ask setup questions and order your own bot:</strong><br><a href="https://zalo.me/g/5fli05n11mnwu4ntdqhq"><strong>zalo.me/g/5fli05n11mnwu4ntdqhq</strong></a></p>
+
 Connect a personal Zalo account to [Hermes Agent](https://github.com/NousResearch/hermes-agent) as a full messaging platform alongside Telegram, Discord, and Slack.
 
 Messages sent through Zalo reach the same Hermes agent running on your computer, with its tools, memory, skills, and scheduled jobs.
