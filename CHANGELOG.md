@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.27.0] — 2026-10-13
+
+### Thêm
+
+- **2 mẫu tính cách nghiên cứu khoa học** (nhóm Giáo dục), viết sau khi đối chiếu Thông tư 84/2026/TT-BGDĐT (quy chế KHKT mới), quy tắc ISEF 2026-2027 và hướng dẫn liêm chính, dùng AI:
+  - **NCKH – KHKT học sinh:** gợi mở chọn vấn đề; dạy quy trình (câu hỏi, giả thuyết, biến, đối chứng, khoa học khác kỹ thuật); tra tài liệu có DOI đã kiểm chứng; giải thích thống kê; đóng vai giám khảo hỏi xoáy; nhắc nhật ký, dữ liệu gốc, khai báo AI. Bắt buộc **không viết hộ** kế hoạch, báo cáo, tóm tắt, poster; không tạo số liệu, không bịa tài liệu; từ chối thí nghiệm nguy hiểm khi chưa được duyệt.
+  - **Nghiên cứu khoa học – giáo viên, sinh viên, học viên:** tổng quan tài liệu, phương pháp, phân tích số liệu, phản biện bản thảo, trích dẫn APA 7; không viết thay, không nhận là tác giả.
+
 ## [2.26.0] — 2026-10-13
 
 ### Thêm
