@@ -25,7 +25,7 @@ test('thư mục: tạo, đổi tên, đặt nhóm; cài đặt thư mục chỉ
   store.setFolderMembers(id, [A, B, A]);
   const { changed } = store.setFolderSettings(id, { ...body({ replyOnlyTagged: false }, { web: false }), studioQuota: 2 });
   assert.deepEqual(changed.sort(), ['replyOnlyTagged', 'studioQuota', 'web']);
-  assert.deepEqual(disk().folders[id], { name: 'Lớp học', groups: [A, B], replyOnlyTagged: false, features: { web: false }, studioQuota: 2 });
+  assert.deepEqual(disk().folders[id], { name: 'Lớp học', color: 'blue', groups: [A, B], replyOnlyTagged: false, features: { web: false }, studioQuota: 2 });
   store.renameFolder(id, 'Lớp 12');
   const state = store.get();
   assert.equal(state.folders[0].name, 'Lớp 12');
@@ -103,4 +103,17 @@ test('người trong thư mục: đặt, chuyển giữa thư mục, lưu cài �
   assert.equal(disk().folders[f1].people, undefined);
   assert.throws(() => store.setFolderPeople(f1, [{ uid: '0123' }]), InvalidPermissions);
   assert.deepEqual(normalizeFolders({ a: { groups: [], people: [P, { uid: P }, 'x'] }, b: { groups: [], people: [P] } }).a.people, [{ uid: P }]);
+});
+
+test('màu thư mục: thư mục mới nhận màu chưa dùng; đổi màu; màu lạ bị từ chối; lưu cài đặt giữ màu', (t) => {
+  const { store, disk } = fresh(t);
+  const { id: f1 } = store.createFolder('Một');
+  const { id: f2 } = store.createFolder('Hai');
+  assert.notEqual(disk().folders[f1].color, disk().folders[f2].color);
+  const state = store.setFolderColor(f1, 'pink');
+  assert.equal(state.folders.find((f) => f.id === f1).color, 'pink');
+  assert.throws(() => store.setFolderColor(f1, '#fff'), InvalidPermissions);
+  store.setFolderSettings(f1, body({}, { web: false }));
+  assert.equal(disk().folders[f1].color, 'pink');
+  assert.equal(normalizeFolders({ a: { groups: [], color: 'neon' } }).a.color, undefined);
 });

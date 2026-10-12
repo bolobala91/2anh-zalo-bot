@@ -1059,3 +1059,17 @@ test('nhắn riêng: người trong thư mục được tính là có trong danh
   const F = [{ key: 'web', label: 'Web' }, { key: 'kb', label: 'Kho' }];
   assert.equal(folderSummary(folder, F).text, 'Theo thư mục "BCH" · 1/2');
 });
+
+test('thư mục có màu: chỉ mục, lọc, thư mục của hội thoại nhóm/nhắn riêng', async () => {
+  const { colorOf, folderIndex, folderOfThread, inFolderFilter, NO_FOLDER } = await import('./views/folder-ui.js');
+  const folders = [{ id: 'a', name: 'BCH', color: 'pink', groups: ['200'], people: [{ uid: '1111111111111111111' }] }, { id: 'b', name: 'Lớp', color: 'neon', groups: ['200', '300'] }];
+  const idx = folderIndex(folders);
+  assert.equal(folderOfThread(idx, '200', 1).id, 'a', 'thư mục đầu giữ nhóm');
+  assert.equal(folderOfThread(idx, '1111111111111111111', 0).id, 'a');
+  assert.equal(folderOfThread(idx, '1111111111111111111', 1), null, 'id nhóm và UID người không lẫn nhau');
+  assert.equal(colorOf(folders[1]), 'gray');
+  assert.equal(inFolderFilter('all', null), true);
+  assert.equal(inFolderFilter(NO_FOLDER, null), true);
+  assert.equal(inFolderFilter('a', folders[0]), true);
+  assert.equal(inFolderFilter('a', folders[1]), false);
+});

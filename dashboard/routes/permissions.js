@@ -145,6 +145,13 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity, 
       res.json(full(state));
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
+  r.put('/permissions/folders/:fid/color', requireAuth, (req, res) => {
+    try {
+      const state = permissions.setFolderColor(req.params.fid, req.body?.color);
+      logFolder(req, `đổi màu thư mục "${folderLabel(state, req.params.fid)}"`);
+      res.json(full(state));
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
   r.put('/permissions/folders/:fid/people', requireAuth, (req, res) => {
     try {
       const state = permissions.setFolderPeople(req.params.fid, req.body?.people);

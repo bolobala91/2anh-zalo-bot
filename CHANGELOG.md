@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.23.0] — 2026-10-12
+
+### Thêm
+
+- **Thư mục có màu:** chọn 1 trong 9 màu ở Phân quyền Bot › Thư mục › "Tên, màu và xoá thư mục". Thư mục mới tự nhận một màu chưa dùng.
+- **Phiên chat lọc được theo thư mục:** hàng nút "Tất cả · từng thư mục (có số hội thoại) · Chưa xếp". Hội thoại nhóm hoặc nhắn riêng thuộc thư mục nào thì mang nhãn màu của thư mục đó.
+- **Phân quyền Bot:** thư mục có chấm màu; mỗi nhóm mang nhãn màu thư mục; danh sách nhóm lọc được theo thư mục.
+
 ## [2.22.0] — 2026-10-12
 
 ### Thêm

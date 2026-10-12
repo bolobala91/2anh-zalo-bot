@@ -7,6 +7,7 @@ import { fold, indexOfFolded, markMatches } from '../fold.js';
 import { classifyMedia } from '../media.js';
 import { FileCard, Lightbox, MediaPanel, Thumb, VideoCard } from './chat-media.js';
 import { PermsIcon, PermsPanel, permsTint } from './chat-perms.js';
+import { FolderChip, FolderFilter, folderIndex, folderOfThread, inFolderFilter } from './folder-ui.js';
 
 export { markMatches };
 
@@ -79,10 +80,10 @@ export function preview(c) {
   return `${c.lastIsSelf ? 'Bot: ' : ''}${v.text || (v.label ? `[${v.label}]` : '')}`;
 }
 
-function ConvItem({ c, active, onSelect }) {
+function ConvItem({ c, active, folder, onSelect }) {
   return html`<li><button type="button" class=${`conv${active ? ' active' : ''}`} aria-current=${active ? 'true' : undefined} onClick=${() => onSelect(c)}>
     <span class="conv-top"><span class="conv-name">${c.name}</span><time class="conv-time">${fmtTime(c.lastAtMs)}</time></span>
-    <span class="conv-sub">${c.threadType === 1 ? html`<span class="tag">Nhóm</span>` : null}<span class="conv-preview">${preview(c)}</span></span>
+    <span class="conv-sub">${folder ? html`<${FolderChip} folder=${folder} />` : c.threadType === 1 ? html`<span class="tag">Nhóm</span>` : null}<span class="conv-preview">${preview(c)}</span></span>
   </button></li>`;
 }
 
@@ -609,6 +610,8 @@ export function Chats() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [selected, setSelected] = useState(null);
+  const [folders, setFolders] = useState([]);
+  const [folderFilter, setFolderFilter] = useState('all');
   const searchSeq = useRef(0); // bỏ kết quả về muộn của lần tìm đã bị thay hoặc huỷ
 
   useEffect(() => {
@@ -626,6 +629,17 @@ export function Chats() {
     tick();
     return () => { alive = false; clearTimeout(timer); };
   }, []);
+
+  // Thư mục (nhóm + người) từ Phân quyền Bot — chỉ để lọc và tô màu; không đọc được thì danh sách vẫn như cũ.
+  useEffect(() => {
+    let alive = true;
+    const load = () => api('/api/permissions').then((r) => { if (alive) setFolders(r.folders || []); }, () => {});
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  const index = folderIndex(folders);
+  const folderOf = (c) => folderOfThread(index, c.threadId, c.threadType);
 
   function clearSearch() { searchSeq.current += 1; setFound(null); setSearching(false); setSearchError(''); }
 
@@ -649,7 +663,7 @@ export function Chats() {
   }
 
   const needle = fold(query.trim());
-  const shown = (list || []).filter((c) => !needle || fold(c.name).includes(needle));
+  const shown = (list || []).filter((c) => (!needle || fold(c.name).includes(needle)) && inFolderFilter(folderFilter, folderOf(c)));
   let left;
   if (found) {
     left = html`
@@ -662,9 +676,9 @@ export function Chats() {
   } else if (list === null) {
     left = html`<${Spinner} />`;
   } else if (!shown.length) {
-    left = html`<p class="muted small">${list.length ? 'Không có hội thoại nào trùng tên — bấm Enter để tìm trong nội dung tin nhắn.' : 'Chưa có hội thoại nào.'}</p>`;
+    left = html`<p class="muted small">${!list.length ? 'Chưa có hội thoại nào.' : folderFilter !== 'all' && !needle ? 'Thư mục này chưa có hội thoại nào.' : 'Không có hội thoại nào trùng tên — bấm Enter để tìm trong nội dung tin nhắn.'}</p>`;
   } else {
-    left = html`<ul class="conv-list">${shown.map((c) => html`<${ConvItem} key=${keyOf(c)} c=${c}
+    left = html`<ul class="conv-list">${shown.map((c) => html`<${ConvItem} key=${keyOf(c)} c=${c} folder=${folderOf(c)}
       active=${Boolean(selected) && keyOf(selected) === keyOf(c)} onSelect=${setSelected} />`)}</ul>`;
   }
 
@@ -679,6 +693,7 @@ export function Chats() {
             onInput=${(e) => { setQuery(e.currentTarget.value); if (!e.currentTarget.value) clearSearch(); }} />
           <button class="btn btn-secondary btn-sm" disabled=${searching} aria-label="Tìm trong tin nhắn"><${Icon} name="search" size=${16} /></button>
         </form>
+        ${found ? null : html`<${FolderFilter} folders=${folders} items=${list || []} of=${folderOf} value=${folderFilter} onChange=${setFolderFilter} label="Lọc hội thoại theo thư mục" />`}
         <${Live} error=${searchError || listError} />
         ${left}
       </section>

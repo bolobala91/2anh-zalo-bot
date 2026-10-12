@@ -1216,3 +1216,22 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 /* Phân quyền Bot › Thư mục › Người trong thư mục. */
 .folder-people { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .folder-people li { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); }
+
+/* Thư mục có màu (Phân quyền Bot, Phiên chat). Nền/chữ dùng lại .mtag-<màu>. */
+.fdot { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; background: #94a3b8; }
+.fdot-blue { background: #2563eb; } .fdot-green { background: #16a34a; } .fdot-orange { background: #ea580c; }
+.fdot-purple { background: #9333ea; } .fdot-pink { background: #db2777; } .fdot-teal { background: #0d9488; }
+.fdot-red { background: #dc2626; } .fdot-indigo { background: #4f46e5; } .fdot-gray { background: #64748b; }
+.fchip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.fchip-sm { font-size: 11.5px; line-height: 1.6; }
+.folder-filter { margin: 8px 0; }
+.fchip-btn { display: inline-flex; align-items: center; gap: 6px; }
+.fchip-btn[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: -2px; }
+.folder-colors { gap: 8px; }
+.color-swatch { width: 32px; height: 32px; min-width: 32px; border-radius: 50%; border: 2px solid transparent; color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.color-swatch.on { border-color: var(--text, #0f172a); }
+.color-swatch:focus-visible { outline: none; box-shadow: var(--focus); }
+.conv-folder .conv-name .fdot { margin-right: 2px; }
+.conv-sub .fchip { flex: none; max-width: 55%; margin-right: 6px; }
+.fchip-btn.mtag-blue, .fchip-btn.mtag-green, .fchip-btn.mtag-orange, .fchip-btn.mtag-purple, .fchip-btn.mtag-pink,
+.fchip-btn.mtag-teal, .fchip-btn.mtag-red, .fchip-btn.mtag-indigo, .fchip-btn.mtag-gray { border-color: transparent; }

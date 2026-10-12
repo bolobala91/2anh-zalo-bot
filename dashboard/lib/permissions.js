@@ -65,6 +65,8 @@ const MAX_GROUPS = 500;
 export const FOLDER_ID = /^[a-z0-9]{1,16}$/;
 export const MAX_FOLDERS = 50;
 export const MAX_FOLDER_PEOPLE = 300;
+/** Màu thư mục (khớp public/views/folder-ui.js). Plugin và kết nối Zalo không dùng tới. */
+export const FOLDER_COLORS = ['blue', 'green', 'orange', 'purple', 'pink', 'teal', 'red', 'indigo', 'gray'];
 const MAX_FOLDER_NAME = 60;
 const MAX_DM_PEOPLE = 200;
 const MAX_PERSON_NAME = 80;
@@ -203,7 +205,8 @@ export function normalizeFolders(raw) {
       const name = isObj(p) ? tidy(p.name, MAX_NAME) : '';
       people.push(name ? { uid, name } : { uid });
     }
-    out[fid] = { name: tidy(entry.name, MAX_FOLDER_NAME) || 'Thư mục', groups, ...(people.length ? { people } : {}), ...layer(entry) };
+    const color = FOLDER_COLORS.includes(entry.color) ? entry.color : null;
+    out[fid] = { name: tidy(entry.name, MAX_FOLDER_NAME) || 'Thư mục', ...(color ? { color } : {}), groups, ...(people.length ? { people } : {}), ...layer(entry) };
   }
   return out;
 }
@@ -411,8 +414,8 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       const base = baseOf(data, defaults, id);
       return [id, { name: g.name || '', custom: true, folder: base.folder, ...merge(base, g), studioQuota: g.studioQuota ?? base.studioQuota }];
     }));
-    const folders = Object.entries(data.folders || {}).map(([id, f]) => ({
-      id, name: f.name, groups: [...f.groups], people: (f.people || []).map((p) => ({ uid: p.uid, name: p.name || '' })), ...merge(defaults, f), studioQuota: f.studioQuota ?? null,
+    const folders = Object.entries(data.folders || {}).map(([id, f], i) => ({
+      id, name: f.name, color: f.color || FOLDER_COLORS[i % FOLDER_COLORS.length], groups: [...f.groups], people: (f.people || []).map((p) => ({ uid: p.uid, name: p.name || '' })), ...merge(defaults, f), studioQuota: f.studioQuota ?? null,
     }));
     return { exists, corrupt, defaults, groups, folders, dm: dmView(data.dm), studio: studioView(data.studio), toolsOff: data.tools?.off || [] };
   };
@@ -485,7 +488,10 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       if (Object.keys(data.folders).length >= MAX_FOLDERS) throw new InvalidPermissions(`Tối đa ${MAX_FOLDERS} thư mục — xoá bớt rồi tạo mới.`);
       let id;
       do { id = randomBytes(5).toString('hex').slice(0, 8); } while (data.folders[id]);
-      data.folders[id] = { name: clean, groups: [] };
+      // Màu chưa thư mục nào dùng (hết thì quay vòng) — để các thư mục khác màu nhau ngay từ đầu.
+      const used = new Set(Object.values(data.folders).map((f) => f.color));
+      const color = FOLDER_COLORS.find((c) => !used.has(c)) || FOLDER_COLORS[Object.keys(data.folders).length % FOLDER_COLORS.length];
+      data.folders[id] = { name: clean, color, groups: [] };
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), id };
     },
@@ -493,6 +499,13 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       const clean = folderName(name);
       const { data } = read();
       folderOrThrow(data, fid).name = clean;
+      write(data);
+      return view({ data, exists: true, corrupt: false });
+    },
+    setFolderColor(fid, color) {
+      if (!FOLDER_COLORS.includes(color)) throw new InvalidPermissions('Màu không hợp lệ — chọn lại trong bảng màu.');
+      const { data } = read();
+      folderOrThrow(data, fid).color = color;
       write(data);
       return view({ data, exists: true, corrupt: false });
     },
@@ -550,7 +563,7 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       seedReplyOnlyTagged(data);
       const defaults = { ...merge(builtin(), data.defaults), studioQuota: null };
       const { entry, changed } = diffLayer(settings, defaults, folder);
-      data.folders[fid] = { name: folder.name, groups: folder.groups, ...(folder.people?.length ? { people: folder.people } : {}), ...entry };
+      data.folders[fid] = { name: folder.name, ...(folder.color ? { color: folder.color } : {}), groups: folder.groups, ...(folder.people?.length ? { people: folder.people } : {}), ...entry };
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), changed };
     },

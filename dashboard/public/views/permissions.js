@@ -6,6 +6,7 @@ import { html, Icon, Live, Notice, PageHead, SaveBar, Spinner, Toggle, onText } 
 import { fold } from '../fold.js';
 import { DmEditor, dmBadge } from './dm-permissions.js';
 import { FolderPeople } from './folder-people.js';
+import { FolderChip, FolderColorPicker, FolderFilter, colorOf, inFolderFilter } from './folder-ui.js';
 import { StudioBox, applyPolicy, parseQuota, studioComplete } from './studio-box.js';
 import { QuotaEditor, quotaBadge } from './studio-quota.js';
 import { CallWordsEditor } from './call-words.js';
@@ -198,7 +199,7 @@ function FolderEditor({ folder, perms, list, admin, onSaved, onBack, onDirty, on
   return html`<div class="perm-form folder-edit">
     <header class="thread-head">
       <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
-      <h2><${Icon} name="folder" size=${18} /> ${folder.name}</h2>
+      <h2><span class=${`fdot fdot-${colorOf(folder)}`} aria-hidden="true"></span> ${folder.name}</h2>
       <span class=${`badge badge-${folderBadge(folder).kind}`}>${folderBadge(folder).text}</span>
     </header>
     <${Live} error=${msg.error} ok=${msg.ok} />
@@ -230,7 +231,10 @@ function FolderEditor({ folder, perms, list, admin, onSaved, onBack, onDirty, on
     </details>
     <${FolderPeople} folder=${folder} folders=${perms.folders} admin=${admin} busy=${busy} run=${run} base=${base} />
     <details class="perm-box">
-      <summary><span>Tên và xoá thư mục</span></summary>
+      <summary><span>Tên, màu và xoá thư mục</span></summary>
+      <p class="small">Màu thư mục — để phân biệt ở Phân quyền và Phiên chat:</p>
+      <${FolderColorPicker} value=${colorOf(folder)} disabled=${busy !== ''}
+        onChange=${(c) => { if (c !== colorOf(folder)) run('color', `${base}/color`, 'PUT', { color: c }, 'Đã đổi màu thư mục.'); }} />
       <div class="row">
         <label for="folder-name" class="sr-only">Tên thư mục</label>
         <input id="folder-name" maxlength="60" value=${name} onInput=${(e) => setName(e.currentTarget.value)} />
@@ -255,6 +259,7 @@ export function Permissions({ me }) {
   const [groupsError, setGroupsError] = useState('');
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [folderFilter, setFolderFilter] = useState('all');
   const [selected, setSelected] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [flash, setFlash] = useState('');
@@ -317,7 +322,8 @@ export function Permissions({ me }) {
     catch (err) { setFlash(''); window.alert(err.message); }
   }
   const needle = fold(query.trim());
-  const shown = list.filter((g) => !needle || fold(g.name).includes(needle));
+  const groupFolder = (g) => (g.folder ? folders.find((f) => f.id === g.folder.id) || null : null);
+  const shown = list.filter((g) => (!needle || fold(g.name).includes(needle)) && inFolderFilter(folderFilter, groupFolder(g)));
   const defaultsTarget = { id: DEFAULTS_KEY, name: 'Mặc định cho nhóm mới', members: null, ...pick(perms.defaults) };
   const target = selected === DEFAULTS_KEY ? defaultsTarget : list.find((g) => g.id === selected) || null;
   const sub = (g) => {
@@ -368,19 +374,20 @@ export function Permissions({ me }) {
             const badge = folderBadge(f);
             return html`<li key=${key}><button type="button" class=${`conv conv-folder${selected === key ? ' active' : ''}`}
               aria-current=${selected === key ? 'true' : undefined} onClick=${() => choose(key)}>
-              <span class="conv-top"><span class="conv-name"><${Icon} name="folder" size=${16} /> ${f.name}</span>
+              <span class="conv-top"><span class="conv-name"><span class=${`fdot fdot-${colorOf(f)}`} aria-hidden="true"></span> ${f.name}</span>
                 <span class=${`badge badge-${badge.kind}`}>${badge.text}</span></span>
-              <span class="conv-preview">Cài đặt chung cho các nhóm bên trong · bật/tắt hàng loạt</span>
+              <span class="conv-preview">Cài đặt chung cho nhóm và người bên trong · bật/tắt hàng loạt</span>
             </button></li>`;
           }) : html`<li class="muted small folder-empty">Gom các nhóm cùng chủ đề vào thư mục để chỉnh và bật/tắt hàng loạt.</li>`}
           <li class="folder-head"><span>Nhóm</span></li>
+          ${folders.length ? html`<li><${FolderFilter} folders=${folders} items=${list} of=${groupFolder} value=${folderFilter} onChange=${setFolderFilter} label="Lọc nhóm theo thư mục" /></li>` : null}
           ${shown.map((g) => {
             const badge = groupBadge(g);
             return html`<li key=${g.id}><button type="button" class=${`conv${selected === g.id ? ' active' : ''}`}
               aria-current=${selected === g.id ? 'true' : undefined} onClick=${() => choose(g.id)}>
               <span class="conv-top"><span class="conv-name">${g.name}</span>
                 ${badge ? html`<span class=${`badge badge-${badge.kind}`}>${badge.text}</span>` : null}</span>
-              <span class="conv-preview">${g.folder ? html`<span class="folder-tag"><${Icon} name="folder" size=${12} /> ${g.folder.name}</span> · ` : null}${sub(g)}</span>
+              <span class="conv-preview">${groupFolder(g) ? html`<${FolderChip} folder=${groupFolder(g)} /> ` : null}${sub(g)}</span>
             </button></li>`;
           })}
         </ul>
