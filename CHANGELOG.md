@@ -2,6 +2,11 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.17.1] — 2026-10-12
+
+### Sửa
+- Tra cứu học thuật nguồn Europe PMC: tiêu đề và tóm tắt không còn lẫn mã HTML (ví dụ "SiO&lt;sub&gt;2&lt;/sub&gt;" nay hiện là "SiO2").
+
 ## [2.17.0] — 2026-10-12
 
 ### Thêm

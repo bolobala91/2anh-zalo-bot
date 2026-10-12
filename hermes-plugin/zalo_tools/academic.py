@@ -9,7 +9,9 @@ NCBI cho tối đa ~3 yêu cầu/giây mỗi IP khi không có khoá; vượt l�
 chặn. Nên mọi lời gọi NCBI đi qua một nhịp chung (không phải giới hạn theo người).
 """
 
+import html
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -358,6 +360,15 @@ def _arxiv_via_openalex(query: str, limit: int, abstracts: bool, api_key: str) -
     return out
 
 
+_MARKUP = re.compile(r"<[^>]+>")
+
+
+def _no_markup(text: Any, sep: str = "") -> str:
+    """Europe PMC trả tiêu đề/tóm tắt có HTML, đôi khi đã escape ("SiO&lt;sub&gt;2&lt;/sub&gt;"). Tiêu đề bỏ thẻ
+    dính liền (SiO2); tóm tắt thay thẻ bằng khoảng trắng để tiêu đề mục không dính vào chữ."""
+    return " ".join(_MARKUP.sub(sep, html.unescape(str(text or ""))).split())
+
+
 def europepmc(query: str, limit: int = 5, abstracts: bool = True) -> List[Dict[str, Any]]:
     """Europe PMC: y sinh, khoa học sự sống (gồm PubMed, PMC, bản thảo, bằng sáng chế) — có cờ toàn văn mở."""
     limit = max(1, min(int(limit or 5), MAX_RESULTS))
@@ -375,7 +386,7 @@ def europepmc(query: str, limit: int = 5, abstracts: bool = True) -> List[Dict[s
                else f"https://doi.org/{it['doi']}" if it.get("doi") else None)
         item = {
             "doi": it.get("doi"),
-            "title": it.get("title"),
+            "title": _no_markup(it.get("title")),
             "authors": [s.strip() for s in str(it.get("authorString") or "").split(",") if s.strip()][:6],
             "journal": it.get("journalTitle") or (((it.get("journalInfo") or {}).get("journal") or {}).get("title")),
             "year": it.get("pubYear"),
@@ -385,6 +396,6 @@ def europepmc(query: str, limit: int = 5, abstracts: bool = True) -> List[Dict[s
             "url": url,
         }
         if abstracts:
-            item["abstract"] = " ".join(str(it.get("abstractText") or "").replace("<", " <").split())[:ABSTRACT_MAX_CHARS]
+            item["abstract"] = _no_markup(it.get("abstractText"), " ")[:ABSTRACT_MAX_CHARS]
         out.append(item)
     return out

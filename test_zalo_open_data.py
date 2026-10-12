@@ -173,14 +173,17 @@ class AcademicSourcesTest(unittest.TestCase):
 
     def test_europepmc_links_and_open_access_flag(self):
         body = json.dumps({"resultList": {"result": [
-            {"title": "Biochar", "authorString": "Le A, Tran B.", "pubYear": "2025", "pmcid": "PMC1", "isOpenAccess": "Y",
-             "doi": "10.1/x", "abstractText": "Cd <i>uptake</i>.", "journalTitle": "Chemosphere"},
+            {"title": "Biochar SiO&lt;sub&gt;2&lt;/sub&gt; ash", "authorString": "Le A, Tran B.", "pubYear": "2025",
+             "pmcid": "PMC1", "isOpenAccess": "Y", "doi": "10.1/x",
+             "abstractText": "<h4>Aim</h4>Cd <i>uptake</i>.", "journalTitle": "Chemosphere"},
             {"title": "Soil", "pmid": "42", "isOpenAccess": "N"}]}}).encode()
         with mock.patch.object(academic, "_get", return_value=body):
             r = academic.europepmc("biochar", 2)
         self.assertEqual(r[0]["url"], "https://europepmc.org/article/PMC/PMC1")
         self.assertTrue(r[0]["open_access"])
         self.assertEqual(r[0]["authors"], ["Le A", "Tran B."])
+        self.assertEqual(r[0]["title"], "Biochar SiO2 ash")
+        self.assertEqual(r[0]["abstract"], "Aim Cd uptake .")
         self.assertEqual(r[1]["url"], "https://europepmc.org/article/MED/42")
 
 
