@@ -376,7 +376,8 @@ def make_video(prompt: str, *, model: Optional[str] = None, seconds: Optional[in
     model = model if model in VIDEO_MODELS else conf["model"]
     seconds = fit_seconds(model, int(seconds or conf["seconds"]))
     aspect, size = video_size(model, aspect)
-    body: Dict[str, Any] = {"model": model, "prompt": " ".join(str(prompt or "").split()), "seconds": seconds, "size": size}
+    # Chuẩn OpenAI Videos: ``seconds`` là CHUỖI — gửi số kèm ``size`` bị Stali từ chối 400.
+    body: Dict[str, Any] = {"model": model, "prompt": " ".join(str(prompt or "").split()), "seconds": str(seconds), "size": size}
     if not body["prompt"]:
         raise EngineError("cần mô tả video")
     refs = [r for r in (refs or []) if isinstance(r, str) and r.strip()][:VIDEO_REFS.get(model, 3)]

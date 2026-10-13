@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.30.3] — 2026-10-13
+
+### Sửa
+
+- **Tạo video Stali vẫn báo lỗi 400:** độ dài video gửi dạng chuỗi (`"5"`) theo chuẩn OpenAI Videos — Stali từ chối độ dài dạng số khi có kích thước khung hình.
+
 ## [2.30.2] — 2026-10-13
 
 ### Sửa

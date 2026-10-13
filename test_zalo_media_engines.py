@@ -175,8 +175,8 @@ class VideoTest(Base):
         with mock.patch("requests.request", request):
             got = me.make_video("phố đêm", seconds=12, aspect="16:9", sleep=lambda s: None)
         self.assertEqual(got["data"], b"MP4DATA")
-        self.assertEqual(log[0][2], {"model": "seedance-2.0-fast", "prompt": "phố đêm", "seconds": 10, "size": "1280x720"},
-                         "khung hình gửi qua size — Stali từ chối aspect_ratio")
+        self.assertEqual(log[0][2], {"model": "seedance-2.0-fast", "prompt": "phố đêm", "seconds": "10", "size": "1280x720"},
+                         "khung hình gửi qua size, seconds là chuỗi — Stali từ chối aspect_ratio / seconds số")
         self.assertEqual(got["aspect"], "16:9")
         self.assertEqual([m for m, *_ in log], ["POST", "GET", "GET", "GET"])
         self.assertEqual(me.video_size("veo-3.1", "1:1"), ("9:16", "720x1280"), "Veo không có khung vuông")
