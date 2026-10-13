@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.33.0] — 2026-10-13
+
+### Thêm
+
+- **Tổng quan › Khách dùng bot:** số lượt bot thực sự nhận xử lý cho người không phải chủ nhân — **trong nhóm** và **nhắn riêng**, số người khác nhau — theo **Hôm nay / 7 ngày / 30 ngày**; **bảng xếp hạng 10 người dùng nhiều nhất** trong nhóm (kèm nhóm họ dùng nhiều nhất) và khi nhắn riêng, bấm vào là mở cuộc trò chuyện. Plugin ghi sổ mỗi lượt (`zalo/bot-uses.jsonl`, giữ 40 ngày); 30 ngày trước khi cập nhật được dựng lại một lần từ lịch sử trợ lý (nhắn riêng chính xác, trong nhóm ghép tên với lịch sử tin nên có thể lệch vài lượt).
+
+### Đổi
+
+- **Người trong thư mục:** thay các thẻ tên bằng danh sách cuộn được, có ô lọc, ô tích, "Chọn tất cả" và nút **bỏ khỏi thư mục hàng loạt**.
+
 ## [2.32.1] — 2026-10-13
 
 ### Sửa

@@ -2,9 +2,9 @@
 // là có trong danh sách nhắn riêng). Giao diện chỉ hiện tên; UID chỉ ở ô nhập khi phải gõ tay.
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
-import { html, Icon } from '../ui.js';
+import { html } from '../ui.js';
 import { knownNames } from './dm-permissions.js';
-import { MultiPick } from './multi-pick.js';
+import { BulkList, MultiPick } from './multi-pick.js';
 
 const UID = /^[1-9]\d{14,21}$/;
 
@@ -46,10 +46,10 @@ export function FolderPeople({ folder, folders, admin, busy, run, base }) {
   return html`<details class="perm-box" open=${!saved.length && !folder.groups.length}>
     <summary><span>Người trong thư mục</span><span class="muted perm-box-sum">· ${people.length} người${dirty ? ' (chưa lưu)' : ''}</span></summary>
     <p class="muted small">Người trong thư mục <strong>được nhắn riêng với bot</strong> và dùng đúng các tính năng của thư mục (bên dưới) khi nhắn riêng. Muốn chỉnh riêng một người thì vào Nhắn riêng › Danh sách người. Mỗi người thuộc một thư mục.</p>
-    ${people.length ? html`<ul class="folder-people">${people.map((p) => html`<li key=${p.uid}>
-      <span>${nameOf(p)}${elsewhere.has(p.uid) ? html`<small class="muted"> · sẽ chuyển từ "${elsewhere.get(p.uid)}"</small>` : null}</span>
-      <button type="button" class="tag-x" aria-label=${`Bỏ ${nameOf(p)} khỏi thư mục`} onClick=${() => setPeople(people.filter((x) => x.uid !== p.uid))}><${Icon} name="close" size=${14} /></button>
-    </li>`)}</ul>` : html`<p class="muted small">Chưa có ai.</p>`}
+    <${BulkList} id="fp-have" label="Người trong thư mục" action="Bỏ khỏi thư mục"
+      items=${people.map((p) => ({ uid: p.uid, name: nameOf(p), note: elsewhere.has(p.uid) ? `· sẽ chuyển từ "${elsewhere.get(p.uid)}"` : '' }))}
+      onRemove=${(uids) => setPeople(people.filter((x) => !uids.includes(x.uid)))} />
+    <h4 class="multi-pick-head">Thêm người</h4>
     <${MultiPick} id="fp-pick" options=${options} label="Chọn người đã biết"
       onAdd=${(list) => { setPeople([...people, ...list.map((o) => ({ uid: o.uid, name: o.name || '' }))]); setError(''); }} />
     <div class="dm-add">

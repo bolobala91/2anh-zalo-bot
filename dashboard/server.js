@@ -42,6 +42,7 @@ import { createAgentConfig, createSoul } from './lib/agent-config.js';
 import { createAiKeys } from './lib/ai-keys.js';
 import { createAiModels } from './lib/ai-models.js';
 import { createMediaEngines } from './lib/media-engines.js';
+import { createBotUses } from './lib/bot-uses.js';
 import { createAgentTrace } from './lib/agent-trace.js';
 import { createMcpServers } from './lib/mcp-servers.js';
 import { createSettings } from './lib/settings.js';
@@ -82,10 +83,17 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
   const agentMemory = createHermesMemory({ hermesHome: paths.hermesHome, configFile: paths.hermesConfigFile });
   const threadNames = createThreadNames({ loadGroups: () => sidecar.groups(), file: join(paths.dataDir, 'group-names.json') });
   const owners = createOwnersStore({ envFile: paths.hermesEnvFile, sidecarEnvFile: paths.sidecarEnvFile, pendingFile: paths.pendingRestartFile, inheritedValue: inheritedOwners });
+  const store = createStoreReader({ path: paths.sqliteFile });
   const people = createPeopleStore({ file: readEnvKey(paths.hermesEnvFile, 'ZALO_PEOPLE_FILE') || paths.peopleFile });
   return {
     paths, config, sidecar, linker,
-    store: createStoreReader({ path: paths.sqliteFile }),
+    store,
+    botUses: createBotUses({
+      hermesHome: paths.hermesHome, stateDb: paths.hermesStateDb, zaloDb: paths.sqliteFile,
+      owners: () => [...owners.list(), ...owners.overrideUids()],
+      groupName: (id) => threadNames.cached().get(id) || '',
+      personName: (uid) => { try { return (uid && (store.senderNames([uid]).get(uid) || people.list().find((p) => p.uid === uid)?.name)) || ''; } catch { return ''; } },
+    }),
     threadNames,
     users,
     sessions: createSessionStore(paths.sessionsFile),

@@ -1217,6 +1217,13 @@ class ZaloAdapter(BasePlatformAdapter):
                 expect_ack=False,
             )
 
+        # Sổ lượt dùng bot cho Tổng quan › Khách dùng bot (ai hỏi, nhóm hay nhắn riêng) — cố hết sức.
+        try:
+            from .bot_uses import record as _record_use
+            _record_use(sender_uid, sender_name, thread_id, is_group, self._is_owner(sender_uid))
+        except Exception:
+            logger.debug("[zalo] không ghi được lượt dùng bot", exc_info=True)
+
         await self.handle_message(event)
 
     @staticmethod

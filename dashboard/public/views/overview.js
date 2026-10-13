@@ -171,6 +171,41 @@ const QUICK = [
   ['#/agent', 'bot', 'Tính cách AI', 'indigo', true], ['#/schedules', 'clock', 'Lịch hẹn', 'orange'], ['#/settings', 'settings', 'Cấu hình', 'gray', true],
 ];
 
+const USE_PERIODS = [[1, 'Hôm nay'], [7, '7 ngày'], [30, '30 ngày']];
+/** Khách dùng bot: lượt người không phải chủ nhân được bot xử lý trong nhóm / nhắn riêng + xếp hạng. */
+function BotUses() {
+  const [days, setDays] = useState(7);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let alive = true;
+    setError('');
+    api(`/api/bot-uses?days=${days}`).then((r) => { if (alive) setData(r); }, (e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
+  }, [days]);
+  const board = (title, b, group) => html`<div class="ov-board">
+    <h3>${title}</h3>
+    ${b.top.length ? html`<ol class="ov-rank">${b.top.map((p, i) => html`<li key=${`${p.uid}:${p.name}:${i}`}>
+      <button type="button" class="ov-rank-row" disabled=${!(group ? p.thread : p.uid)}
+        onClick=${() => openChat(group ? { threadId: p.thread, threadType: 1, name: p.threadName || 'Nhóm' } : { threadId: p.uid, threadType: 0, name: p.name })}>
+        <span class="ov-rank-no">${i + 1}</span>
+        <span class="ov-rank-who"><strong>${p.name}</strong>${group && p.threadName ? html`<small class="muted">nhiều nhất ở ${p.threadName}</small>` : null}</span>
+        <span class="conv-count" title=${`${p.count} lượt`}>${p.count.toLocaleString('vi-VN')}</span>
+      </button></li>`)}</ol>` : html`<p class="muted small">Chưa có ai.</p>`}
+  </div>`;
+  return html`<${Card} title="Khách dùng bot" icon="users" tint="teal">
+    <div class="chips" role="group" aria-label="Khoảng thời gian">${USE_PERIODS.map(([d, label]) => html`<button key=${d} type="button"
+      class="btn btn-secondary btn-sm chip" aria-pressed=${days === d ? 'true' : 'false'} onClick=${() => setDays(d)}>${label}</button>`)}</div>
+    ${error ? html`<p class="muted small">${error}</p>` : !data || data.days !== days ? html`<${Spinner} />` : html`
+      <dl class="ov-facts ov-uses">
+        <div><dt>Lượt trong nhóm</dt><dd>${data.group.uses.toLocaleString('vi-VN')}</dd><dd class="ov-small muted">${data.group.people} người</dd></div>
+        <div><dt>Lượt nhắn riêng</dt><dd>${data.dm.uses.toLocaleString('vi-VN')}</dd><dd class="ov-small muted">${data.dm.people} người</dd></div>
+      </dl>
+      <div class="ov-boards">${board('Dùng nhiều nhất trong nhóm', data.group, true)}${board('Nhắn riêng nhiều nhất', data.dm, false)}</div>
+      <p class="muted small">Chỉ tính lượt bot thực sự nhận xử lý (được tag, nhóm đang bật, được phép nhắn riêng); không tính chủ nhân.${data.approx ? ' Số trước ngày cập nhật được dựng lại từ lịch sử trợ lý nên có thể lệch vài lượt trong nhóm.' : ''}</p>`}
+  <//>`;
+}
+
 export function Overview({ me, status: s }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
@@ -253,5 +288,6 @@ export function Overview({ me, status: s }) {
         <div class="ov-quick">${QUICK.filter((q) => admin || !q[4]).map(([href, icon, text, tint]) => html`<a key=${href} class=${`ov-q tint-${tint}`} href=${href}><span class=${`nav-ico tint-${tint}`} aria-hidden="true"><${Icon} name=${icon} size=${18} /></span>${text}</a>`)}</div>
       <//>
       </div>
-    </div>`;
+    </div>
+    <${BotUses} />`;
 }
