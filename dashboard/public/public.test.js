@@ -1084,7 +1084,9 @@ test('phiên chat: dòng thống kê hội thoại — số tin, hôm nay, phiê
 });
 
 test('mẫu tính cách: đủ 6 nhóm, mỗi mẫu có đủ khung; ghép một/nhiều vai trò; ngành y tế có giới hạn bắt buộc', async () => {
-  const { SOUL_GROUPS, SOUL_PRESETS, composeSoul } = await import('./soul-presets.js');
+  const { SOUL_GROUPS, SOUL_PRESETS } = await import('../lib/soul-presets.js');
+  const { composeSoul: compose } = await import('./soul-compose.js');
+  const composeSoul = (custom, ids) => compose(custom, ids, SOUL_PRESETS);
   assert.equal(SOUL_GROUPS.length, 6);
   for (const g of SOUL_GROUPS) assert.ok(SOUL_PRESETS.some((p) => p.group === g.id), g.id);
   assert.equal(new Set(SOUL_PRESETS.map((p) => p.id)).size, SOUL_PRESETS.length);

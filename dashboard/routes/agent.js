@@ -3,7 +3,8 @@ import express from 'express';
 import { requireAuth, requireRole } from '../lib/http-guards.js';
 import { REASONING } from '../lib/agent-config.js';
 import { readJson, writeJsonAtomic } from '../lib/json-store.js';
-import { MAX_CUSTOM, MAX_PRESETS, SOUL_GROUPS, SOUL_PRESETS, composeSoul } from '../public/soul-presets.js';
+import { MAX_CUSTOM, MAX_PRESETS, SOUL_GROUPS, SOUL_PRESETS } from '../lib/soul-presets.js';
+import { composeSoul } from '../public/soul-compose.js';
 
 export function agentRoutes({ agentConfig, soul, restartFlags, activity, soulPresetsFile = null }) {
   // Mẫu tính cách đã chọn + phần riêng (tiếng Việt) — để lần sau mở lại đúng lựa chọn. SOUL.md là bản đã ghép.
@@ -22,7 +23,7 @@ export function agentRoutes({ agentConfig, soul, restartFlags, activity, soulPre
   };
   const log = (req, action, detail) => { try { activity.append({ actor: req.user.username, action, detail }); } catch (e) { console.error('[dashboard] không ghi được Nhật ký:', e); } };
   const view = () => ({ ok: true, ...agentConfig.view(), reasoningChoices: REASONING, soul: soul.view(),
-    soulPresets: { groups: SOUL_GROUPS, presets: SOUL_PRESETS.map(({ id, group, label, hint }) => ({ id, group, label, hint })), max: MAX_PRESETS, maxCustom: MAX_CUSTOM, ...presetState() } });
+    soulPresets: { groups: SOUL_GROUPS, presets: SOUL_PRESETS.map(({ id, group, label, hint, body }) => ({ id, group, label, hint, body })), max: MAX_PRESETS, maxCustom: MAX_CUSTOM, ...presetState() } });
 
   r.get('/admin/agent', ...guard, (req, res) => { try { res.json(view()); } catch (err) { fail(res, err, 'Chưa đọc được cài đặt trợ lý.'); } });
   r.get('/admin/agent/models', ...guard, async (req, res) => { try { res.json({ ok: true, models: await agentConfig.models() }); } catch (err) { fail(res, err, 'Chưa lấy được danh sách model.'); } });
@@ -57,7 +58,7 @@ export function agentRoutes({ agentConfig, soul, restartFlags, activity, soulPre
       if (selected.length > MAX_PRESETS) return res.status(400).json({ ok: false, error: `Chọn tối đa ${MAX_PRESETS} vai trò.` });
       if (custom.length > MAX_CUSTOM) return res.status(400).json({ ok: false, error: `Phần riêng tối đa ${MAX_CUSTOM} ký tự.` });
       if (!selected.length && !custom) return res.status(400).json({ ok: false, error: 'Chọn ít nhất một vai trò hoặc viết phần riêng của bot.' });
-      const text = composeSoul(custom, selected);
+      const text = composeSoul(custom, selected, SOUL_PRESETS);
       if (soul.save(text, req.user.username)) {
         restartFlags.mark('assistant', 'Tính cách (SOUL.md)');
         log(req, 'agent_soul', `mẫu: ${selected.map((id) => SOUL_PRESETS.find((p) => p.id === id).label).join(', ') || 'không'}${custom ? ' + phần riêng' : ''}`);

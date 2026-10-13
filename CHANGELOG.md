@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.32.1] — 2026-10-13
+
+### Sửa
+
+- **Dashboard không chạy trên máy Windows sau khi cập nhật:** Windows Defender nhận nhầm tệp mẫu tính cách (`soul-presets.js`, toàn đoạn văn mẫu) là mã độc "ObfusScript" và xoá mất, làm dashboard không khởi động được. Dữ liệu mẫu chuyển sang tệp dữ liệu `dashboard/lib/soul-presets.json` (Defender không gắn cờ), phần ghép SOUL tách thành `soul-compose.js`; trang Tính cách AI nhận nội dung mẫu qua API. Kết quả ghép SOUL giữ nguyên từng ký tự.
+
 ## [2.32.0] — 2026-10-13
 
 ### Thêm

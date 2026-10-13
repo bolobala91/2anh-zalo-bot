@@ -3,7 +3,7 @@ import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, fmtTime, Live, PageHead, SaveBar, Spinner } from '../ui.js';
 import { RestartBanner } from './restart-banner.js';
-import { composeSoul } from '../soul-presets.js';
+import { composeSoul } from '../soul-compose.js';
 
 const CUSTOM_PLACEHOLDER = `Ví dụ:
 Tên: Uyển Nhi — trợ lý của thầy Hải Anh (giáo viên Hoá, Phó Bí thư Đoàn trường THPT Chuyên Nguyễn Trãi).
@@ -18,7 +18,7 @@ function SoulPresets({ data, busy, onSave }) {
   const dirty = custom.trim() !== sp.custom.trim() || selected.length !== sp.selected.length || selected.some((id) => !sp.selected.includes(id));
   const toggle = (id) => setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   const full = selected.length >= sp.max;
-  const text = composeSoul(custom, selected);
+  const text = composeSoul(custom, selected, sp.presets);
   return html`<form class="card" onSubmit=${(e) => { e.preventDefault(); onSave({ selected, custom }); }}>
     <h2>Tính cách (SOUL.md)</h2>
     <p class="muted small">Chọn một hoặc nhiều vai trò hợp với nơi bot làm việc, rồi viết phần riêng của bot bằng tiếng Việt. Chọn nhiều vai trò thì bot tự dùng đúng vai trò theo nhóm/người đang trò chuyện. Lưu xong khởi động lại trợ lý; cuộc trò chuyện mới dùng tính cách mới.</p>
