@@ -164,23 +164,34 @@ export function statusLevel(s) {
   return { kind: 'ok', icon: 'check', text: `Bot đang hoạt động bình thường${s.zalo.displayName ? ` — ${s.zalo.displayName}` : ''}.` };
 }
 
-/** Báo có bản bot mới (hỏi máy chủ khi mở trang và mỗi giờ). Quản trị bấm vào để tới Bảo trì. */
+/**
+ * Báo có bản bot mới. Hỏi máy chủ khi mở trang, khi quay lại tab, mỗi 15 giây lúc đang cập nhật, mỗi 2 phút lúc đang
+ * báo có bản mới (để nhãn tự tắt ngay khi cập nhật xong ở nơi khác), còn lại mỗi giờ. `loaded`: bản máy chủ lúc trang
+ * này mở — máy chủ đã lên bản khác thì nhắc tải lại trang.
+ */
 function useUpdateNotice() {
   const [n, setN] = useState(null);
+  const loaded = useRef('');
   const updating = Boolean(n?.updating);
+  const newer = Boolean(n?.newer);
   useEffect(() => {
-    const load = () => api('/api/update-notice').then(setN).catch(() => {});
-    if (!updating) load();
-    // Đang cập nhật: hỏi lại mỗi 15 giây để nhãn tự tắt khi xong; bình thường mỗi giờ.
-    const t = setInterval(load, updating ? 15_000 : 3600_000);
-    return () => clearInterval(t);
-  }, [updating]);
+    const load = () => api('/api/update-notice').then((r) => { if (!loaded.current && r.current) loaded.current = r.current; setN({ ...r, loaded: loaded.current }); }).catch(() => {});
+    load();
+    const t = setInterval(load, updating ? 15_000 : newer ? 120_000 : 3600_000);
+    const onShow = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onShow); };
+  }, [updating, newer]);
   return n;
 }
+
+/** Máy chủ đã chạy bản khác bản lúc trang mở (vừa cập nhật xong) → cần tải lại trang. */
+export const reloadNeeded = (n) => Boolean(n && !n.updating && n.loaded && n.current && n.current !== n.loaded);
 
 export function noticeText(n) {
   if (!n) return '';
   if (n.updating) return 'Đang cập nhật bot…';
+  if (reloadNeeded(n)) return `Đã cập nhật lên v${String(n.current).replace(/^v/, '')} — tải lại trang`;
   return n.newer ? `Có bản mới ${n.latest}` : '';
 }
 
@@ -193,7 +204,8 @@ function StatusStrip({ status, error, path, admin, update }) {
   return html`<div class=${`strip strip-${lv.kind}`} role="status" aria-live="polite">
     <span class="strip-text"><${Icon} name=${lv.icon} /> ${lv.text}</span>
     <span class="strip-actions">
-      ${notice ? (admin && path !== '/maintenance' ? html`<a class="update-pill" href="#/maintenance"><${Icon} name="download" size=${16} /> ${notice}</a>`
+      ${notice && reloadNeeded(update) ? html`<button type="button" class="update-pill" onClick=${() => location.reload()}><${Icon} name="refresh" size=${16} /> ${notice}</button>`
+        : notice ? (admin && path !== '/maintenance' ? html`<a class="update-pill" href="#/maintenance"><${Icon} name="download" size=${16} /> ${notice}</a>`
         : html`<span class="update-pill" title=${admin ? '' : 'Báo người quản trị để cập nhật'}><${Icon} name="download" size=${16} /> ${notice}</span>`) : null}
       ${lv.qr && path !== '/zalo' ? html`<a class="btn btn-light btn-sm" href="#/zalo"><${Icon} name="qr" size=${16} /> Quét mã đăng nhập lại</a>` : null}
       <${CommunityButton} />

@@ -19,6 +19,8 @@ export function kbRoutes({ kb, activity, restartFlags }) {
   };
 
   const readName = (req) => { try { return decodeURIComponent(String(req.get('x-file-name') || '')); } catch { return ''; } };
+  /** Thư mục (siêu dữ liệu dashboard) cho tài liệu mới: thiếu/rỗng = "Chưa xếp". */
+  const folderArg = (v) => (v == null || v === '' ? null : String(v));
 
   r.get('/kb', requireAuth, async (req, res) => {
     try { res.json({ ok: true, ...kb.info(), ...(await kb.list({ fresh: req.query.fresh === '1' })), uploadTypes: UPLOAD_TYPES, maxBytes: MAX_UPLOAD_BYTES }); } catch (err) { fail(res, err, 'Chưa đọc được kho tri thức — thử lại sau ít phút.'); }
@@ -28,7 +30,7 @@ export function kbRoutes({ kb, activity, restartFlags }) {
     try {
       const name = readName(req);
       if (!Buffer.isBuffer(req.body)) return res.status(400).json({ ok: false, error: 'Chưa nhận được tệp — chọn lại tệp rồi tải lên.' });
-      const path = kb.upload(name, req.body);
+      const path = kb.upload(name, req.body, { folder: folderArg(req.query.folder) });
       log(req, 'kb_upload', path);
       res.json({ ok: true, path });
     } catch (err) { fail(res, err, 'Chưa tải lên được — thử lại, nếu vẫn lỗi hãy báo người cài đặt.'); }
@@ -59,7 +61,7 @@ export function kbRoutes({ kb, activity, restartFlags }) {
 
   r.post('/kb/note', requireAuth, (req, res) => {
     try {
-      const path = kb.createNote(req.body?.title, req.body?.text);
+      const path = kb.createNote(req.body?.title, req.body?.text, { folder: folderArg(req.body?.folder) });
       log(req, 'kb_note', path);
       res.json({ ok: true, path });
     } catch (err) { fail(res, err, 'Chưa tạo được tài liệu — thử lại.'); }
@@ -96,6 +98,39 @@ export function kbRoutes({ kb, activity, restartFlags }) {
       log(req, 'kb_delete', `${n} tài liệu`);
       res.json({ ok: true, count: n });
     } catch (err) { fail(res, err, 'Chưa xoá được — thử lại.'); }
+  });
+
+  /** Xếp một hay nhiều tài liệu tự tạo vào thư mục: `{ paths: [...], folder: id | null }` — một dòng Nhật ký. */
+  r.put('/kb/files/folder', requireAuth, (req, res) => {
+    try {
+      const { count, folder } = kb.moveMany(req.body?.paths, folderArg(req.body?.folder));
+      log(req, 'kb_move', `${count} tài liệu → ${folder ? folder.name : 'Chưa xếp'}`);
+      res.json({ ok: true, count });
+    } catch (err) { fail(res, err, 'Chưa chuyển được tài liệu — thử lại.'); }
+  });
+
+  r.post('/kb/folders', requireAuth, (req, res) => {
+    try {
+      const folder = kb.createFolder({ name: req.body?.name, color: req.body?.color ?? undefined });
+      log(req, 'kb_folder_create', folder.name);
+      res.json({ ok: true, folder });
+    } catch (err) { fail(res, err, 'Chưa tạo được thư mục — thử lại.'); }
+  });
+
+  r.put('/kb/folders/:id', requireAuth, (req, res) => {
+    try {
+      const { before, after } = kb.updateFolder(req.params.id, { name: req.body?.name ?? undefined, color: req.body?.color ?? undefined });
+      log(req, 'kb_folder_edit', before.name === after.name ? after.name : `${before.name} → ${after.name}`);
+      res.json({ ok: true, folder: after });
+    } catch (err) { fail(res, err, 'Chưa lưu được thư mục — thử lại.'); }
+  });
+
+  r.delete('/kb/folders/:id', requireAuth, (req, res) => {
+    try {
+      const folder = kb.deleteFolder(req.params.id);
+      log(req, 'kb_folder_delete', folder.name);
+      res.json({ ok: true });
+    } catch (err) { fail(res, err, 'Chưa xoá được thư mục — thử lại.'); }
   });
 
   // Lỗi của express.raw (quá cỡ) đi qua đây thay vì câu chung của app.

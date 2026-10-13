@@ -73,6 +73,10 @@ export const ACTION_LABELS = {
   kb_edit: 'Sửa tài liệu trong kho tri thức',
   kb_replace: 'Thay tệp trong kho tri thức',
   kb_source: 'Đổi nguồn kho tri thức',
+  kb_folder_create: 'Tạo thư mục tài liệu trong kho tri thức',
+  kb_folder_edit: 'Sửa thư mục tài liệu trong kho tri thức',
+  kb_folder_delete: 'Xoá thư mục tài liệu trong kho tri thức',
+  kb_move: 'Chuyển tài liệu sang thư mục khác trong kho tri thức',
   insight_summary: 'Nhờ AI tóm tắt chủ đề nhóm',
   second_brain_note: 'Thêm ghi chú vào Second brain',
   // Giai đoạn 8 (spec §19.6)

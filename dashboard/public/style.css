@@ -769,6 +769,9 @@ fieldset.field { border: 0; padding: 0; margin: 0; }
 .kb-find { margin-top: 10px; }
 .kb-find > summary { display: inline-flex; align-items: center; min-height: 36px; color: var(--brand); font-size: 14px; font-weight: 600; cursor: pointer; }
 .kb-find[open] > input { width: 100%; margin: 6px 0; }
+.kb-folder-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+.kb-folder-bar .folder-filter { flex: 0 1 auto; min-width: 0; }
+.row-main small .fchip { margin-right: 6px; vertical-align: middle; max-width: 60%; }
 
 /* Theo dõi agent gọn: chi tiết số liệu và từng lượt chỉ hiện khi bấm. */
 .trace-meta { flex: 1 1 100%; margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }

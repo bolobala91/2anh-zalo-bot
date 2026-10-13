@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.36.0] — 2026-10-14
+
+### Thêm
+
+- **Kho tri thức › Tài liệu tự tạo có thư mục:** tạo thư mục có **tên và màu** (đổi tên, đổi màu, xoá — tài liệu bên trong về "Chưa xếp"), lọc theo thư mục (Tất cả · từng thư mục · Chưa xếp), chọn thư mục trong cửa sổ chi tiết, **chuyển nhiều tài liệu vào thư mục** ở chế độ chọn nhiều; tài liệu mới tải lên/viết mới vào thẳng thư mục đang xem. Thư mục là nhãn quản lý trên dashboard — tệp và cách bot đọc kho giữ nguyên.
+
+### Sửa
+
+- **Thanh trạng thái vẫn báo "Có bản mới" sau khi đã cập nhật:** trang hỏi lại khi quay lại tab và mỗi 2 phút lúc đang báo; máy chủ đã lên bản mới hơn trang đang mở thì đổi thành nút **"Đã cập nhật lên vX — tải lại trang"**.
+
 ## [2.35.0] — 2026-10-13
 
 ### Thêm — chọn và sửa hàng loạt (tiếp)

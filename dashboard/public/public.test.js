@@ -1004,6 +1004,9 @@ test('thanh trạng thái: nhãn bản mới / đang cập nhật', async () => 
   assert.equal(noticeText({ newer: false }), '');
   assert.equal(noticeText({ newer: true, latest: 'v2.9.0' }), 'Có bản mới v2.9.0');
   assert.equal(noticeText({ newer: true, latest: 'v2.9.0', updating: true }), 'Đang cập nhật bot…');
+  // Trang mở lúc 2.34.0, máy chủ đã lên 2.35.0 (cập nhật ở nơi khác) → nhắc tải lại thay vì "có bản mới".
+  assert.equal(noticeText({ newer: false, current: '2.35.0', loaded: '2.34.0', latest: 'v2.35.0' }), 'Đã cập nhật lên v2.35.0 — tải lại trang');
+  assert.equal(noticeText({ newer: false, current: '2.35.0', loaded: '2.35.0' }), '', 'cùng bản thì không báo gì');
 });
 
 test('Phiên chat: dò "@" đang gõ và tính vị trí tag trên nội dung gửi', async () => {

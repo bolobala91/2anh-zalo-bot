@@ -9,6 +9,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { writeFileAtomic } from './json-store.js';
 import { writeEnvKeys } from './env-file.js';
+import { createKbFolders } from './kb-folders.js';
 
 export const UPLOAD_DIR = 'tai-len-dashboard';
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -123,8 +124,10 @@ function subdirsOf(dir) {
  * — không bao giờ nhận đường dẫn tự do: bot đọc được kho bằng công cụ công khai, nên một phiên Quản trị bị chiếm
  * không được biến thư mục khoá/phiên đăng nhập thành kho.
  */
-export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envFile = null, now = Date.now }) {
+export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envFile = null, foldersFile = null, now = Date.now }) {
   let cache = null;
+  // Thư mục của tài liệu tự tạo: chỉ là siêu dữ liệu (kb-folders.js), tệp vẫn nằm phẳng trong thư mục tải lên.
+  const folders = createKbFolders({ file: foldersFile });
   function root() {
     const raw = String(kbDir() || '').trim();
     if (!raw) return null;
@@ -231,7 +234,7 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
     if (!st.isFile()) throw err(403, NOT_ALLOWED);
     return { r, scope, dir, target };
   }
-  function upload(rawName, buf) {
+  function upload(rawName, buf, { folder = null } = {}) {
     const r = root();
     if (!r) throw err(409, 'Chưa cấu hình kho tri thức (ZALO_KB_DIR) — báo người cài đặt.');
     const name = safeFileName(rawName);
@@ -239,6 +242,7 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
     const scope = parsePublicDirs(publicDirs());
     const dir = uploadDir(r, scope);
     assertReadable(r, scope, dir, name);
+    folders.check(folder);
     // Kiểm TRƯỚC khi tạo thư mục: thư mục cha là liên kết trỏ ra ngoài kho thì mkdir sẽ tạo ngoài kho.
     assertParentInside(r, dir);
     if (existsSync(dir)) assertRealInside(r, dir);
@@ -249,7 +253,9 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
     for (let i = 2; existsSync(join(dir, final)); i += 1) final = `${stem} (${i})${ext}`;
     writeFileAtomic(join(dir, final), buf, { mode: 0o644 });
     cache = null;
-    return relOf(r, join(dir, final));
+    const rel = relOf(r, join(dir, final));
+    if (folder != null) folders.assign([rel], folder);
+    return rel;
   }
   return {
     info() {
@@ -269,12 +275,14 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
         const walked = await walk(r, scope, relOf(r, dir));
         cache = { key, at: now(), files: walked.files, truncated: walked.capped, sources: summarize(walked.counts, named), own: await ownFiles(r, dir) };
       }
-      return { files: cache.files, truncated: cache.truncated, sources: cache.sources, own: cache.own };
+      const meta = folders.view(cache.own.map((f) => f.path), relOf(r, uploadDir(r, scope)));
+      return { files: cache.files, truncated: cache.truncated, sources: cache.sources, own: cache.own.map((f) => ({ ...f, folder: meta.folderOf(f.path) })), folders: meta.folders };
     },
     upload,
     remove(rel) {
-      const { target } = ownTarget(rel);
+      const { r, target } = ownTarget(rel);
       unlinkSync(target);
+      folders.drop([relOf(r, target)]);
       cache = null;
     },
     /** Xoá nhiều tài liệu tự tạo: kiểm TẤT CẢ đường dẫn như xoá một tệp trước (một cái sai → lỗi, chưa xoá gì). */
@@ -283,9 +291,24 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
       if (rels.length > MAX_BULK) throw err(400, `Tối đa ${MAX_BULK} tài liệu mỗi lần.`);
       const targets = [...new Set([...new Set(rels.map((x) => String(x ?? '')))].map((rel) => ownTarget(rel).target))];
       for (const target of targets) unlinkSync(target);
+      const r = root();
+      folders.drop(targets.map((t) => relOf(r, t)));
       cache = null;
       return targets.length;
     },
+    /** Xếp nhiều tài liệu tự tạo vào thư mục (`folder` null = "Chưa xếp"): kiểm hết đường dẫn và thư mục trước. */
+    moveMany(rels, folder) {
+      if (!Array.isArray(rels) || !rels.length) throw err(400, 'Chưa chọn tài liệu nào.');
+      if (rels.length > MAX_BULK) throw err(400, `Tối đa ${MAX_BULK} tài liệu mỗi lần.`);
+      const f = folders.check(folder);
+      const picked = [...new Set(rels.map((x) => String(x ?? '')))].map((rel) => ownTarget(rel));
+      const keys = [...new Set(picked.map(({ r, target }) => relOf(r, target)))];
+      folders.assign(keys, f ? f.id : null);
+      return { count: keys.length, folder: f };
+    },
+    createFolder: (body) => folders.create(body),
+    updateFolder: (id, body) => folders.update(id, body),
+    deleteFolder: (id) => folders.remove(id),
     /** Nội dung một tài liệu tự tạo dạng chữ (.md/.txt) để sửa trong cửa sổ chi tiết. */
     readOwn(rel) {
       const { target } = ownTarget(rel);
@@ -314,7 +337,7 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
         if (!sameDir(final, target) && existsSync(final)) throw err(409, 'Đã có tài liệu trùng tên — chọn tên khác.');
       }
       if (buf) writeFileAtomic(target, buf, { mode: 0o644 });
-      if (final !== target) renameSync(target, final);
+      if (final !== target) { renameSync(target, final); folders.rename(relOf(r, target), relOf(r, final)); }
       cache = null;
       return relOf(r, final);
     },
@@ -326,13 +349,13 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
       cache = null;
     },
     /** Viết tài liệu mới ngay trên dashboard → <tiêu đề>.md trong thư mục tự tạo. */
-    createNote(title, text) {
+    createNote(title, text, opts) {
       const name = stripKnownExt(String(title ?? '').trim()).replace(/[\\/]/g, '-');
       if (!name) throw err(400, 'Đặt tiêu đề cho tài liệu.');
       const buf = Buffer.from(String(text ?? ''), 'utf8');
       if (!String(text ?? '').trim()) throw err(400, 'Nội dung trống — gõ nội dung tài liệu.');
       if (buf.length > MAX_TEXT_BYTES) throw err(413, 'Nội dung quá 1 MB — chia thành nhiều tài liệu.');
-      return upload(`${name}.md`, buf);
+      return upload(`${name}.md`, buf, opts);
     },
     /** Nguồn hiện tại cho cửa sổ "Sửa nguồn" (chỉ Quản trị): gốc đang dùng, các gốc được phép, thư mục mở (đúng thứ tự). */
     source() {
