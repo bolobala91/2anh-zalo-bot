@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.28.1] — 2026-10-13
+
+### Sửa
+
+- **Phiên chat — đầu khung tin bị vỡ:** tên hội thoại bị ép thành một cột chữ dọc khi khung tin hẹp. Giờ đầu khung tin chia hai hàng: tên (kèm nhãn "Nhóm") một hàng riêng, dài thì cắt "…" và rê chuột xem đủ; hàng dưới là số tin/phiên AI bên trái, nút Tìm · Ảnh/Video · Quyền bên phải. Khung hẹp thì nút tự gọn thành biểu tượng.
+
 ## [2.28.0] — 2026-10-13
 
 ### Đổi

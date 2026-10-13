@@ -583,17 +583,20 @@ function Thread({ conv, onBack }) {
   const closeSide = (name) => { setSide(null); setTimeout(() => toggles[name].current?.focus(), 0); };
   const group = conv.threadType === 1;
   return html`
-    <header class="thread-head">
-      <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
-      <h2>${conv.name}</h2>
-      ${group ? html`<span class="tag">Nhóm</span>` : null}
-      ${convStats(conv) ? html`<p class="thread-stats muted small">${convStats(conv)}</p>` : null}
+    <header class="thread-head thread-head-stack">
+      <div class="thread-name">
+        <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
+        <h2 title=${conv.name}>${conv.name}</h2>${group ? html`<span class="tag">Nhóm</span>` : null}
+      </div>
+      <div class="thread-bar">
+      <p class="thread-stats muted small">${convStats(conv)}</p>
       <button type="button" ref=${toggles.search} class=${`btn btn-ghost btn-sm head-tool${side === 'search' ? ' active' : ''}`} aria-pressed=${side === 'search' ? 'true' : 'false'}
         onClick=${() => toggle('search')} aria-label="Tìm trong hội thoại" title="Tìm trong hội thoại"><${Icon} name="search" /></button>
       <button type="button" ref=${toggles.media} class=${`btn btn-ghost btn-sm head-tool${side === 'media' ? ' active' : ''}`} aria-pressed=${side === 'media' ? 'true' : 'false'}
         onClick=${() => toggle('media')} aria-label="Ảnh/Video · Tệp · Link" title="Ảnh/Video · Tệp · Link"><${Icon} name="image" /><span class="head-tool-label">Ảnh/Video · Tệp · Link</span></button>
       <button type="button" ref=${toggles.perms} class=${`btn btn-ghost btn-sm head-tool head-perms ${permsTint()}${side === 'perms' ? ' active' : ''}`} aria-pressed=${side === 'perms' ? 'true' : 'false'}
         onClick=${() => toggle('perms')} aria-label=${group ? 'Quyền của bot trong nhóm này' : 'Quyền nhắn riêng của người này'} title="Phân quyền Bot"><${PermsIcon} /><span class="head-tool-label">Quyền</span></button>
+      </div>
     </header>
     <${Live} error=${error || recallMsg.error} ok=${recallMsg.ok} />
     ${newer ? html`<div class="jump-bar"><span class="muted small">Đang xem tin cũ.</span>
