@@ -1,8 +1,8 @@
-// Tổng quan (kiểu macOS): mỗi thẻ một màu — ô biểu tượng + tiêu đề màu, nhãn nhỏ, số lớn, 3 chỉ số phụ, biểu đồ chấm.
+// Tổng quan: dải tình trạng gọn · Cần chú ý (có chỗ xử lý ngay) · hội thoại hôm nay · lịch sắp chạy · AI hôm nay · lối tắt.
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Live, PageHead, Spinner, fmtTime } from '../ui.js';
-import { fmtUptime } from './health.js';
+import { FolderChip, folderIndex, folderOfThread } from './folder-ui.js';
 
 export function zaloCard(s) {
   if (s.sidecar === 'down') return { kind: 'danger', state: 'Kết nối Zalo đang tắt — hệ thống sẽ tự bật lại trong ít phút' };
@@ -65,21 +65,7 @@ const compact = new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFra
 const hhmm = (ms) => (ms ? new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(ms)) : '—');
 const todayVN = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
 
-function Metric({ tint, icon, title, href, label, big, unit, text = false, pill, facts = [], children }) {
-  const body = html`
-    <div class="metric-head"><span class=${`nav-ico tint-${tint}`} aria-hidden="true"><${Icon} name=${icon} size=${18} /></span>
-      <h2 class="metric-title">${title}</h2>${href ? html`<span class="metric-go" aria-hidden="true"><${Icon} name="next" size=${18} /></span>` : null}</div>
-    ${label ? html`<p class="metric-label">${label}</p>` : null}
-    <div class=${`metric-big${text ? ' is-text' : ''}`}><span>${big}</span>${unit ? html`<small>${unit}</small>` : null}
-      ${pill ? html`<span class=${`metric-pill is-${pill.kind}`}>${pill.kind === 'ok' ? '' : '! '}${pill.text}</span>` : null}</div>
-    ${facts.length ? html`<dl class="metric-facts">${facts.map(([k, v]) => html`<div key=${k}><dt>${k}</dt><dd title=${String(v)}>${v}</dd></div>`)}</dl>` : null}
-    ${children}`;
-  return href
-    ? html`<a class=${`card metric tint-${tint}`} href=${href}>${body}</a>`
-    : html`<section class=${`card metric tint-${tint}`}>${body}</section>`;
-}
-
-/** Số đo máy chủ (CPU 60 phút, RAM, ổ đĩa) và lượt gọi AI theo ngày — hỏi lại mỗi phút. */
+/** Số đo máy chủ (CPU, RAM, ổ đĩa) và lượt gọi AI theo ngày — hỏi lại mỗi phút. */
 function useServer() {
   const [h, setH] = useState(null);
   useEffect(() => {
@@ -92,10 +78,110 @@ function useServer() {
   return h;
 }
 
+/** Tải một API định kỳ (lỗi → giữ giá trị cũ). */
+function usePoll(path, ms, enabled = true) {
+  const [v, setV] = useState(null);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let alive = true;
+    const load = () => api(path).then((r) => alive && setV(r)).catch(() => {});
+    load();
+    const t = setInterval(load, ms);
+    return () => { alive = false; clearInterval(t); };
+  }, [path, enabled, tick]);
+  return [v, () => setTick((x) => x + 1)];
+}
+
+/** Mở thẳng một hội thoại ở Phiên chat (Phiên chat đọc khoá này khi mở). */
+export const OPEN_CHAT_KEY = 'zd:open-chat';
+function openChat(c) {
+  try { sessionStorage.setItem(OPEN_CHAT_KEY, JSON.stringify({ threadId: c.threadId, threadType: c.threadType, name: c.name })); } catch { /* bỏ qua */ }
+  location.hash = '#/chats';
+}
+
+/**
+ * Việc cần chú ý, mỗi việc một dòng có chỗ xử lý: `{ kind: 'danger'|'warn'|'info', text, href?, action? }`.
+ * Không có gì → mảng rỗng (trang hiện "Mọi thứ ổn").
+ */
+export function attentionItems({ status: s, host, requests, memory, notice, admin, now = Date.now() }) {
+  const out = [];
+  if (s) {
+    const z = zaloCard(s);
+    if (z.kind !== 'ok') out.push({ kind: z.kind === 'warn' ? 'warn' : 'danger', text: `Zalo: ${z.state}`, href: '#/zalo' });
+    if (s.sidecar !== 'down' && s.assistant && s.assistant !== 'connected') out.push({ kind: 'danger', text: 'Trợ lý AI chưa phản hồi — bot có thể không trả lời tin nhắn.', action: admin ? 'restart' : null });
+    if (s.lastError && now - Number(s.lastError.atMs || 0) < 24 * 3600_000) {
+      out.push({ kind: 'warn', text: `Lỗi lúc ${fmtTime(s.lastError.atMs)}: ${errorText(s.lastError, 'owner').text}`, href: '#/audit' });
+    }
+  }
+  if (requests?.length) out.push({ kind: 'info', text: `${requests.length} lời mời kết bạn đang chờ`, requests: true });
+  if (host && Math.max(host.cpuPct, host.ramPct, host.diskPct) >= 85) {
+    out.push({ kind: 'warn', text: `Máy chủ đang tải cao — CPU ${Math.round(host.cpuPct)}%, RAM ${Math.round(host.ramPct)}%, ổ đĩa ${Math.round(host.diskPct)}%.`, href: '#/health' });
+  }
+  for (const t of ['user', 'memory']) {
+    const m = memory?.[t];
+    if (m && m.limit && m.used / m.limit >= 0.9) out.push({ kind: 'warn', text: `${m.label} đã đầy ${Math.round((m.used / m.limit) * 100)}% — bot sắp không nhớ thêm được.`, href: '#/memory' });
+  }
+  if (notice?.newer) out.push({ kind: 'info', text: `Có bản cập nhật mới ${notice.latest || ''}`.trim(), href: admin ? '#/maintenance' : '' });
+  return out;
+}
+
+/** Hội thoại có tin hôm nay, mới nhất trước. */
+export const todayChats = (list, n = 8) => (list || []).filter((c) => c.today > 0).sort((a, b) => b.lastAtMs - a.lastAtMs).slice(0, n);
+
+/** Việc hẹn giờ sắp chạy trong `hours` giờ tới, gần nhất trước. */
+export function upcomingJobs(jobs, now = Date.now(), hours = 48, n = 5) {
+  return (jobs || []).filter((j) => j.enabled && !j.paused && j.nextRunAt && j.nextRunAt >= now - 60_000 && j.nextRunAt <= now + hours * 3600_000)
+    .sort((a, b) => a.nextRunAt - b.nextRunAt).slice(0, n);
+}
+
+const when = (ms) => {
+  const d = new Date(ms);
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(d);
+  const label = day === todayVN() ? 'Hôm nay' : 'Ngày mai';
+  return `${label} ${hhmm(ms)}`;
+};
+
+function Card({ title, icon, tint, href, hrefText, children }) {
+  return html`<section class=${`card ov-card tint-${tint}`}>
+    <div class="ov-head"><span class=${`nav-ico tint-${tint}`} aria-hidden="true"><${Icon} name=${icon} size=${18} /></span>
+      <h2>${title}</h2>${href ? html`<a class="ov-more" href=${href}>${hrefText || 'Xem tất cả'} <${Icon} name="next" size=${14} /></a>` : null}</div>
+    ${children}
+  </section>`;
+}
+
+function Requests({ list, onDone }) {
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState({});
+  async function answer(r, accept) {
+    if (!accept && !confirm(`Từ chối lời mời kết bạn của ${r.name || 'người này'}?`)) return;
+    setBusy(r.uid); setMsg({});
+    try { await api(`/api/contacts/requests/${r.uid}`, { method: 'POST', body: { accept } }); setMsg({ ok: accept ? `Đã đồng ý kết bạn với ${r.name || 'người này'}.` : 'Đã từ chối.' }); onDone(); }
+    catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
+  }
+  return html`<ul class="ov-requests">${list.map((r) => html`<li key=${r.uid}>
+      <span class="ov-req-name"><strong>${r.name || 'Chưa rõ tên'}</strong>${r.message ? html`<small class="muted">Có lời nhắn — xem ở Liên hệ</small>` : null}</span>
+      <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== ''} onClick=${() => answer(r, true)}>Đồng ý</button>
+      <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => answer(r, false)}>Từ chối</button>
+    </li>`)}</ul><${Live} error=${msg.error} ok=${msg.ok} />`;
+}
+
+const QUICK = [
+  ['#/chats', 'chat', 'Nhắn tin', 'blue'], ['#/permissions', 'shield', 'Phân quyền', 'purple'], ['#/memory', 'brain', 'Trí nhớ', 'pink'],
+  ['#/agent', 'bot', 'Tính cách AI', 'indigo', true], ['#/schedules', 'clock', 'Lịch hẹn', 'orange'], ['#/settings', 'settings', 'Cấu hình', 'gray', true],
+];
+
 export function Overview({ me, status: s }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
+  const admin = me.role === 'admin';
   const server = useServer();
+  const [chats] = usePoll('/api/chats', 30_000);
+  const [perms] = usePoll('/api/permissions', 120_000);
+  const [sched] = usePoll('/api/schedules', 60_000);
+  const [reqs, reloadReqs] = usePoll('/api/contacts/requests', 60_000);
+  const [memory] = usePoll('/api/admin/agent-memory', 300_000, admin);
+  const [notice] = usePoll('/api/update-notice', 600_000);
   if (!s) return html`<${PageHead} title="Tổng quan" /><${Spinner} />`;
 
   async function restart() {
@@ -104,65 +190,68 @@ export function Overview({ me, status: s }) {
     try {
       const r = await api('/api/admin/restart-assistant', { method: 'POST' });
       if (r.sidecarFailed) setMsg({ error: r.warning });
-      else setMsg({ ok: 'Đã gửi lệnh khởi động lại — đợi khoảng một phút rồi xem lại thẻ Trợ lý.' });
+      else setMsg({ ok: 'Đã gửi lệnh khởi động lại — đợi khoảng một phút.' });
     } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
   }
 
-  const admin = me.role === 'admin';
-  const z = zaloCard(s);
-  const down = s.sidecar === 'down';
-  const err = s.lastError ? errorText(s.lastError, me.role) : null;
-  const today = s.today;
   const host = server?.host || null;
-  const cpu = (server?.history?.points || []).slice(-60).map((p) => Number(p[1]) || 0);
-  const hot = host && Math.max(host.cpuPct, host.ramPct, host.diskPct) >= 85;
+  const requests = reqs?.requests || [];
+  const items = attentionItems({ status: s, host, requests, memory, notice, admin });
+  const index = folderIndex(perms?.folders || []);
+  const recent = todayChats(chats?.conversations);
+  const jobs = upcomingJobs(sched?.jobs);
   const days = server?.usage?.days || [];
   const aiToday = days.find((d) => d.date === todayVN());
-  const assistantOk = !down && s.assistant === 'connected';
-  const groups = today?.topGroups || [];
-  const topMax = Math.max(1, ...groups.map((g) => g.count));
+  const week = days.slice(-7).reduce((a, d) => a + (d.calls || 0), 0);
+  const today = s.today;
+  const z = zaloCard(s);
+  const assistantOk = s.sidecar !== 'down' && s.assistant === 'connected';
 
   return html`
-    <${PageHead} title="Tổng quan" sub="Tình trạng bot Zalo, cập nhật mỗi 3 giây." />
-    <div class="grid grid-3">
-      <${Metric} tint="cyan" icon="phone" title="Zalo" href="#/zalo" label="Tài khoản bot" text
-        big=${s.zalo.displayName || (z.kind === 'ok' ? 'Bot Zalo' : 'Chưa đăng nhập')}
-        pill=${{ kind: z.kind, text: z.kind === 'ok' ? 'Đang chạy' : z.kind === 'warn' ? 'Đang nối lại' : 'Mất kết nối' }}
-        facts=${[['Nhận lần cuối', hhmm(s.traffic.lastInboundAtMs)], ['Gửi lần cuối', hhmm(s.traffic.lastOutboundAtMs)], ['Cảnh báo', s.telegramLinked ? 'Đã nối' : 'Chưa nối']]}>
-        ${z.kind !== 'ok' ? html`<p class="muted small">${z.state}</p>` : null}
+    <${PageHead} title="Tổng quan" sub="Việc cần chú ý, hội thoại hôm nay, lịch sắp chạy — cập nhật liên tục." />
+    <div class="ov-strip" role="status">
+      <span class=${`ov-pill is-${z.kind}`}><${Icon} name="phone" size=${14} /> Zalo: ${z.kind === 'ok' ? 'đang chạy' : z.kind === 'warn' ? 'đang nối lại' : 'mất kết nối'}</span>
+      <span class=${`ov-pill is-${assistantOk ? 'ok' : 'danger'}`}><${Icon} name="bot" size=${14} /> Trợ lý: ${assistantOk ? 'sẵn sàng' : 'chưa phản hồi'}</span>
+      <span class="ov-pill"><${Icon} name="chat" size=${14} /> Hôm nay: ${today ? `${today.threads ?? '—'} hội thoại · ${(today.received + today.sent).toLocaleString('vi-VN')} tin` : '—'}</span>
+      ${host ? html`<a class=${`ov-pill${Math.max(host.cpuPct, host.ramPct, host.diskPct) >= 85 ? ' is-warn' : ''}`} href="#/health"><${Icon} name="server" size=${14} /> CPU ${Math.round(host.cpuPct)}% · RAM ${Math.round(host.ramPct)}% · Ổ ${Math.round(host.diskPct)}%</a>` : null}
+    </div>
+
+    <section class=${`card ov-attention${items.length ? '' : ' is-ok'}`}>
+      <div class="ov-head"><span class=${`nav-ico tint-${items.length ? 'orange' : 'green'}`} aria-hidden="true"><${Icon} name=${items.length ? 'warn' : 'check'} size=${18} /></span>
+        <h2>${items.length ? `Cần chú ý (${items.length})` : 'Mọi thứ ổn'}</h2></div>
+      ${items.length ? html`<ul class="ov-items">${items.map((it, i) => html`<li key=${i} class=${`is-${it.kind}`}>
+          ${it.href ? html`<a href=${it.href}>${it.text} <${Icon} name="next" size=${14} /></a>` : html`<span>${it.text}</span>`}
+          ${it.action === 'restart' ? html`<button class="btn btn-secondary btn-sm" disabled=${busy} onClick=${restart}><${Icon} name="refresh" size=${14} /> ${busy ? 'Đang gửi lệnh…' : 'Khởi động lại trợ lý'}</button>` : null}
+          ${it.requests ? html`<${Requests} list=${requests} onDone=${reloadReqs} />` : null}
+        </li>`)}</ul>` : html`<p class="muted small">Bot đang chạy bình thường, không có lời mời hay lỗi nào cần xử lý.</p>`}
+      <${Live} error=${msg.error} ok=${msg.ok} />
+    </section>
+
+    <div class="ov-grid">
+      <${Card} title="Hội thoại hôm nay" icon="chat" tint="blue" href="#/chats" hrefText="Phiên chat">
+        ${!chats ? html`<${Spinner} />` : recent.length ? html`<ul class="ov-chats">${recent.map((c) => html`<li key=${`${c.threadType}:${c.threadId}`}>
+            <button type="button" class="ov-chat" onClick=${() => openChat(c)}>
+              <span class="ov-chat-top"><strong>${c.name}</strong><span class="conv-count" title=${`${c.today} tin hôm nay`}>${c.today}</span><time>${hhmm(c.lastAtMs)}</time></span>
+              <span class="ov-chat-sub">${folderOfThread(index, c.threadId, c.threadType) ? html`<${FolderChip} folder=${folderOfThread(index, c.threadId, c.threadType)} />` : c.threadType === 1 ? html`<span class="tag">Nhóm</span>` : html`<span class="tag">Nhắn riêng</span>`}</span>
+            </button></li>`)}</ul>` : html`<p class="muted small">Hôm nay chưa có tin nhắn nào.</p>`}
       <//>
-      <${Metric} tint="blue" icon="chat" title="Tin nhắn hôm nay" href="#/chats" label="Bot nhận và gửi"
-        big=${today ? (today.received + today.sent).toLocaleString('vi-VN') : '—'} unit="tin"
-        facts=${[['Bot nhận', today?.received ?? '—'], ['Bot gửi', today?.sent ?? '—'], ['Nhóm sôi nổi', groups[0]?.name || '—']]}>
-        ${today?.hourly ? html`<${Dots} values=${today.hourly} label="Số tin theo từng giờ hôm nay" />` : null}
+      <div class="ov-side">
+      <${Card} title="Lịch hẹn sắp chạy" icon="clock" tint="orange" href="#/schedules" hrefText="Lịch hẹn">
+        ${!sched ? html`<${Spinner} />` : jobs.length ? html`<ul class="ov-jobs">${jobs.map((j) => html`<li key=${j.id}>
+            <time>${when(j.nextRunAt)}</time><span><strong>${j.name || 'Việc hẹn giờ'}</strong><small class="muted">→ ${j.targetName || '—'}</small></span></li>`)}</ul>`
+          : html`<p class="muted small">Không có việc nào chạy trong 2 ngày tới.</p>`}
       <//>
-      <${Metric} tint="red" icon="activity" title="Máy chủ" href="#/health" label="CPU lúc này"
-        big=${host ? Math.round(host.cpuPct) : '—'} unit=${host ? '%' : ''}
-        pill=${hot ? { kind: 'warn', text: 'Cao' } : null}
-        facts=${[['RAM', host ? `${Math.round(host.ramPct)}%` : '—'], ['Ổ đĩa', host ? `${Math.round(host.diskPct)}%` : '—'], ['Đã chạy', host ? fmtUptime(host.uptimeSec) : '—']]}>
-        ${cpu.length ? html`<${Dots} values=${bucket(cpu, 30)} max=${100} label="CPU 60 phút gần nhất" />` : null}
-      <//>
-      <${Metric} tint="purple" icon="bot" title="Trợ lý AI" href="#/health" label="Lượt gọi AI hôm nay"
-        big=${aiToday ? aiToday.calls.toLocaleString('vi-VN') : '0'} unit="lượt"
-        pill=${assistantOk ? null : { kind: down ? 'warn' : 'danger', text: down ? 'Chưa rõ' : 'Chưa phản hồi' }}
-        facts=${[['Trạng thái', assistantOk ? 'Sẵn sàng' : down ? 'Chưa rõ' : 'Chưa phản hồi'], ['Chữ vào', aiToday ? compact.format(aiToday.input) : '0'], ['Chữ ra', aiToday ? compact.format(aiToday.output) : '0']]}>
+      <${Card} title="AI hôm nay" icon="bot" tint="purple" href="#/health" hrefText="Chi tiết">
+        <dl class="ov-facts">
+          <div><dt>Lượt gọi AI</dt><dd>${aiToday ? aiToday.calls.toLocaleString('vi-VN') : '0'}</dd></div>
+          <div><dt>7 ngày qua</dt><dd>${week.toLocaleString('vi-VN')}</dd></div>
+          <div><dt>Chữ vào · ra</dt><dd class="ov-small">${aiToday ? `${compact.format(aiToday.input)} · ${compact.format(aiToday.output)}` : '0'}</dd></div>
+        </dl>
         ${days.length ? html`<${Dots} values=${days.map((d) => d.calls)} label="Lượt gọi AI theo ngày" />` : null}
-        ${admin && !down && s.assistant !== 'connected' ? html`
-          <button class="btn btn-secondary btn-sm" disabled=${busy} onClick=${(e) => { e.preventDefault(); restart(); }}><${Icon} name="refresh" size=${16} />
-            ${busy ? 'Đang gửi lệnh…' : 'Khởi động lại trợ lý'}</button>` : null}
-        <${Live} error=${msg.error} ok=${msg.ok} />
       <//>
-      <${Metric} tint="orange" icon="warn" title="Lỗi gần nhất" href="#/audit" label=${err ? fmtTime(s.lastError.atMs) : 'Gần đây'} text
-        big=${err ? err.text : 'Không có lỗi'} pill=${err ? null : { kind: 'ok', text: 'Ổn định' }}>
-        ${err ? html`<p class="muted small">${err.next}</p>${err.code ? html`<p class="muted small">Mã: <span class="mono">${err.code}</span></p>` : null}` : null}
+      <${Card} title="Lối tắt" icon="list" tint="green">
+        <div class="ov-quick">${QUICK.filter((q) => admin || !q[4]).map(([href, icon, text, tint]) => html`<a key=${href} class=${`ov-q tint-${tint}`} href=${href}><span class=${`nav-ico tint-${tint}`} aria-hidden="true"><${Icon} name=${icon} size=${18} /></span>${text}</a>`)}</div>
       <//>
-      <section class="card metric tint-green">
-        <div class="metric-head"><span class="nav-ico tint-green" aria-hidden="true"><${Icon} name="users" size=${18} /></span>
-          <h2 class="metric-title">Nhóm sôi nổi hôm nay</h2></div>
-        ${groups.length ? html`<ul class="bars">${groups.map((g) => html`<li key=${g.threadId}>
-            <div class="bar-top"><span>${g.name}</span><span>${g.count} tin</span></div>
-            <div class="bar-track"><div class=${`bar-fill bar-w-${Math.max(1, Math.round((g.count / topMax) * 10))}`}></div></div></li>`)}</ul>`
-          : html`<p class="muted small">Hôm nay chưa có nhóm nào nhắn tin.</p>`}
-      </section>
+      </div>
     </div>`;
 }

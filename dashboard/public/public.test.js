@@ -1096,3 +1096,25 @@ test('mẫu tính cách: đủ 6 nhóm, mỗi mẫu có đủ khung; ghép một
   assert.doesNotMatch(one, /đảm nhận/);
   assert.match(composeSoul('Tên: Nhi', ['biz-shop', 'personal-friends']), /# Bạn là ai\nTên: Nhi[\s\S]*đảm nhận 2 vai trò[\s\S]*# Luôn nhớ/);
 });
+
+test('tổng quan: cần chú ý gom đúng việc, kèm chỗ xử lý; hội thoại hôm nay; lịch sắp chạy', async () => {
+  const { attentionItems, todayChats, upcomingJobs } = await import('./views/overview.js');
+  const ok = { sidecar: 'up', assistant: 'connected', zalo: { status: 'logged-in', displayName: 'Bot', listener: 'connected' }, lastError: null };
+  assert.deepEqual(attentionItems({ status: ok, admin: true }), [], 'mọi thứ ổn → không có gì');
+  const now = Date.UTC(2026, 9, 13, 5);
+  const items = attentionItems({
+    status: { ...ok, assistant: 'disconnected', lastError: { code: 'bridge_command_failed', atMs: now - 3600_000 } },
+    host: { cpuPct: 20, ramPct: 91, diskPct: 40 }, requests: [{ uid: '1', name: 'A' }],
+    memory: { user: { label: 'Hồ sơ chủ nhân', used: 1300, limit: 1375 }, memory: { label: 'Ghi chú', used: 100, limit: 2200 } },
+    notice: { newer: true, latest: 'v9' }, admin: true, now,
+  });
+  assert.deepEqual(items.map((i) => i.kind), ['danger', 'warn', 'info', 'warn', 'warn', 'info']);
+  assert.equal(items[0].action, 'restart');
+  assert.equal(items[2].requests, true);
+  assert.match(items[4].text, /Hồ sơ chủ nhân đã đầy 95%/);
+  assert.equal(attentionItems({ status: { ...ok, lastError: { code: 'x', atMs: now - 3 * 86400_000 } }, now }).length, 0, 'lỗi quá 24 giờ thì thôi');
+  assert.deepEqual(todayChats([{ threadId: 'a', today: 0, lastAtMs: 9 }, { threadId: 'b', today: 2, lastAtMs: 5 }, { threadId: 'c', today: 1, lastAtMs: 7 }]).map((c) => c.threadId), ['c', 'b']);
+  const jobs = [{ id: '1', enabled: true, paused: false, nextRunAt: now + 3600_000 }, { id: '2', enabled: true, paused: true, nextRunAt: now + 60_000 },
+    { id: '3', enabled: true, paused: false, nextRunAt: now + 5 * 86400_000 }, { id: '4', enabled: true, paused: false, nextRunAt: now + 600_000 }];
+  assert.deepEqual(upcomingJobs(jobs, now).map((j) => j.id), ['4', '1']);
+});

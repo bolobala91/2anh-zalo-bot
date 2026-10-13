@@ -626,7 +626,15 @@ export function Chats() {
   const [found, setFound] = useState(null); // { q, items, next } khi đang xem kết quả tìm
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
-  const [selected, setSelected] = useState(null);
+  // Bấm một hội thoại ở Tổng quan → mở thẳng hội thoại đó (Tổng quan đặt khoá này trước khi chuyển trang).
+  const [selected, setSelected] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('zd:open-chat');
+      sessionStorage.removeItem('zd:open-chat');
+      const c = raw ? JSON.parse(raw) : null;
+      return c && c.threadId ? { threadId: String(c.threadId), threadType: Number(c.threadType), name: String(c.name || '') } : null;
+    } catch { return null; }
+  });
   const [folders, setFolders] = useState([]);
   const [folderFilter, setFolderFilter] = useState('all');
   const searchSeq = useRef(0); // bỏ kết quả về muộn của lần tìm đã bị thay hoặc huỷ

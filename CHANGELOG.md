@@ -2,6 +2,17 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.28.0] — 2026-10-13
+
+### Đổi
+
+- **Trang Tổng quan thiết kế lại** quanh những việc chủ bot hay xem và hay làm:
+  - **Dải tình trạng gọn:** Zalo · Trợ lý · hôm nay N hội thoại, M tin · CPU, RAM, ổ đĩa.
+  - **Cần chú ý**, chỉ hiện khi có việc, mỗi dòng có chỗ xử lý: Zalo mất kết nối; trợ lý không phản hồi (nút khởi động lại); lỗi trong 24 giờ; **lời mời kết bạn đang chờ** (bấm Đồng ý/Từ chối ngay tại chỗ); máy chủ tải cao; bộ nhớ trợ lý đầy từ 90%; có bản cập nhật. Không có gì thì hiện "Mọi thứ ổn".
+  - **Hội thoại hôm nay:** 8 nhóm hoặc người có tin mới nhất, số tin hôm nay, nhãn thư mục màu. Bấm vào là mở thẳng hội thoại đó ở Phiên chat.
+  - **Lịch hẹn sắp chạy** trong 2 ngày tới · **AI hôm nay** (lượt gọi, 7 ngày qua, chữ vào/ra) · **Lối tắt** (Nhắn tin, Phân quyền, Trí nhớ, Tính cách AI, Lịch hẹn, Cấu hình).
+  - Biểu đồ CPU và biểu đồ tin theo giờ chuyển hẳn sang trang Sức khoẻ máy chủ.
+
 ## [2.27.1] — 2026-10-13
 
 ### Sửa

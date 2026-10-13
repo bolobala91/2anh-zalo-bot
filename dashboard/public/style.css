@@ -1252,3 +1252,45 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .soul-card.on { border-color: var(--brand); background: var(--brand-soft); }
 .soul-advanced > summary { cursor: pointer; list-style: revert; }
 .soul-advanced h2.inline { display: inline; font-size: 16px; }
+
+/* Tổng quan (v2.28): dải tình trạng · Cần chú ý · hội thoại hôm nay · lịch sắp chạy · AI hôm nay · lối tắt. */
+.ov-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.ov-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); font-size: 13px; font-weight: 600; color: inherit; text-decoration: none; }
+.ov-pill.is-ok { color: var(--ok); } .ov-pill.is-warn { color: var(--warn); background: var(--warn-soft); } .ov-pill.is-danger { color: var(--danger); background: var(--danger-soft); }
+.ov-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ov-head h2 { margin: 0; font-size: 17px; flex: 1; }
+.ov-more { font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; }
+.ov-attention { margin-bottom: 14px; }
+.ov-attention.is-ok { border-color: var(--ok); }
+.ov-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ov-items > li { padding: 10px 12px; border-radius: 10px; background: var(--bg, #f8fafc); border-left: 4px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.ov-items > li.is-danger { border-left-color: var(--danger); } .ov-items > li.is-warn { border-left-color: var(--warn); } .ov-items > li.is-info { border-left-color: var(--brand); }
+.ov-items a { color: inherit; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.ov-items button { align-self: flex-start; }
+.ov-requests { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ov-requests li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ov-req-name { flex: 1 1 160px; display: flex; flex-direction: column; min-width: 0; }
+.ov-grid { align-items: start; }
+.ov-chats, .ov-jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ov-chat { width: 100%; text-align: left; border: 0; background: none; padding: 8px 6px; border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; color: inherit; font: inherit; }
+.ov-chat:hover { background: var(--brand-soft); }
+.ov-chat-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ov-chat-top strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-chat-top time { font-size: 12px; color: var(--muted); }
+.ov-chat-sub { display: flex; gap: 6px; }
+.ov-jobs li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.ov-jobs li:last-child { border-bottom: 0; }
+.ov-jobs time { flex: none; width: 112px; font-weight: 700; font-size: 13px; }
+.ov-jobs span { display: flex; flex-direction: column; min-width: 0; }
+.ov-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 8px; }
+.ov-facts div { display: flex; flex-direction: column; }
+.ov-facts dt { font-size: 12px; color: var(--muted); }
+.ov-facts dd { margin: 0; font-size: 20px; font-weight: 800; }
+.ov-quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.ov-q { display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; color: inherit; text-decoration: none; font-weight: 600; min-height: 44px; }
+.ov-q:hover { border-color: var(--brand); }
+.ov-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.ov-side { display: flex; flex-direction: column; gap: 16px; }
+.ov-side .card, .ov-grid > .card { margin: 0; }
+.ov-facts dd.ov-small { font-size: 15px; white-space: nowrap; }
+@media (max-width: 860px) { .ov-grid { grid-template-columns: minmax(0, 1fr); } }
