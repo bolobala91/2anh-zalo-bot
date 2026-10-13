@@ -2,6 +2,20 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.30.0] — 2026-10-13
+
+### Thêm
+
+- **Tab "Tạo ảnh & video"** ở Khoá API & Model:
+  - **Một khoá Stali cho cả ảnh và video:** dán khoá là bot tạo ảnh, sửa ảnh theo ảnh mẫu và tạo video được ngay. Chưa có khoá thì có link đăng ký Stali.
+  - **Nguồn vẽ ảnh xếp ưu tiên:** Stali, 9router, ChatGPT (chỉ hiện ở máy đã đăng nhập Codex). Mỗi nguồn bật/tắt được, đổi model (gợi ý từ danh sách model của nguồn), **Thử** (kiểm khoá + model, không tốn tiền), **Vẽ thử** (vẽ thật một ảnh, xem ngay), ↑↓ để đổi ưu tiên. Nguồn đang dùng lỗi (khoá sai, hết tiền, quá tải…) thì bot tự sang nguồn bật kế tiếp và cho biết đã dùng nguồn dự phòng. Áp dụng chung cho ảnh khi chat trên Zalo và ảnh minh hoạ của 2Anh Studio.
+  - **Tạo video qua Stali:** bật/tắt, chọn model (Seedance 2.0 Fast, Seedance 2.5, Veo 3.1, Omni Flash — kèm giá), độ dài mặc định, nút Thử. Chủ nhân nhờ bot tạo video từ mô tả, hoặc lấy ảnh gửi kèm làm khung hình đầu.
+- Dòng khoá Stali ở tab Khoá API có link đăng ký khi chưa có khoá.
+
+### Đổi
+
+- Nguồn vẽ ảnh Stali của bản 2.29.0 được thay bằng bộ điều phối nhiều nguồn ở trên; khoá Stali đã lưu vẫn dùng tiếp.
+
 ## [2.29.0] — 2026-10-13
 
 ### Thêm

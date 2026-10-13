@@ -1303,3 +1303,21 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .ov-side .card, .ov-grid > .card { margin: 0; }
 .ov-facts dd.ov-small { font-size: 15px; white-space: nowrap; }
 @media (max-width: 860px) { .ov-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Tạo ảnh & video (Khoá API & Model). */
+.media-key { padding: 12px 14px; margin: 4px 0 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--brand-soft); }
+.media-key h3 { margin: 0 0 4px; }
+.media-key p { margin: 6px 0 0; }
+.media-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.media-engines .key-main { flex: 1 1 260px; }
+.media-note { flex: 1 1 100%; }
+.media-switch { display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; font-size: 13.5px; cursor: pointer; }
+.media-switch input { width: 18px; height: 18px; }
+.media-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.media-edit input { flex: 1 1 220px; min-width: 0; }
+.media-preview { display: block; width: 160px; max-width: 100%; margin-top: 6px; border-radius: 10px; border: 1px solid var(--border); }
+.gen-video { display: flex; flex-direction: column; gap: 10px; }
+.gen-video-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.gen-video-row .field { flex: 1 1 200px; margin: 0; }
+.media-engines + h3, .gen-video + p { margin-top: 18px; }
+.media-key + h3 { margin-top: 6px; }

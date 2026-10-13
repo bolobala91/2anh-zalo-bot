@@ -41,6 +41,7 @@ import { createInsightAi } from './lib/insight-ai.js';
 import { createAgentConfig, createSoul } from './lib/agent-config.js';
 import { createAiKeys } from './lib/ai-keys.js';
 import { createAiModels } from './lib/ai-models.js';
+import { createMediaEngines } from './lib/media-engines.js';
 import { createAgentTrace } from './lib/agent-trace.js';
 import { createMcpServers } from './lib/mcp-servers.js';
 import { createSettings } from './lib/settings.js';
@@ -123,6 +124,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     agentConfig: createAgentConfig({ configFile: paths.hermesConfigFile, envValue: (k) => readEnvKey(paths.hermesEnvFile, k) }),
     aiKeys: createAiKeys({ envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, poolFile: join(paths.hermesHome, 'zalo', 'key-pool.json') }),
     aiModels: createAiModels({ configFile: paths.hermesConfigFile, envValue: (k) => readEnvKey(paths.hermesEnvFile, k) }),
+    mediaEngines: createMediaEngines({ hermesHome: paths.hermesHome, configFile: paths.hermesConfigFile, envFile: paths.hermesEnvFile }),
     soulPresetsFile: join(paths.hermesHome, 'zalo', 'soul-presets.json'),
     soul: createSoul({ hermesHome: paths.hermesHome, historyDir: paths.soulHistoryDir }),
     toolsManifestFile: paths.toolsManifestFile,

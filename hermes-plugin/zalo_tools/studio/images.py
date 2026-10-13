@@ -245,13 +245,24 @@ def image_config() -> ImageConfig:
 
 
 async def generate(prompt: str, size: str, *, config: Optional[ImageConfig] = None, client: Any = None) -> Picture:
-    """Vẽ một ảnh AI. Địa chỉ cổng ảnh là cấu hình của chủ bot (được phép là 127.0.0.1); câu mô tả là dữ liệu."""
+    """Vẽ một ảnh AI. Mặc định đi theo thứ tự nguồn ở dashboard (Stali / 9router / ChatGPT, lỗi thì sang nguồn kế —
+    media_engines.draw); ``config``/``client`` chỉ định thẳng một cổng (test). Câu mô tả là dữ liệu."""
     import httpx
 
-    cfg = config or image_config()
     text = " ".join(str(prompt or "").split())[:1500]
     if not text:
         raise ImageError("mô tả ảnh rỗng")
+    if config is None and client is None:
+        from .. import media_engines
+
+        try:
+            got = await asyncio.wait_for(asyncio.to_thread(media_engines.draw, text, size=size), GENERATE_TIMEOUT * 2)
+        except media_engines.EngineError as exc:
+            raise ImageError(str(exc)) from None
+        except asyncio.TimeoutError:
+            raise ImageError("vẽ ảnh quá lâu") from None
+        return _image(got["data"])
+    cfg = config or image_config()
     headers = {"Content-Type": "application/json"}
     if cfg.key:
         headers["Authorization"] = f"Bearer {cfg.key}"

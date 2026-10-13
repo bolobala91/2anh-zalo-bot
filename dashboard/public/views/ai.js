@@ -7,6 +7,7 @@ import { fold } from '../fold.js';
 import { RestartBanner } from './restart-banner.js';
 import { modelOptions } from './agent.js';
 import { FreeApis } from './free-apis.js';
+import { Media } from './media.js';
 
 const fmtMs = (ms) => (ms < 1000 ? `${ms} ms` : `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(ms / 1000)} giây`);
 
@@ -48,7 +49,7 @@ function Models({ onRestart }) {
       ${c.testable ? html`<p><button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => test(c.id, c.model)}>${busy === c.id ? 'Đang thử…' : 'Thử'}</button></p>` : null}
       ${tests[c.id] ? html`<p class=${`ai-result ${tests[c.id].ok ? 'is-ok' : 'is-bad'}`} role="status">${resultText(tests[c.id])}</p>` : null}
     </section>`)}</div>
-    <p class="muted small"><${Icon} name="info" size=${14} /> Mức suy nghĩ và tính cách của bot nằm ở trang Tính cách AI. Giọng đọc, nghe giọng nói, tạo ảnh đặt bằng cấu hình trên máy chủ — nhờ người cài đặt nếu muốn đổi.</p>`;
+    <p class="muted small"><${Icon} name="info" size=${14} /> Mức suy nghĩ và tính cách của bot nằm ở trang Tính cách AI. Nguồn vẽ ảnh và tạo video chỉnh ở tab "Tạo ảnh & video". Giọng đọc, nghe giọng nói đặt bằng cấu hình trên máy chủ — nhờ người cài đặt nếu muốn đổi.</p>`;
 }
 
 const hhmm = (ms) => new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(new Date(ms));
@@ -61,7 +62,7 @@ export function entryState(e) {
 }
 
 /** Cửa sổ quản lý khoá của một dịch vụ: thay khoá đang dùng, danh sách khoá dự phòng (thứ tự = thứ tự đổi khi lỗi). */
-function KeyDialog({ row, available, onSaved, onClose }) {
+export function KeyDialog({ row, available, onSaved, onClose }) {
   const [key, setKey] = useState(row?.key || '');
   const [value, setValue] = useState('');
   const [label, setLabel] = useState('');
@@ -91,6 +92,7 @@ function KeyDialog({ row, available, onSaved, onClose }) {
   }
   return html`<${Dialog} title=${cur ? `Khoá — ${cur.label}` : 'Thêm khoá dịch vụ'} onClose=${onClose} dirty=${() => !busy && Boolean(value)} wide=${pool.length > 0}>
     <div class="stack">
+      ${cur?.signup && !cur.set ? html`<p class="small">Chưa có khoá? <a href=${cur.signup} target="_blank" rel="noopener">Đăng ký tại đây</a>, tạo khoá rồi dán vào ô dưới.</p>` : null}
       ${cur ? html`<p class="muted small">${cur.feature}${cur.restart ? ' · Đổi khoá này cần khởi động lại trợ lý.' : ' · Đổi khoá có hiệu lực ngay, không cần khởi động lại.'}</p>`
         : html`<label class="field"><span>Dịch vụ</span><select value=${key} onChange=${(e) => setKey(e.currentTarget.value)}>
           <option value="">— Chọn dịch vụ —</option>${available.map((a) => html`<option key=${a.key} value=${a.key}>${a.label}</option>`)}</select>
@@ -147,7 +149,8 @@ function Keys({ onRestart }) {
   const known = rows.filter((k) => k.known);
   const others = rows.filter((k) => !k.known);
   const line = (k) => html`<li key=${k.key} class="row-item">
-    <span class="row-main"><strong>${k.label}</strong><small class="muted">${k.feature || k.key}</small></span>
+    <span class="row-main"><strong>${k.label}</strong><small class="muted">${k.feature || k.key}</small>
+      ${k.signup && !k.set ? html`<small>Chưa có khoá? <a href=${k.signup} target="_blank" rel="noopener">Đăng ký tại đây</a></small>` : null}</span>
     <span class=${`badge ${k.set ? 'badge-ok' : 'badge-idle'}`}>${k.set ? `Đã đặt ${k.hint}` : 'Chưa đặt'}</span>
     ${k.pool?.length > 1 ? html`<span class="badge badge-idle" title="Tự đổi sang khoá kế khi lỗi hoặc hết lượt">${k.pool.length} khoá · tự đổi</span>` : null}
     ${k.pool?.some((e) => e.coolUntil) ? html`<span class="badge badge-warn">${k.pool.filter((e) => e.coolUntil).length} khoá đang nghỉ</span>` : null}
@@ -166,7 +169,7 @@ function Keys({ onRestart }) {
 }
 
 const TAB_KEY = 'zd-ai-tab';
-const TABS = ['models', 'keys', 'free'];
+const TABS = ['models', 'media', 'keys', 'free'];
 export function Ai() {
   const [tab, setTab] = useState(() => { try { const t = localStorage.getItem(TAB_KEY); return TABS.includes(t) ? t : 'models'; } catch { return 'models'; } });
   const [rev, setRev] = useState(0);
@@ -176,11 +179,13 @@ export function Ai() {
     <section class="card">
       <div class="chips" role="group" aria-label="Mục">
         <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${tab === 'models' ? 'true' : 'false'} onClick=${() => pick('models')}>Model AI</button>
+        <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${tab === 'media' ? 'true' : 'false'} onClick=${() => pick('media')}>Tạo ảnh & video</button>
         <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${tab === 'keys' ? 'true' : 'false'} onClick=${() => pick('keys')}>Khoá API</button>
         <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${tab === 'free' ? 'true' : 'false'} onClick=${() => pick('free')}>API miễn phí</button>
       </div>
       ${tab === 'models' ? html`<${Models} onRestart=${() => setRev((r) => r + 1)} />`
         : tab === 'free' ? html`<${FreeApis} />`
+        : tab === 'media' ? html`<${Media} onRestart=${() => setRev((r) => r + 1)} />`
         : html`<${Keys} onRestart=${() => setRev((r) => r + 1)} />`}
     </section>`;
 }

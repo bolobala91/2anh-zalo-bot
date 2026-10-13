@@ -4,7 +4,7 @@
 import express from 'express';
 import { requireAuth, requireRole } from '../lib/http-guards.js';
 
-export function aiConfigRoutes({ aiKeys, aiModels, agentConfig, restartFlags, activity }) {
+export function aiConfigRoutes({ aiKeys, aiModels, agentConfig, mediaEngines, restartFlags, activity }) {
   const r = express.Router();
   const guard = [requireAuth, requireRole('admin')];
   const fail = (res, err, fallback) => {
@@ -64,5 +64,34 @@ export function aiConfigRoutes({ aiKeys, aiModels, agentConfig, restartFlags, ac
   r.post('/admin/ai/keys/:key/test', ...guard, async (req, res) => {
     try { res.json({ ok: true, ...(await aiKeys.test(String(req.params.key))) }); } catch (err) { fail(res, err, 'Chưa kiểm tra được khoá.'); }
   });
+
+  // Tạo ảnh & video: nguồn ảnh xếp ưu tiên (Stali / 9router / ChatGPT) + video Stali. Plugin đọc lại tệp — áp dụng ngay.
+  if (mediaEngines) {
+    r.get('/admin/ai/media', ...guard, (req, res) => {
+      try { res.json({ ok: true, ...mediaEngines.view() }); } catch (err) { fail(res, err, 'Chưa đọc được cài đặt tạo ảnh.'); }
+    });
+    r.put('/admin/ai/media', ...guard, (req, res) => {
+      try {
+        const { changedProviders } = mediaEngines.save(req.body?.settings);
+        if (changedProviders) restartFlags?.mark('assistant', 'Tạo ảnh & video');
+        log(req, 'media_engines', '');
+        res.json({ ok: true, ...mediaEngines.view() });
+      } catch (err) { fail(res, err, 'Chưa lưu được — thử lại.'); }
+    });
+    r.get('/admin/ai/media/models/:engine', ...guard, async (req, res) => {
+      try { res.json({ ok: true, models: await mediaEngines.models(String(req.params.engine)) }); } catch (err) { fail(res, err, 'Chưa lấy được danh sách model.'); }
+    });
+    r.post('/admin/ai/media/test', ...guard, async (req, res) => {
+      try { res.json({ ok: true, result: await mediaEngines.test(String(req.body?.kind || 'image'), String(req.body?.engine || '')) }); } catch (err) { fail(res, err, 'Chưa thử được.'); }
+    });
+    r.post('/admin/ai/media/draw', ...guard, async (req, res) => {
+      try {
+        const engine = String(req.body?.engine || '');
+        const result = await mediaEngines.draw(engine);
+        log(req, 'media_draw_test', engine);
+        res.json({ ok: true, result });
+      } catch (err) { fail(res, err, 'Chưa vẽ thử được.'); }
+    });
+  }
   return r;
 }

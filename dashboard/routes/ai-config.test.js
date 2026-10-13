@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAgentConfig } from '../lib/agent-config.js';
 import { createAiKeys } from '../lib/ai-keys.js';
 import { createAiModels } from '../lib/ai-models.js';
+import { createMediaEngines } from '../lib/media-engines.js';
 import { loginAs, makeDeps, startApp } from '../test-helpers.js';
 
 const SECRET = 'core-abcdefghijklmnop9876';
@@ -68,4 +69,32 @@ test('Khoá API: danh sách khoá dự phòng qua API — thêm, dùng khoá kh�
   assert.equal(deps.restartFlags.get().assistant, null, 'khoá công cụ có hiệu lực ngay — không cần khởi động lại');
   assert.deepEqual(deps.activity.list().filter((e) => e.action.startsWith('ai_key')).map((e) => e.action).sort(), ['ai_key_activate', 'ai_key_add']);
   assert.ok(!JSON.stringify(deps.activity.list()).includes(B));
+});
+
+test('Tạo ảnh & video: chỉ Quản trị; lưu thứ tự nguồn → chọn bộ điều phối 2anh + video Stali, bật cờ khởi động lại; thử không vẽ', async (t) => {
+  const { deps, envFile, configFile } = withAi(t);
+  writeFileSync(envFile, 'STALI_API_KEY=sk-stali-0123456789abcdef\n');
+  deps.mediaEngines = createMediaEngines({ hermesHome: deps.dir, configFile, envFile, fetchImpl: async (url, init) => {
+    assert.equal(init.method, undefined, 'Thử chỉ GET danh sách model');
+    return { ok: true, status: 200, json: async () => ({ data: [{ id: 'req/gpt-image-2' }] }) };
+  } });
+  mkdirSync(join(deps.dir, 'zalo'), { recursive: true });
+  const { call } = await startApp(t, deps);
+  const owner = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  assert.equal((await call('/api/admin/ai/media', { cookie: owner })).status, 403);
+  const admin = await loginAs(t, deps, call);
+  const v = (await call('/api/admin/ai/media', { cookie: admin })).json;
+  assert.deepEqual(v.settings.image.engines.map((e) => e.id), ['stali', '9router', 'codex']);
+  assert.equal(v.ready.stali, true);
+  assert.ok(!JSON.stringify(v).includes('sk-stali-0123'), 'không lộ khoá');
+  const body = { settings: { image: { engines: [{ id: '9router', model: 'cx/gpt-image' }, { id: 'stali' }, { id: 'codex', enabled: false }] }, video: { model: 'veo-3.1', seconds: 8 } } };
+  const saved = (await call('/api/admin/ai/media', { method: 'PUT', cookie: admin, body })).json;
+  assert.deepEqual(saved.settings.image.engines.map((e) => e.id), ['9router', 'stali', 'codex']);
+  assert.match(readFileSync(configFile, 'utf8'), /provider: 2anh/);
+  assert.match(readFileSync(configFile, 'utf8'), /video_gen:\n {2}provider: stali/);
+  assert.ok(deps.restartFlags.get().assistant, 'đổi nguồn → cần khởi động lại trợ lý');
+  assert.equal((await call('/api/admin/ai/media', { method: 'PUT', cookie: admin, body: { settings: { video: { model: 'sora' } } } })).status, 400);
+  const tried = (await call('/api/admin/ai/media/test', { method: 'POST', cookie: admin, body: { kind: 'image', engine: 'stali' } })).json;
+  assert.equal(tried.result.ok, true);
+  assert.deepEqual(deps.activity.list().filter((e) => e.action === 'media_engines').length, 1);
 });

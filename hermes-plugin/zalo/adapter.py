@@ -1773,7 +1773,7 @@ class ZaloAdapter(BasePlatformAdapter):
 
             platform_key = str(self.platform.value)
             for label, override in (
-                ("chủ nhân", [f"hermes-{platform_key}", "kanban",
+                ("chủ nhân", [f"hermes-{platform_key}", "kanban", "video_gen",
                               TOOLSET_OWNER, TOOLSET_PUBLIC]),
                 ("người trong nhóm", [TOOLSET_PUBLIC]),
             ):
@@ -1820,7 +1820,8 @@ class ZaloAdapter(BasePlatformAdapter):
         # ``hermes-zalo``: bảng công việc đã bị loại khỏi composite ở
         # define_platform_composite() để người trong nhóm không với tới. Liệt
         # kê tường minh là đường duy nhất còn lại để chủ nhân vẫn dùng được.
-        chosen = ([f"hermes-{platform_key}", "kanban", TOOLSET_OWNER, TOOLSET_PUBLIC]
+        # ``video_gen`` (tạo video, tốn tiền) không thuộc bộ lõi Hermes — chỉ chủ nhân; Hermes tự ẩn khi chưa có nguồn.
+        chosen = ([f"hermes-{platform_key}", "kanban", "video_gen", TOOLSET_OWNER, TOOLSET_PUBLIC]
                   if owner else [TOOLSET_PUBLIC])
 
         logger.debug("[zalo] %s (%s) → %s",

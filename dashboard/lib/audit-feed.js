@@ -55,6 +55,8 @@ export const ACTION_LABELS = {
   ai_key_add: 'Thêm khoá API dự phòng',
   ai_key_activate: 'Chuyển sang khoá API khác',
   ai_key_remove_backup: 'Xoá khoá API dự phòng',
+  media_engines: 'Đổi cài đặt tạo ảnh & video',
+  media_draw_test: 'Vẽ thử một ảnh',
   agent_memory_delete: 'Xoá mục trong bộ nhớ của trợ lý',
   dashboard_friend_accept: 'Chấp nhận lời mời kết bạn từ dashboard',
   dashboard_friend_reject: 'Từ chối lời mời kết bạn từ dashboard',

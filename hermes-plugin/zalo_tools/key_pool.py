@@ -55,14 +55,16 @@ SERVICE_HINTS: Dict[str, re.Pattern] = {
     "VBEE_ACCESS_TOKEN": re.compile(r"vbee", re.I),
     "ELEVENLABS_API_KEY": re.compile(r"elevenlabs", re.I),
     "GEMINI_API_KEY": re.compile(r"generativelanguage|gemini api", re.I),
-    "STALI_API_KEY": re.compile(r"stali", re.I),
+    # Chỉ khi chính nguồn Stali báo lỗi HTTP về khoá (không đổi khoá Stali vì lỗi của 9router/ChatGPT cùng lượt).
+    "STALI_API_KEY": re.compile(r"Stali[^;]{0,40}lỗi (401|402|403|429)", re.I),
 }
 TOOL_KEYS: Dict[str, List[str]] = {
     "web_search": ["TAVILY_API_KEY", "EXA_API_KEY", "FIRECRAWL_API_KEY", "PARALLEL_API_KEY"],
     "web_extract": ["TAVILY_API_KEY", "EXA_API_KEY", "FIRECRAWL_API_KEY", "PARALLEL_API_KEY"],
     "zalo_academic_search": ["CORE_API_KEY", "OPENALEX_API_KEY"],
     "zalo_studio": ["ANH_AI_KEY"],
-    "image_generate": ["STALI_API_KEY"],
+    # image_generate có nhiều nguồn (Stali/9router/ChatGPT) → chỉ đổi khoá Stali khi lỗi nêu đúng Stali (SERVICE_HINTS).
+    "video_generate": ["STALI_API_KEY"],
 }
 ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]{1,63}$")
 
