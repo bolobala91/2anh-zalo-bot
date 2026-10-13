@@ -49,12 +49,26 @@ def _provider() -> str:
         return ""
 
 
+_USER_MEMORY_NS = "_hermes_user_memory."
+
+
+def _is_provider_module_name(name: str) -> bool:
+    """Tên module gói zalo_memory trong mọi cách Hermes nạp: trong mã Hermes (``plugins.memory.zalo_memory``),
+    plugin người dùng bản cũ (``_hermes_user_memory.zalo_memory``) và bản mới
+    (``_hermes_user_memory.zalo_memory__source_<sha16>``). Không nhận module con (``….openviking_base``)."""
+    if name == "plugins.memory.zalo_memory":
+        return True
+    if not name.startswith(_USER_MEMORY_NS):
+        return False
+    rest = name[len(_USER_MEMORY_NS):]
+    return "." not in rest and (rest == PROVIDER or rest.startswith(PROVIDER + "__source_"))
+
+
 def _provider_module():
     """Module provider zalo_memory đang nạp trong tiến trình (Hermes nạp plugin người dùng dưới
     ``_hermes_user_memory``); chưa nạp = provider không chạy → None."""
-    for name in ("_hermes_user_memory.zalo_memory", "plugins.memory.zalo_memory"):
-        mod = sys.modules.get(name)
-        if mod is not None and getattr(mod, "PROVIDER_NAME", None) == PROVIDER:
+    for name, mod in list(sys.modules.items()):
+        if mod is not None and _is_provider_module_name(name) and getattr(mod, "PROVIDER_NAME", None) == PROVIDER:
             return mod
     return None
 

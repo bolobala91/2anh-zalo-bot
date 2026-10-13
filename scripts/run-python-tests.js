@@ -81,6 +81,8 @@ const suites = [
   { label: 'test_zalo_studio.py', module: 'test_zalo_studio', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_insight.py', module: 'test_zalo_insight', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_memory.py', module: 'test_zalo_memory', cwd: REPO_ROOT, requires: 'import gateway, httpx' },
+  // Plugin nạp từ <HERMES_HOME>/plugins dưới tên module tổng hợp (Hermes cũ và mới).
+  { label: 'test_zalo_plugin_layout.py', module: 'test_zalo_plugin_layout', cwd: REPO_ROOT, requires: 'import gateway, httpx, yaml' },
   { label: 'test_zalo_keypool.py', module: 'test_zalo_keypool', cwd: REPO_ROOT },
   { label: 'test_dashboard_hermes_admin.py', module: 'test_dashboard_hermes_admin', cwd: REPO_ROOT },
   { label: 'test_zalo_call_words.py', module: 'test_zalo_call_words', cwd: REPO_ROOT },

@@ -1,6 +1,6 @@
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, cpSync,
-  realpathSync, renameSync, rmSync, statSync,
+  readdirSync, realpathSync, renameSync, rmSync, statSync,
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { homedir, platform } from 'node:os';
@@ -239,6 +239,103 @@ function atomicReplaceDirectory(source, destination) {
     if (movedOld && !existsSync(destination) && existsSync(backup)) renameWithRetry(backup, destination);
     throw error;
   }
+}
+
+/**
+ * Nơi cài ba plugin: thư mục plugin người dùng `<HERMES_HOME>/plugins` — mọi bản Hermes (cũ lẫn mới) đều dò ở đây,
+ * và `hermes update` (git stash --include-untracked trong mã Hermes) không bao giờ đụng tới.
+ * Khoá bật giữ nguyên: `platforms/zalo` (thư mục nhóm platforms/ không có plugin.yaml), `zalo-tools` (tên trong
+ * manifest). Provider trí nhớ phải nằm ở `<HERMES_HOME>/plugins/zalo_memory` (tên thư mục = tên provider).
+ */
+export function pluginTargets(home) {
+  const root = join(resolve(home), 'plugins');
+  return { root, platform: join(root, 'platforms', 'zalo'), tools: join(root, 'zalo_tools'), memory: join(root, 'zalo_memory') };
+}
+
+/** Chỗ các bản ≤ 2.36 chép plugin: thẳng vào mã Hermes — `hermes update` có thể cất mất (git stash -u). */
+export function legacyPluginTargets(repoRoot) {
+  const root = join(resolve(repoRoot), 'plugins');
+  return [join(root, 'platforms', 'zalo'), join(root, 'zalo_tools'), join(root, 'memory', 'zalo_memory')];
+}
+
+// Thư mục tạm của atomicReplaceDirectory (.zalo.install-…, .zalo_tools.backup-…) còn sót khi lần cài trước bị ngắt.
+const STAGING_LEFTOVER = /^\.(zalo|zalo_tools|zalo_memory)\.(install|backup)-/;
+
+/**
+ * Git của mã Hermes có theo dõi `path` không: true / false / null (không hỏi được — thiếu git, lỗi lạ).
+ * Không phải bản git (không có .git) → false: thư mục đó chắc chắn do bộ cài chép vào.
+ */
+export function gitTracks(repoRoot, path, { run = spawnSync } = {}) {
+  if (!existsSync(join(repoRoot, '.git'))) return false;
+  const rel = relative(resolve(repoRoot), resolve(path)).replaceAll('\\', '/');
+  let result;
+  try {
+    // safe.directory=*: trên VPS mã Hermes thường thuộc user khác → git từ chối ("dubious ownership").
+    result = run('git', ['-c', 'safe.directory=*', '-C', repoRoot, 'ls-files', '--error-unmatch', '--', rel],
+      { encoding: 'utf8', windowsHide: true });
+  } catch { return null; }
+  if (result?.status === 0) return true;
+  if (result?.status === 1) return false;
+  return null;
+}
+
+const samePath = (a, b) => {
+  const norm = (p) => (platform() === 'win32' ? resolve(p).toLowerCase() : resolve(p));
+  return norm(a) === norm(b);
+};
+
+/**
+ * Dọn bản plugin cũ trong mã Hermes sau khi đã cài vào `<HERMES_HOME>/plugins`. BẮT BUỘC: provider trí nhớ có sẵn
+ * trong mã Hermes thắng bản ở HERMES_HOME (bot chạy mã cũ), còn hai bản platform thì đăng ký trùng.
+ * Chỉ xoá khi git báo thư mục KHÔNG được theo dõi (hoặc mã Hermes không phải bản git); tệp git theo dõi thì
+ * không bao giờ xoá. Thiếu (đã mất theo `hermes update`) thì bỏ qua. Dọn luôn thư mục tạm còn sót của bộ cài.
+ * Trả { removed: [đường dẫn], kept: [{ path, reason }] }.
+ */
+export function migrateLegacyPlugins({ repoRoot, home, run = spawnSync }) {
+  const fresh = pluginTargets(home);
+  const keep = [fresh.platform, fresh.tools, fresh.memory];
+  const pluginRoot = join(resolve(repoRoot), 'plugins');
+  const removed = [];
+  const kept = [];
+  const legacy = legacyPluginTargets(repoRoot);
+  for (const target of legacy) {
+    // HERMES_HOME trùng mã Hermes: platforms/zalo, zalo_tools cũ chính là bản vừa cài — không đụng.
+    if (keep.some((p) => samePath(p, target)) || !existsSync(target)) continue;
+    if (!within(pluginRoot, target)) throw new Error(`Đích dọn plugin cũ không an toàn: ${target}`);
+    const tracked = gitTracks(repoRoot, target, { run });
+    if (tracked === false) {
+      rmSync(target, { recursive: true, force: true });
+      removed.push(target);
+    } else {
+      kept.push({ path: target, reason: tracked ? 'git của Hermes đang theo dõi thư mục này' : 'không hỏi được git của Hermes' });
+    }
+  }
+  const parents = new Set([...legacy, ...keep].map((p) => dirname(p)));
+  for (const dir of parents) {
+    let names = [];
+    try { names = readdirSync(dir); } catch { continue; }
+    for (const name of names) {
+      if (!STAGING_LEFTOVER.test(name)) continue;
+      const leftover = join(dir, name);
+      if (!within(dir, leftover)) continue;
+      rmSync(leftover, { recursive: true, force: true });
+      removed.push(leftover);
+    }
+  }
+  return { removed, kept };
+}
+
+/** Bản plugin cũ còn trong mã Hermes (khác chỗ cài mới) — doctor cảnh báo. */
+function legacyLeftovers(layout) {
+  const fresh = pluginTargets(layout.home);
+  return legacyPluginTargets(layout.repoRoot)
+    .filter((p) => existsSync(p) && ![fresh.platform, fresh.tools, fresh.memory].some((q) => samePath(p, q)));
+}
+
+/** `plugins.isolation` thực tế (Hermes mới, hermes_cli/plugin_isolation.py): giá trị hợp lệ hoặc 'in_process'. */
+export function pluginIsolationMode(config) {
+  const raw = String(config?.plugins?.isolation ?? 'in_process').trim().toLowerCase().replaceAll('-', '_');
+  return raw === 'host' ? 'host' : 'in_process';
 }
 
 function atomicWriteText(destination, content) {
@@ -551,8 +648,9 @@ export function doctorHermes({
     return { ok: false, checks };
   }
   const root = resolve(sidecarRoot || fileURLToPath(new URL('..', import.meta.url)));
-  const platformDir = join(layout.repoRoot, 'plugins', 'platforms', 'zalo');
-  const toolsDir = join(layout.repoRoot, 'plugins', 'zalo_tools');
+  const targets = pluginTargets(layout.home);
+  const platformDir = targets.platform;
+  const toolsDir = targets.tools;
   add('zalo-platform', existsSync(join(platformDir, 'adapter.py')));
   add('zalo-tools', existsSync(join(toolsDir, 'tools.py')));
   const manifestPath = join(platformDir, 'plugin.yaml');
@@ -563,6 +661,17 @@ export function doctorHermes({
   const known = config?.known_plugin_toolsets?.zalo || [];
   add('config', Boolean(config) && enabled.includes(PLATFORM_KEY) && enabled.includes(TOOLS_KEY)
     && known.includes('zalo_owner') && known.includes('zalo_public') && known.includes('zalo_cron'));
+  // Bản cũ chép plugin vào mã Hermes; còn sót thì provider trí nhớ cũ thắng bản mới và platform đăng ký trùng.
+  const leftovers = legacyLeftovers(layout);
+  if (leftovers.length) {
+    add('legacy-plugin-copies', true, `CẢNH BÁO: còn bản plugin cũ trong mã Hermes (${leftovers.join(', ')}) — `
+      + 'chạy lại install:hermes để dọn; nếu git của Hermes đang theo dõi các thư mục này thì gỡ tay');
+  }
+  // Hermes mới: plugins.isolation: host chạy plugin bên thứ ba trong tiến trình riêng — plugin nền tảng không chạy được ở đó.
+  if (existsSync(join(layout.repoRoot, 'hermes_cli', 'plugin_isolation.py')) && pluginIsolationMode(config) === 'host') {
+    add('plugin-isolation', true, 'CẢNH BÁO: config.yaml đặt plugins.isolation: host — plugin nền tảng Zalo không chạy được '
+      + 'trong tiến trình plugin riêng; bỏ khoá này (mặc định in_process) rồi khởi động lại gateway');
+  }
   const installedGuide = existsSync(join(platformDir, 'style-guide.md'));
   const configuredAppend = config?.platform_hints?.zalo?.append;
   let leftover = false;
@@ -595,7 +704,7 @@ export function doctorHermes({
   add('second-brain', secondBrain.ok, secondBrain.detail);
   const memory = memoryCheck({
     provider: String(config?.memory?.provider ?? '').trim(), endpoint: hermesEnvValue(layout.home, 'OPENVIKING_ENDPOINT'),
-    pluginInstalled: existsSync(join(layout.repoRoot, 'plugins', 'memory', 'zalo_memory', '__init__.py')), hostPlatform,
+    pluginInstalled: existsSync(join(targets.memory, '__init__.py')), hostPlatform,
   });
   add('long-term-memory', memory.ok, memory.detail);
   const configuredVieneu = config?.tts?.providers?.[VIENEU_PROVIDER];
@@ -720,6 +829,7 @@ export async function installHermes({
   commandProbe = spawnSync,
   hostPlatform = platform(),
   dashboardInstaller = installDashboardService,
+  gitRunner = spawnSync,
 } = {}) {
   if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Cần Node.js 22 trở lên');
   const root = resolve(sidecarRoot);
@@ -727,14 +837,16 @@ export async function installHermes({
   const token = ensureSidecarEnv(root, layout.home);
   mkdirSync(join(root, 'data'), { recursive: true });
 
-  const platformDestination = join(layout.repoRoot, 'plugins', 'platforms', 'zalo');
-  const toolsDestination = join(layout.repoRoot, 'plugins', 'zalo_tools');
-  atomicReplaceDirectory(join(root, 'hermes-plugin', 'zalo'), platformDestination);
-  atomicReplaceDirectory(join(root, 'hermes-plugin', 'zalo_tools'), toolsDestination);
+  // Cài vào <HERMES_HOME>/plugins (không vào mã Hermes): `hermes update` không xoá được, Hermes cũ và mới đều nạp.
+  const targets = pluginTargets(layout.home);
+  atomicReplaceDirectory(join(root, 'hermes-plugin', 'zalo'), targets.platform);
+  atomicReplaceDirectory(join(root, 'hermes-plugin', 'zalo_tools'), targets.tools);
   // Trí nhớ dài hạn (spec §19): chỉ chép plugin; KHÔNG đổi memory.provider — người cài đặt tự bật.
-  atomicReplaceDirectory(join(root, 'hermes-plugin', 'zalo_memory'), join(layout.repoRoot, 'plugins', 'memory', 'zalo_memory'));
-  const manifestPath = join(platformDestination, 'plugin.yaml');
+  atomicReplaceDirectory(join(root, 'hermes-plugin', 'zalo_memory'), targets.memory);
+  const manifestPath = join(targets.platform, 'plugin.yaml');
   writeFileSync(manifestPath, renderPlatformManifest(readFileSync(manifestPath, 'utf8'), root), 'utf8');
+  // Chuyển chỗ cho bản cài cũ: chỉ sau khi đã chép xong ở chỗ mới mới dọn bản trong mã Hermes.
+  const migration = migrateLegacyPlugins({ repoRoot: layout.repoRoot, home: layout.home, run: gitRunner });
 
   const vieneu = vieneuTts ? ensureVieneu(root, layout, { skipPython, commandProbe }) : null;
   const guideHeadings = styleGuideHeadings(root);
@@ -760,7 +872,7 @@ export async function installHermes({
     hostPlatform,
   });
   if (!diagnosis.ok) throw new Error(`Cài đặt chưa hoàn chỉnh: ${JSON.stringify(diagnosis.checks)}`);
-  if (noDashboard) return diagnosis;
+  if (noDashboard) return { ...diagnosis, migration };
 
   // Dashboard không bao giờ làm hỏng bản cài chính: lỗi nào cũng chỉ thành cảnh báo.
   let config = null;
@@ -787,17 +899,21 @@ export async function installHermes({
   const memory = memoryHint({
     hostPlatform, provider: String(configObject(layout.configPath)?.memory?.provider ?? '').trim(), configFile: layout.configPath, commandProbe,
   });
-  return { ...diagnosis, dashboard, setupLink, caddy, secondBrain, memory };
+  return { ...diagnosis, migration, dashboard, setupLink, caddy, secondBrain, memory };
 }
 
-export function uninstallHermes({ hermesHome, noDashboard = false, dashboardUninstaller = uninstallDashboardService } = {}) {
+export function uninstallHermes({
+  hermesHome, noDashboard = false, dashboardUninstaller = uninstallDashboardService, gitRunner = spawnSync,
+} = {}) {
   const layout = resolveHermesLayout({ hermesHome });
-  const pluginRoot = join(layout.repoRoot, 'plugins');
-  const targets = [join(pluginRoot, 'platforms', 'zalo'), join(pluginRoot, 'zalo_tools'), join(pluginRoot, 'memory', 'zalo_memory')];
+  const fresh = pluginTargets(layout.home);
+  const targets = [fresh.platform, fresh.tools, fresh.memory];
   for (const target of targets) {
-    if (!within(pluginRoot, target)) throw new Error(`Đích gỡ cài đặt không an toàn: ${target}`);
+    if (!within(fresh.root, target)) throw new Error(`Đích gỡ cài đặt không an toàn: ${target}`);
     if (existsSync(target)) rmSync(target, { recursive: true, force: true });
   }
+  // Bản cũ trong mã Hermes (≤ 2.36): cùng luật với lúc cài — không bao giờ xoá thứ git của Hermes theo dõi.
+  const legacy = migrateLegacyPlugins({ repoRoot: layout.repoRoot, home: layout.home, run: gitRunner });
   const dashboard = noDashboard ? { removed: [], detail: '' } : dashboardUninstaller();
-  return { ok: true, removed: [...targets, ...dashboard.removed], dashboardDetail: dashboard.detail };
+  return { ok: true, removed: [...targets, ...legacy.removed, ...dashboard.removed], kept: legacy.kept, dashboardDetail: dashboard.detail };
 }

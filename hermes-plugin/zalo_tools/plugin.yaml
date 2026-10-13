@@ -1,13 +1,13 @@
 name: zalo-tools
 label: Zalo Tools
 kind: standalone
-version: 2.36.0
+version: 2.37.0
 description: >
   Bộ công cụ Zalo cho Hermes Agent — gửi tệp/thoại/sticker, đọc lịch sử
   SQLite, tra web, tạo bình chọn, quản trị nhóm có xác nhận, và sổ hồ sơ
   người quen.
 
-  Tách riêng khỏi plugin nền tảng `zalo-platform` vì Hermes nạp mọi plugin
+  Tách riêng khỏi plugin nền tảng `2anh-zalo-platform` (platforms/zalo) vì Hermes nạp mọi plugin
   `kind: platform` theo kiểu lười — chúng chỉ được import khi gateway thực sự
   chạm tới nền tảng đó, tức là sau khi Hermes đã lập xong danh sách khoá
   toolset. Công cụ đăng ký muộn như vậy không bao giờ được công nhận, và agent

@@ -145,7 +145,13 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     // Cách gọi bot: cùng tệp plugin đọc (ZALO_CALL_WORDS_FILE trong .env Hermes thắng).
     callWords: createCallWords({ file: readEnvKey(paths.hermesEnvFile, 'ZALO_CALL_WORDS_FILE') || join(paths.hermesHome, 'zalo', 'call-words.json') }),
     maintenance: createMaintenance({ hermesBin: hermesBin({ hermesHome: paths.hermesHome, env }), dataDir: paths.dataDir, sidecarRoot: paths.sidecarRoot,
-      pluginYaml: () => { try { return readFileSync(join(hermesAdmin.root(), 'plugins', 'zalo_tools', 'plugin.yaml'), 'utf8'); } catch { return ''; } } }),
+      // Plugin cài ở <HERMES_HOME>/plugins; bản ≤ 2.36 nằm trong mã Hermes (chưa chạy lại bộ cài).
+      pluginYaml: () => {
+        for (const dir of [join(paths.hermesHome, 'plugins'), join(hermesAdmin.root(), 'plugins')]) {
+          try { return readFileSync(join(dir, 'zalo_tools', 'plugin.yaml'), 'utf8'); } catch { /* thử chỗ kế */ }
+        }
+        return '';
+      } }),
     // Phong cách trả lời: cùng tệp plugin đọc (zalo_tools/reply_style.py).
     replyStyle: createReplyStyle({ file: join(paths.hermesHome, 'zalo', 'reply-style.json') }),
     settings: createSettings({ envFile: paths.hermesEnvFile, configFile: paths.hermesConfigFile, inherited: inheritedSettings }),

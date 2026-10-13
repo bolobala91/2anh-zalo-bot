@@ -340,12 +340,16 @@ npm start
 
 Phần này chỉ dùng khi không thể chạy bộ cài tự động ở trên.
 
-**Bước 1 — chép plugin vào Hermes.** Thư mục `hermes-plugin/` chứa hai plugin, chép vào đúng chỗ trong mã nguồn Hermes:
+**Bước 1 — chép plugin vào thư mục plugin của Hermes** (`<HERMES_HOME>/plugins`, KHÔNG phải vào mã nguồn Hermes — `hermes update` có thể xoá mất plugin nằm trong mã nguồn). Thư mục `hermes-plugin/` chứa hai plugin (cộng `zalo_memory` cho trí nhớ dài hạn, tuỳ chọn):
 
 ```bash
-cp -r hermes-plugin/zalo        <hermes-agent>/plugins/platforms/zalo
-cp -r hermes-plugin/zalo_tools  <hermes-agent>/plugins/zalo_tools
+mkdir -p <HERMES_HOME>/plugins/platforms
+cp -r hermes-plugin/zalo         <HERMES_HOME>/plugins/platforms/zalo
+cp -r hermes-plugin/zalo_tools   <HERMES_HOME>/plugins/zalo_tools
+cp -r hermes-plugin/zalo_memory  <HERMES_HOME>/plugins/zalo_memory
 ```
+
+Bản cũ từng chép vào `<hermes-agent>/plugins/platforms/zalo`, `<hermes-agent>/plugins/zalo_tools`, `<hermes-agent>/plugins/memory/zalo_memory` thì xoá đi (bộ cài tự làm việc này).
 
 Vì sao lại hai thư mục thay vì một: Hermes nạp mọi plugin `kind: platform` theo kiểu **lười** — chúng chỉ được import khi gateway thật sự chạm tới nền tảng đó, tức là *sau* khi Hermes đã chốt xong danh sách toolset. Công cụ đăng ký muộn như vậy bị coi là tên lạ và bị loại sạch, agent thì không báo lỗi mà chỉ lặng lẽ trả lời bằng chữ. Nên bộ công cụ phải nằm ở một plugin `kind: standalone` riêng, thứ được nạp ngay lúc khám phá.
 

@@ -88,14 +88,15 @@ from agent.secret_scope import UnscopedSecretError as _UnscopedSecretError
 from agent.secret_scope import get_secret as _scoped_get_secret
 
 # Công cụ nằm ở plugin standalone `zalo_tools`, không phải ở đây — xem
-# ghi chú trong plugins/zalo_tools/__init__.py về việc Hermes nạp platform
-# plugin theo kiểu lười.
-from plugins.zalo_tools.tools import TOOLSET_OWNER, TOOLSET_PUBLIC
-try:
-    from plugins.zalo_tools import group_permissions as _group_permissions
-except ImportError:
-    # Bản cài dở (adapter mới, zalo_tools cũ): bỏ qua phân quyền nhóm, bot vẫn trả lời.
-    _group_permissions = None
+# ghi chú trong zalo_tools/__init__.py về việc Hermes nạp platform plugin theo
+# kiểu lười. KHÔNG import ``plugins.zalo_tools`` ở cấp module: cài vào
+# <HERMES_HOME>/plugins thì Hermes nạp hai plugin dưới tên tổng hợp
+# (``hermes_plugins.zalo_tools``, ``hermes_plugins.platforms__zalo``), tên
+# ``plugins.zalo_tools`` không tồn tại. Mô-đun của zalo_tools được tìm lúc cần,
+# qua ``_zalo_tools_module()``.
+# Tên toolset là chuỗi cố định, trùng với zalo_tools/tools.py (test kiểm khớp).
+TOOLSET_OWNER = "zalo_owner"
+TOOLSET_PUBLIC = "zalo_public"
 
 from .flood import JUST_MUTED as FLOOD_JUST_MUTED
 from .flood import MUTED as FLOOD_MUTED
@@ -181,6 +182,37 @@ def _transcode_to_aac(audio_path: str) -> Optional[str]:
     return None
 
 
+def _zalo_tools_module(submodule: str, *markers: str):
+    """Mô-đun ``zalo_tools.<submodule>`` ĐÃ NẠP trong tiến trình, bất kể Hermes nạp gói dưới tên nào.
+
+    Cài trong mã Hermes (bản cũ) hay ở <HERMES_HOME>/plugins (bản mới), Hermes đều đặt tên tổng hợp
+    ``hermes_plugins.<slug>`` — slug không cam kết cố định, nên dò theo đuôi tên và đặc điểm module
+    (``markers``: các thuộc tính phải có). Ưu tiên bản dưới ``hermes_plugins.`` (bản Hermes thật sự
+    dùng); không thấy thì import ``plugins.zalo_tools.<submodule>`` (test trong repo, bản cài cũ).
+    """
+    import importlib
+
+    found = []
+    for name, candidate in list(sys.modules.items()):
+        if candidate is None or not all(hasattr(candidate, m) for m in markers):
+            continue
+        if name.endswith(f"zalo_tools.{submodule}") or (
+                name.startswith("hermes_plugins.") and name.endswith(f".{submodule}")):
+            found.append((not name.startswith("hermes_plugins."), name, candidate))
+    if found:
+        return min(found, key=lambda item: item[:2])[2]
+    return importlib.import_module(f"plugins.zalo_tools.{submodule}")
+
+
+def _group_permissions():
+    """Mô-đun phân quyền nhóm của zalo_tools, hoặc None khi chưa có (bản cài dở: adapter mới, zalo_tools
+    cũ/chưa nạp) — khi đó bỏ qua phân quyền nhóm, bot vẫn trả lời."""
+    try:
+        return _zalo_tools_module("group_permissions", "group_settings", "FEATURES")
+    except ImportError:
+        return None
+
+
 def _zalo_tools():
     """Trả về đúng bản module công cụ mà Hermes đã nạp.
 
@@ -194,19 +226,7 @@ def _zalo_tools():
     Hằng số toolset ở trên là chuỗi nên trùng lặp không sao; chỉ phần **trạng
     thái** mới bắt buộc phải dùng chung một bản.
     """
-    mod = sys.modules.get("hermes_plugins.zalo_tools.tools")
-    if mod is not None:
-        return mod
-    # Tên slug do Hermes đặt, không cam kết cố định — dò theo đặc điểm module
-    # thay vì đoán tên.
-    for name, candidate in list(sys.modules.items()):
-        if (name.startswith("hermes_plugins.")
-                and name.endswith(".tools")
-                and hasattr(candidate, "set_active_adapter")
-                and hasattr(candidate, "TOOLSET_OWNER")):
-            return candidate
-    from plugins.zalo_tools import tools as fallback
-    return fallback
+    return _zalo_tools_module("tools", "set_active_adapter", "TOOLSET_OWNER")
 
 
 _PEOPLE_WARNED = False
@@ -1077,17 +1097,18 @@ class ZaloAdapter(BasePlatformAdapter):
         )
         # Không hứa suông: thành viên hỏi trong nhóm đang tắt vài tính năng thì
         # nói trước cho mô hình biết, khỏi hứa "để mình tra" rồi bị chặn.
-        if group_rules and not is_owner and _group_permissions is not None:
-            off = [feature for feature in _group_permissions.FEATURES if not group_rules["features"][feature]]
+        perms = _group_permissions() if (group_rules and not is_owner) or dm_rules else None
+        if group_rules and not is_owner and perms is not None:
+            off = [feature for feature in perms.FEATURES if not group_rules["features"][feature]]
             if off:
-                labels = ", ".join(_group_permissions.FEATURE_LABELS[feature] for feature in off)
+                labels = ", ".join(perms.FEATURE_LABELS[feature] for feature in off)
                 note = (f"[Nhóm này đang tắt: {labels}. Đừng hứa hay thử làm những việc đó; "
                         "nếu được nhờ, nói rõ chủ bot chưa bật tính năng này trong nhóm.]")
                 channel_context = f"{channel_context}\n{note}" if channel_context else note
-        if dm_rules and _group_permissions is not None:
-            off = [feature for feature in _group_permissions.DM_FEATURES if not dm_rules["features"][feature]]
+        if dm_rules and perms is not None:
+            off = [feature for feature in perms.DM_FEATURES if not dm_rules["features"][feature]]
             if off:
-                labels = ", ".join(_group_permissions.FEATURE_LABELS[feature] for feature in off)
+                labels = ", ".join(perms.FEATURE_LABELS[feature] for feature in off)
                 note = (f"[Tin nhắn riêng này đang tắt: {labels}. Đừng hứa hay thử làm những việc đó; "
                         "nếu được nhờ, nói rõ chủ bot chưa bật tính năng này khi nhắn riêng.]")
                 channel_context = f"{channel_context}\n{note}" if channel_context else note
@@ -1229,10 +1250,11 @@ class ZaloAdapter(BasePlatformAdapter):
     @staticmethod
     def _group_rules(thread_id: str) -> Optional[Dict[str, Any]]:
         """Quyền nhóm từ permissions.json; lỗi bất ngờ → None (hành xử như chưa có tệp)."""
-        if _group_permissions is None:
+        perms = _group_permissions()
+        if perms is None:
             return None
         try:
-            return _group_permissions.group_settings(thread_id)
+            return perms.group_settings(thread_id)
         except Exception as exc:
             logger.warning("[zalo] không đọc được quyền nhóm %s: %s", thread_id, exc)
             return None
@@ -1240,10 +1262,11 @@ class ZaloAdapter(BasePlatformAdapter):
     @staticmethod
     def _dm_rules(sender_uid: str) -> Optional[Dict[str, Any]]:
         """Quyền nhắn riêng của người này từ permissions.json; lỗi bất ngờ → None (mọi nút bật như trước)."""
-        if _group_permissions is None:
+        perms = _group_permissions()
+        if perms is None:
             return None
         try:
-            return _group_permissions.dm_settings(sender_uid)
+            return perms.dm_settings(sender_uid)
         except Exception as exc:
             logger.warning("[zalo] không đọc được quyền nhắn riêng của %s: %s", sender_uid, exc)
             return None
@@ -1258,9 +1281,10 @@ class ZaloAdapter(BasePlatformAdapter):
         """
         if self._is_owner(sender_uid):
             return True
-        if _group_permissions is not None:
+        perms = _group_permissions()
+        if perms is not None:
             try:
-                verdict = _group_permissions.dm_allows(sender_uid)
+                verdict = perms.dm_allows(sender_uid)
             except Exception as exc:
                 logger.warning("[zalo] không đọc được quyền nhắn riêng — theo ZALO_DM_POLICY: %s", exc)
                 verdict = None
@@ -1282,7 +1306,7 @@ class ZaloAdapter(BasePlatformAdapter):
         phần đó vẫn có thể tới nhóm đang tắt. Muốn dừng hẳn thì xoá việc hẹn giờ.
         """
         job_id = str(metadata.get("job_id") or "")
-        if not job_id or _group_permissions is None:
+        if not job_id or _group_permissions() is None:
             return False
         try:
             creator = _zalo_tools().group_cron_creator(job_id)

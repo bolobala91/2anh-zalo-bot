@@ -36,7 +36,7 @@ function setup(t, { git = true, healthy = () => ({ ok: true }), runHook = () => 
   };
   const stateFile = join(root, 'state.json');
   const go = (to = 'v2.9.0') => runSelfUpdate({ root, hermesHome: '/h', to, from: '2.8.3', stateFile, tmpDir: tmp, deps });
-  return { root, calls, logs, go, state: () => JSON.parse(readFileSync(stateFile, 'utf8')) };
+  return { root, calls, logs, go, deps, state: () => JSON.parse(readFileSync(stateFile, 'utf8')) };
 }
 
 test('bản cài git: sao lưu → checkout tag → cài bằng bộ cài mã mới → khởi động lại 3 phần → khoẻ', async (t) => {
@@ -68,6 +68,16 @@ test('không khoẻ sau khi cập nhật → quay về commit cũ, cài lại, k
   assert.ok(back > calls.indexOf('git checkout -q v2.9.0'));
   assert.ok(calls.slice(back).some((c) => c.includes('install-hermes.js')));
   assert.equal(calls.slice(back).filter((c) => c.startsWith('restart')).length, 3);
+});
+
+test('quay về bản cũ: gỡ plugin ở <HERMES_HOME>/plugins TRƯỚC khi chạy bộ cài cũ (bản cũ chép vào mã Hermes)', async (t) => {
+  const { calls, go, deps } = setup(t, { healthy: (c) => (c.includes('git checkout -q abc123') ? { ok: true } : { ok: false, detail: 'x' }) });
+  deps.removeUserPlugins = async () => calls.push('remove user plugins');
+  assert.equal((await go()).status, 'rolled-back');
+  const removed = calls.indexOf('remove user plugins');
+  assert.ok(removed > calls.indexOf('git checkout -q abc123'), 'sau khi lấy lại mã cũ');
+  assert.ok(removed < calls.findLastIndex((c) => c.includes('install-hermes.js')), 'trước bộ cài cũ');
+  assert.equal(calls.filter((c) => c === 'remove user plugins').length, 1, 'cập nhật thành công thì không gỡ');
 });
 
 test('mã nguồn có sửa đổi chưa commit → dừng trước khi đụng gì', async (t) => {

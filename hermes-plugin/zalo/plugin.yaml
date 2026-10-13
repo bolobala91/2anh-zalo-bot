@@ -1,7 +1,9 @@
-name: zalo-platform
+# Tên riêng (không phải "zalo-platform"): danh mục plugin của Hermes có một plugin Zalo khác của bên thứ ba
+# trùng tên đó. Khoá bật vẫn là "platforms/zalo" (theo thư mục <HERMES_HOME>/plugins/platforms/zalo).
+name: 2anh-zalo-platform
 label: Zalo
 kind: platform
-version: 2.36.0
+version: 2.37.0
 description: >
   Zalo gateway adapter for Hermes Agent.
 
@@ -17,6 +19,9 @@ description: >
   Start the sidecar with:  node "{{SIDECAR_SERVER}}"
 author: 2Anh AI Education
 requires_env: []
+# Adapter dùng công cụ/trạng thái của zalo-tools — nạp zalo-tools trước (Hermes chỉ coi đây là gợi ý thứ tự).
+requires_plugins:
+  - zalo-tools
 optional_env:
   - name: ZALO_BRIDGE_URL
     description: "WebSocket URL of the zca-js sidecar (default: ws://127.0.0.1:3873)"

@@ -11,6 +11,9 @@ try {
   if (existsSync(envPath)) loadRepoEnv(envPath);
 
   const result = await installHermes(options);
+  // Chuyển chỗ plugin (≤ 2.36 chép vào mã Hermes, nay ở <HERMES_HOME>/plugins): báo rõ đã dọn gì, giữ gì.
+  for (const path of result.migration?.removed || []) console.log(`[MIGRATED] đã gỡ bản plugin cũ: ${path}`);
+  for (const { path, reason } of result.migration?.kept || []) console.log(`[WARN] giữ bản plugin cũ ${path} (${reason}) — gỡ tay để Hermes dùng bản mới`);
   for (const check of result.checks) console.log(`[PASS] ${check.name}${check.detail ? ` - ${check.detail}` : ''}`);
   if (result.dashboard) {
     // Không cài được dịch vụ vẫn là PASS kèm chi tiết (cảnh báo), không làm hỏng bản cài.

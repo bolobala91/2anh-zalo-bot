@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.37.0] — 2026-10-14
+
+### Đổi — tương thích Hermes mới (và vẫn chạy với Hermes cũ)
+
+- **Plugin Zalo cài vào thư mục plugin của người dùng** (`<HERMES_HOME>/plugins/platforms/zalo`, `/zalo_tools`, `/zalo_memory`) thay vì nằm trong mã nguồn Hermes. Hermes mới cất mọi tệp lạ trong mã nguồn vào `git stash` khi `hermes update` và nhiều chế độ (lệnh /update trong chat, app Desktop, chế độ discard) không trả lại — plugin Zalo biến mất, bot mất kết nối. Thư mục người dùng nằm ngoài git nên không bị đụng. Cả Hermes cũ lẫn mới đều nạp plugin từ đây.
+- **Tự chuyển chỗ cho bản đã cài:** cập nhật 2anh-zalo-bot là chép plugin sang chỗ mới rồi gỡ bản cũ trong mã Hermes (chỉ gỡ khi git xác nhận đó không phải tệp của Hermes); bản cũ đã bị cất mất thì cài lại luôn.
+- **Trí nhớ dài hạn (zalo_memory) không còn phụ thuộc OpenViking trong lõi Hermes** — Hermes mới đã gỡ module này; plugin mang theo bản riêng (từ hermes-agent, giấy phép MIT). Luồng nền dùng `spawn_context_thread` khi Hermes có.
+- Plugin nền tảng đổi tên manifest thành `2anh-zalo-platform` (tránh trùng plugin Zalo bên khác trong catalog Hermes); khoá cấu hình `platforms/zalo` giữ nguyên.
+- Doctor cảnh báo khi còn bản plugin cũ trong mã Hermes và khi Hermes bật `plugins.isolation: host` (chế độ này không chạy được plugin nền tảng).
+
 ## [2.36.0] — 2026-10-14
 
 ### Thêm

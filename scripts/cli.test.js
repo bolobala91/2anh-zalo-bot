@@ -44,6 +44,8 @@ test('install, repeated install, doctor, and uninstall work end to end', (t) => 
   const fx = fixture(t);
   const first = run('install-hermes.js', fx);
   assert.equal(first.status, 0, first.stderr || first.stdout);
+  assert.equal(existsSync(join(fx.home, 'plugins', 'platforms', 'zalo', 'adapter.py')), true);
+  assert.equal(existsSync(join(fx.home, 'plugins', 'zalo_memory', 'openviking_base', '__init__.py')), true);
   writeFileSync(join(fx.sidecar, '.env'), 'CUSTOM_SENTINEL=keep\nZALO_BRIDGE_TOKEN=fixed\n');
   const second = run('install-hermes.js', fx);
   assert.equal(second.status, 0, second.stderr || second.stdout);
@@ -56,8 +58,10 @@ test('install, repeated install, doctor, and uninstall work end to end', (t) => 
   assert.equal(doctor.status, 0, doctor.stderr || doctor.stdout);
   const uninstall = run('uninstall-hermes.js', fx);
   assert.equal(uninstall.status, 0, uninstall.stderr || uninstall.stdout);
+  assert.equal(existsSync(join(fx.home, 'plugins', 'platforms', 'zalo')), false);
+  assert.equal(existsSync(join(fx.home, 'plugins', 'zalo_tools')), false);
+  assert.equal(existsSync(join(fx.home, 'plugins', 'zalo_memory')), false);
   assert.equal(existsSync(join(fx.repo, 'plugins', 'platforms', 'zalo')), false);
-  assert.equal(existsSync(join(fx.repo, 'plugins', 'zalo_tools')), false);
   assert.equal(existsSync(join(fx.sidecar, '.env')), true);
   assert.equal(existsSync(join(fx.home, 'config.yaml')), true);
 });

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parse, stringify } from 'yaml';
 
@@ -17,6 +18,10 @@ import {
   doctorHermes,
   permissionsReadableDetail,
   uninstallHermes as uninstallHermesReal,
+  pluginTargets,
+  legacyPluginTargets,
+  migrateLegacyPlugins,
+  gitTracks,
 } from './hermes-install-lib.js';
 
 // Mặc định không đụng systemd / thư mục Startup thật khi kiểm thử.
@@ -146,8 +151,8 @@ test('install is repeatable, installs both plugins, and preserves env and config
   const fx = fixture(t);
   const first = await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
   assert.equal(first.ok, true);
-  assert.equal(existsSync(join(fx.hermesRepo, 'plugins', 'platforms', 'zalo', 'adapter.py')), true);
-  assert.equal(existsSync(join(fx.hermesRepo, 'plugins', 'zalo_tools', 'tools.py')), true);
+  assert.equal(existsSync(join(fx.hermesHome, 'plugins', 'platforms', 'zalo', 'adapter.py')), true);
+  assert.equal(existsSync(join(fx.hermesHome, 'plugins', 'zalo_tools', 'tools.py')), true);
   assert.match(readFileSync(join(fx.sidecar, '.env'), 'utf8'), /^ZALO_BRIDGE_TOKEN=[a-f0-9]{64}$/m);
   assert.match(readFileSync(join(fx.sidecar, '.env'), 'utf8'), new RegExp(`^HERMES_HOME=${fx.hermesHome.replaceAll('\\', '/')}$`, 'm'));
   writeFileSync(join(fx.sidecar, '.env'), 'CUSTOM_SENTINEL=preserve\nZALO_BRIDGE_TOKEN=fixed-token\n');
@@ -269,12 +274,20 @@ test('uninstall removes only managed plugin directories', async (t) => {
   const fx = fixture(t);
   const unrelated = join(fx.hermesRepo, 'plugins', 'keep-me.txt');
   writeFileSync(unrelated, 'safe');
+  const userUnrelated = join(fx.hermesHome, 'plugins', 'other_plugin', 'plugin.yaml');
+  mkdirSync(dirname(userUnrelated), { recursive: true });
+  writeFileSync(userUnrelated, 'name: other\n');
   await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  // Bản cũ còn sót trong mã Hermes (không git) cũng được gỡ.
+  mkdirSync(join(fx.hermesRepo, 'plugins', 'zalo_tools'), { recursive: true });
   const result = uninstallHermes({ hermesHome: fx.hermesHome });
   assert.equal(result.ok, true);
-  assert.equal(existsSync(join(fx.hermesRepo, 'plugins', 'platforms', 'zalo')), false);
+  for (const dir of [['platforms', 'zalo'], ['zalo_tools'], ['zalo_memory']]) {
+    assert.equal(existsSync(join(fx.hermesHome, 'plugins', ...dir)), false, dir.join('/'));
+  }
   assert.equal(existsSync(join(fx.hermesRepo, 'plugins', 'zalo_tools')), false);
   assert.equal(readFileSync(unrelated, 'utf8'), 'safe');
+  assert.equal(readFileSync(userUnrelated, 'utf8'), 'name: other\n');
   assert.equal(existsSync(join(fx.sidecar, '.env')), true);
 });
 
@@ -503,10 +516,11 @@ test('Second brain: doctor đọc ZALO_SECOND_BRAIN_URL trong .env của Hermes;
 });
 
 // --- Trí nhớ dài hạn (spec §19.10): bộ cài chép plugin nhưng không bao giờ tự bật ---
-test('trí nhớ dài hạn: cài chép plugin vào plugins/memory, không đổi memory.provider; doctor báo tắt/bật/hỏng; gỡ cài xoá plugin', async (t) => {
+test('trí nhớ dài hạn: cài chép plugin vào <HERMES_HOME>/plugins/zalo_memory, không đổi memory.provider; doctor báo tắt/bật/hỏng; gỡ cài xoá plugin', async (t) => {
   const fx = fixture(t);
   await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
-  const plugin = join(fx.hermesRepo, 'plugins', 'memory', 'zalo_memory', '__init__.py');
+  const plugin = join(fx.hermesHome, 'plugins', 'zalo_memory', '__init__.py');
+  assert.equal(existsSync(join(fx.hermesRepo, 'plugins', 'memory', 'zalo_memory')), false, 'không chép vào mã Hermes');
   assert.equal(existsSync(plugin), true);
   assert.doesNotMatch(readFileSync(join(fx.hermesHome, 'config.yaml'), 'utf8'), /provider:\s*zalo_memory/);
   const doctor = (platform) => doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, noDashboard: true, hostPlatform: platform })
@@ -540,4 +554,180 @@ test('đổi tên thư mục plugin: Windows tạm giữ tệp thì thử lại;
   assert.throws(() => renameWithRetry('a', 'b', { rename: () => { throw Object.assign(new Error('x'), { code: 'ENOENT' }); }, platform: 'win32', waitMs: () => 1 }), /x/);
   assert.throws(() => renameWithRetry('a', 'b', { rename: () => { throw Object.assign(new Error('busy'), { code: 'EBUSY' }); }, platform: 'win32', tries: 3, waitMs: () => 1 }), /busy/);
   assert.throws(() => renameWithRetry('a', 'b', { rename: () => { throw Object.assign(new Error('busy'), { code: 'EPERM' }); }, platform: 'linux' }), /busy/, 'Linux không thử lại');
+});
+
+// --- Cài vào <HERMES_HOME>/plugins (không vào mã Hermes) + chuyển chỗ cho bản cài cũ ---
+const LEGACY = (repo) => ({
+  platform: join(repo, 'plugins', 'platforms', 'zalo'),
+  tools: join(repo, 'plugins', 'zalo_tools'),
+  memory: join(repo, 'plugins', 'memory', 'zalo_memory'),
+});
+
+function seedLegacy(repo) {
+  const old = LEGACY(repo);
+  for (const dir of Object.values(old)) {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'plugin.yaml'), 'name: old\n');
+    writeFileSync(join(dir, '__init__.py'), '# bản cũ\n');
+  }
+  // Thư mục tạm của lần cài trước bị ngắt giữa chừng.
+  mkdirSync(join(repo, 'plugins', '.zalo_tools.backup-123-abcd'), { recursive: true });
+  mkdirSync(join(repo, 'plugins', 'platforms', '.zalo.install-123-abcd'), { recursive: true });
+  return old;
+}
+
+const hasGit = spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 0;
+const git = (repo, ...args) => {
+  const r = spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'core.autocrlf=false', '-C', repo, ...args], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  return r.stdout;
+};
+
+test('cài mới: ba plugin nằm ở <HERMES_HOME>/plugins, mã Hermes không bị chép gì vào', async (t) => {
+  const fx = fixture(t);
+  const result = await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  const targets = pluginTargets(fx.hermesHome);
+  assert.deepEqual(targets, {
+    root: join(fx.hermesHome, 'plugins'),
+    platform: join(fx.hermesHome, 'plugins', 'platforms', 'zalo'),
+    tools: join(fx.hermesHome, 'plugins', 'zalo_tools'),
+    memory: join(fx.hermesHome, 'plugins', 'zalo_memory'),
+  });
+  assert.equal(existsSync(join(targets.platform, 'adapter.py')), true);
+  assert.equal(existsSync(join(targets.tools, 'tools.py')), true);
+  assert.equal(existsSync(join(targets.memory, '__init__.py')), true);
+  assert.doesNotMatch(readFileSync(join(targets.platform, 'plugin.yaml'), 'utf8'), /SIDECAR_SERVER/);
+  for (const dir of legacyPluginTargets(fx.hermesRepo)) assert.equal(existsSync(dir), false, dir);
+  assert.deepEqual(readdirSync(join(fx.hermesRepo, 'plugins')), ['platforms']);
+  assert.deepEqual(readdirSync(join(fx.hermesRepo, 'plugins', 'platforms')), []);
+  assert.deepEqual(result.migration, { removed: [], kept: [] });
+  const config = parse(readFileSync(join(fx.hermesHome, 'config.yaml'), 'utf8'));
+  assert.deepEqual(config.plugins.enabled, ['platforms/zalo', 'zalo-tools']);
+});
+
+test('chuyển chỗ: mã Hermes không phải bản git → gỡ bản cũ và thư mục tạm còn sót, sau khi đã cài ở chỗ mới', async (t) => {
+  const fx = fixture(t);
+  const old = seedLegacy(fx.hermesRepo);
+  const result = await installHermes({
+    sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true,
+    gitRunner: () => { throw new Error('không có .git thì không được hỏi git'); },
+  });
+  for (const dir of Object.values(old)) assert.equal(existsSync(dir), false, dir);
+  assert.equal(existsSync(join(fx.hermesRepo, 'plugins', '.zalo_tools.backup-123-abcd')), false);
+  assert.equal(existsSync(join(fx.hermesRepo, 'plugins', 'platforms', '.zalo.install-123-abcd')), false);
+  assert.equal(existsSync(join(fx.hermesHome, 'plugins', 'zalo_tools', 'tools.py')), true);
+  assert.deepEqual([...result.migration.removed].sort(), [
+    old.platform, old.tools, old.memory,
+    join(fx.hermesRepo, 'plugins', '.zalo_tools.backup-123-abcd'),
+    join(fx.hermesRepo, 'plugins', 'platforms', '.zalo.install-123-abcd'),
+  ].sort());
+  assert.equal(result.checks.find((c) => c.name === 'legacy-plugin-copies'), undefined);
+});
+
+test('chuyển chỗ (bản git thật): gỡ thư mục git không theo dõi, KHÔNG BAO GIỜ đụng tệp git theo dõi', { skip: !hasGit && 'máy không có git' }, async (t) => {
+  const fx = fixture(t);
+  git(fx.hermesRepo, 'init', '-q');
+  writeFileSync(join(fx.hermesRepo, 'plugins', 'platforms', 'README.md'), 'core\n');
+  // Giả sử ai đó đã commit zalo_tools vào mã Hermes: phải giữ nguyên.
+  const tracked = join(fx.hermesRepo, 'plugins', 'zalo_tools');
+  mkdirSync(tracked, { recursive: true });
+  writeFileSync(join(tracked, 'tools.py'), '# đã commit\n');
+  git(fx.hermesRepo, 'add', '-A');
+  git(fx.hermesRepo, 'commit', '-q', '-m', 'core');
+  const old = LEGACY(fx.hermesRepo);
+  for (const dir of [old.platform, old.memory]) {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, '__init__.py'), '# bản cũ\n');
+  }
+  writeFileSync(join(tracked, 'extra.py'), '# chưa commit trong thư mục được theo dõi\n');
+
+  assert.equal(gitTracks(fx.hermesRepo, old.platform), false);
+  assert.equal(gitTracks(fx.hermesRepo, tracked), true);
+  const result = await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+
+  assert.equal(existsSync(old.platform), false);
+  assert.equal(existsSync(old.memory), false);
+  assert.equal(readFileSync(join(tracked, 'tools.py'), 'utf8'), '# đã commit\n');
+  assert.equal(existsSync(join(tracked, 'extra.py')), true, 'thư mục git theo dõi giữ nguyên cả tệp chưa commit');
+  assert.equal(readFileSync(join(fx.hermesRepo, 'plugins', 'platforms', 'README.md'), 'utf8'), 'core\n');
+  assert.deepEqual(result.migration.kept.map((k) => k.path), [tracked]);
+  assert.equal(git(fx.hermesRepo, 'status', '--porcelain', '--untracked-files=no'), '', 'cây git của Hermes không đổi');
+  const warn = result.checks.find((c) => c.name === 'legacy-plugin-copies');
+  assert.equal(warn.ok, true);
+  assert.match(warn.detail, /CẢNH BÁO: còn bản plugin cũ trong mã Hermes/);
+  assert.match(warn.detail, /zalo_tools/);
+});
+
+test('chuyển chỗ: git không trả lời được → giữ bản cũ, báo lý do; git báo "không theo dõi" → gỡ', (t) => {
+  const fx = fixture(t);
+  const old = seedLegacy(fx.hermesRepo);
+  mkdirSync(join(fx.hermesRepo, '.git'));
+  const seen = [];
+  const broken = (cmd, args) => { seen.push([cmd, ...args].join(' ')); return { status: 128, stderr: 'fatal' }; };
+  let result = migrateLegacyPlugins({ repoRoot: fx.hermesRepo, home: fx.hermesHome, run: broken });
+  assert.deepEqual(result.kept.map((k) => k.path), [old.platform, old.tools, old.memory]);
+  assert.match(result.kept[0].reason, /không hỏi được git/);
+  for (const dir of Object.values(old)) assert.equal(existsSync(dir), true);
+  assert.match(seen[0], /^git -c safe\.directory=\* -C .+ ls-files --error-unmatch -- plugins\/platforms\/zalo$/);
+  assert.equal(gitTracks(fx.hermesRepo, old.tools, { run: () => { throw new Error('ENOENT'); } }), null);
+  result = migrateLegacyPlugins({ repoRoot: fx.hermesRepo, home: fx.hermesHome, run: () => ({ status: 1 }) });
+  assert.deepEqual(result.removed.slice(0, 3), [old.platform, old.tools, old.memory]);
+  for (const dir of Object.values(old)) assert.equal(existsSync(dir), false);
+});
+
+test('chuyển chỗ: HERMES_HOME trùng mã Hermes → không gỡ chính bản vừa cài, chỉ gỡ plugins/memory/zalo_memory', (t) => {
+  const fx = fixture(t);
+  const old = seedLegacy(fx.hermesRepo);
+  const result = migrateLegacyPlugins({ repoRoot: fx.hermesRepo, home: fx.hermesRepo, run: () => ({ status: 1 }) });
+  assert.equal(existsSync(old.platform), true);
+  assert.equal(existsSync(old.tools), true);
+  assert.equal(existsSync(old.memory), false);
+  assert.equal(result.removed[0], old.memory);
+});
+
+test('cài lại nhiều lần: kết quả như nhau, không còn thư mục tạm, không đụng plugin khác ở <HERMES_HOME>/plugins', async (t) => {
+  const fx = fixture(t);
+  seedLegacy(fx.hermesRepo);
+  const other = join(fx.hermesHome, 'plugins', 'other_plugin');
+  mkdirSync(other, { recursive: true });
+  writeFileSync(join(other, 'plugin.yaml'), 'name: other\n');
+  const first = await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  const configAfterFirst = readFileSync(join(fx.hermesHome, 'config.yaml'), 'utf8');
+  const second = await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.deepEqual(second.migration, { removed: [], kept: [] });
+  assert.equal(readFileSync(join(fx.hermesHome, 'config.yaml'), 'utf8'), configAfterFirst);
+  assert.deepEqual(readdirSync(join(fx.hermesHome, 'plugins')).sort(), ['other_plugin', 'platforms', 'zalo_memory', 'zalo_tools']);
+  assert.deepEqual(readdirSync(join(fx.hermesHome, 'plugins', 'platforms')), ['zalo']);
+  assert.equal(readFileSync(join(other, 'plugin.yaml'), 'utf8'), 'name: other\n');
+});
+
+test('doctor: thiếu plugin ở <HERMES_HOME>/plugins thì hỏng dù mã Hermes còn bản cũ; cảnh báo plugins.isolation: host', async (t) => {
+  const fx = fixture(t);
+  seedLegacy(fx.hermesRepo);
+  writeFileSync(join(LEGACY(fx.hermesRepo).platform, 'adapter.py'), '# cũ\n');
+  let d = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, noDashboard: true });
+  assert.equal(d.checks.find((c) => c.name === 'zalo-platform').ok, false);
+  assert.match(d.checks.find((c) => c.name === 'legacy-plugin-copies').detail, /CẢNH BÁO/);
+
+  await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  const configPath = join(fx.hermesHome, 'config.yaml');
+  const withIsolation = (value) => {
+    const config = parse(readFileSync(configPath, 'utf8'));
+    config.plugins.isolation = value;
+    writeFileSync(configPath, stringify(config));
+  };
+  withIsolation('host');
+  d = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, noDashboard: true });
+  assert.equal(d.checks.find((c) => c.name === 'plugin-isolation'), undefined, 'Hermes cũ không có plugins.isolation');
+  mkdirSync(join(fx.hermesRepo, 'hermes_cli'), { recursive: true });
+  writeFileSync(join(fx.hermesRepo, 'hermes_cli', 'plugin_isolation.py'), '# Hermes mới\n');
+  d = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, noDashboard: true });
+  const iso = d.checks.find((c) => c.name === 'plugin-isolation');
+  assert.equal(iso.ok, true);
+  assert.match(iso.detail, /CẢNH BÁO: .*plugins\.isolation: host/);
+  withIsolation('in-process');
+  d = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, noDashboard: true });
+  assert.equal(d.checks.find((c) => c.name === 'plugin-isolation'), undefined);
 });

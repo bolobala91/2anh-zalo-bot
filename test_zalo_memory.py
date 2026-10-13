@@ -22,13 +22,15 @@ if ROOT not in sys.path:
 import plugins  # noqa: E402
 import plugins.memory  # noqa: E402
 
-# Kiểm thêm với bản plugin OpenViking của máy khác (vd. bản sao từ VPS): ZALO_OV_BASE_DIR=<thư mục openviking>.
+# Kiểm thêm với một bản plugin OpenViking khác thay cho bản chép kèm zalo_memory/openviking_base
+# (vd. bản mới của Hermes): ZALO_OV_BASE_DIR=<thư mục openviking>.
 _ALT_BASE = os.environ.get("ZALO_OV_BASE_DIR")
 if _ALT_BASE:
     _spec = importlib.util.spec_from_file_location(
-        "plugins.memory.openviking", os.path.join(_ALT_BASE, "__init__.py"), submodule_search_locations=[_ALT_BASE])
+        "plugins.memory.zalo_memory.openviking_base", os.path.join(_ALT_BASE, "__init__.py"),
+        submodule_search_locations=[_ALT_BASE])
     _mod = importlib.util.module_from_spec(_spec)
-    sys.modules["plugins.memory.openviking"] = _mod
+    sys.modules["plugins.memory.zalo_memory.openviking_base"] = _mod
     _spec.loader.exec_module(_mod)
 
 plugins.memory.__path__ = [os.path.join(ROOT, "hermes-plugin"), *list(plugins.memory.__path__)]
@@ -613,7 +615,7 @@ class FailureTest(unittest.TestCase):
         with patch.dict(os.environ, {"OPENVIKING_ENDPOINT": "http://127.0.0.1:9"}), \
                 patch.object(zm, "_host_platform", return_value="linux"):
             p = zm.ZaloMemoryProvider()
-            with patch("plugins.memory.openviking._start_local_openviking_server") as start:
+            with patch.object(BASE, "_start_local_openviking_server") as start:
                 p.initialize("s-1", platform="zalo", chat_type="group", chat_id=GROUP_A,
                              hermes_home=tempfile.mkdtemp(prefix="zalo-mem-"))
                 started = time.time()

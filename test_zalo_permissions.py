@@ -390,7 +390,7 @@ class AdapterGroupRulesTest(PermissionsFile, AdapterHarness, unittest.IsolatedAs
         self.write({"version": 1, "defaults": {"features": {"web": False}},
                     "groups": {GROUP_A: {"active": False}}})
         adapter = self.make_adapter()
-        with patch.object(zalo_adapter, "_group_permissions", None):
+        with patch.object(zalo_adapter, "_group_permissions", lambda: None):
             self.assertIsNone(adapter._group_rules(GROUP_A))
             await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu chào")
         self.assertEqual(len(self.handled), 1)
@@ -740,7 +740,7 @@ class AdapterDmTest(PermissionsFile, AdapterHarness, unittest.IsolatedAsyncioTes
                 self.assertLogs(zalo_adapter.logger, level="WARNING"):
             await self.dm(adapter, "d1", STRANGER, "chào bot")
         self.assertEqual(self.handled, [])
-        with patch.object(zalo_adapter, "_group_permissions", None):
+        with patch.object(zalo_adapter, "_group_permissions", lambda: None):
             await self.dm(adapter, "d2", STRANGER, "chào bot")
         self.assertEqual(self.handled, [])
         self.write("{hỏng")

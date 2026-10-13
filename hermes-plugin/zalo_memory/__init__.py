@@ -1,7 +1,7 @@
 """Trí nhớ dài hạn OpenViking cho Zalo, tách riêng từng nhóm và từng người (spec §19).
 
-Bọc nhà cung cấp OpenViking có sẵn của Hermes (``plugins.memory.openviking``) — không sửa
-lõi Hermes. Mỗi phiên agent của gateway có một bản provider riêng; ``initialize`` nhận
+Bọc nhà cung cấp OpenViking của Hermes — bản chép riêng trong ``openviking_base/`` (Hermes mới đã bỏ
+OpenViking khỏi lõi), không sửa lõi Hermes. Mỗi phiên agent của gateway có một bản provider riêng; ``initialize`` nhận
 ``platform``/``chat_type``/``chat_id`` của phiên đó và chốt MỘT phạm vi:
 
 - nhóm Zalo  → người dùng OpenViking ``zalo-g-<groupId>``
@@ -28,7 +28,9 @@ import weakref
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from plugins.memory.openviking import OpenVikingMemoryProvider, _VikingClient
+# Luôn dùng bản OpenViking chép kèm (openviking_base/): chạy như nhau dù lõi Hermes còn hay đã bỏ
+# plugins/memory/openviking, và dù plugin được nạp dưới tên nào (plugins.memory.*, _hermes_user_memory.*).
+from .openviking_base import OpenVikingMemoryProvider, _VikingClient
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,16 @@ SYSTEM_PROMPT = (
 _REQUIRED_BASE = ("_ensure_client", "_new_client", "_user_space", "_post_prefetch_search", "_search_prefetch_context",
                   "_recall_config", "_profile_token_budget", "_recover_pending_sessions",
                   "_handle_runtime_openviking_unreachable", "_drain_writers")
+
+
+def _spawn_thread(target, *, name: str) -> threading.Thread:
+    """Luồng nền (chưa chạy). Hermes mới có ``spawn_context_thread`` để luồng giữ ngữ cảnh hồ sơ của bên gọi;
+    Hermes cũ chưa có thì dùng threading.Thread như trước."""
+    try:
+        from agent.memory_provider import spawn_context_thread
+    except ImportError:
+        return threading.Thread(target=target, daemon=True, name=name)
+    return spawn_context_thread(target, name=name, daemon=True)
 
 
 def _host_platform() -> str:
@@ -237,7 +249,7 @@ def _ensure_ticker() -> None:
                 time.sleep(TICK_SECONDS)
                 tick()
 
-        _TICKER["thread"] = threading.Thread(target=loop, daemon=True, name="zalo-memory-ticker")
+        _TICKER["thread"] = _spawn_thread(loop, name="zalo-memory-ticker")
         _TICKER["thread"].start()
 
 
@@ -438,7 +450,7 @@ class ZaloMemoryProvider(OpenVikingMemoryProvider):
             return False  # lần rút trước hỏng: đợi hết thời gian lùi
         if not self._extracting.acquire(blocking=False):
             return False
-        threading.Thread(target=self._extract_now, daemon=True, name=f"zalo-memory-extract-{self._scope}").start()
+        _spawn_thread(self._extract_now, name=f"zalo-memory-extract-{self._scope}").start()
         return True
 
     def _extract_failed(self, reason: Any) -> None:

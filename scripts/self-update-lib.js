@@ -37,6 +37,7 @@ export function writeState(file, state) {
 
 /**
  * deps: { log(text), run(cmd, args, opts) → Promise (ném lỗi khi mã thoát ≠ 0), download(url, dest), backup() → tên tệp,
+ *         removeUserPlugins() (tuỳ chọn: gỡ plugin ở <HERMES_HOME>/plugins trước khi cài lại bản cũ),
  *         restartSidecar(), restartAssistant(), restartDashboard(), healthy() → Promise<{ ok, detail }>, sleep(ms), now() }
  */
 export async function runSelfUpdate({ root, hermesHome, to, from = '', stateFile, tmpDir, deps }) {
@@ -123,6 +124,9 @@ export async function runSelfUpdate({ root, hermesHome, to, from = '', stateFile
       step('Quay về bản cũ');
       const lockNow = hashFile(lockFile);
       await rollback();
+      // Bản cũ (≤ 2.36) chép plugin vào mã Hermes: bản mới đã cài ở <HERMES_HOME>/plugins sẽ che bản cũ nếu để lại.
+      // Gỡ trước khi chạy bộ cài cũ; bản cũ nào cũng cài vào HERMES_HOME thì bộ cài của nó chép lại ngay.
+      await deps.removeUserPlugins?.();
       await installCode(lockNow);
       await restartAll();
       await waitHealthy();

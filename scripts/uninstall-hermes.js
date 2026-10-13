@@ -12,6 +12,7 @@ try {
 
   const result = uninstallHermes(options);
   for (const path of result.removed) console.log(`[REMOVED] ${path}`);
+  for (const { path, reason } of result.kept || []) console.log(`[KEPT] ${path} (${reason})`);
   if (result.dashboardDetail) console.log(result.dashboardDetail);
   console.log('Đã giữ nguyên .env, phiên Zalo, SQLite, config.yaml và dữ liệu dashboard (tài khoản, cài đặt).');
 } catch (error) {

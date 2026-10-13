@@ -3,11 +3,12 @@
 //   node scripts/self-update.js --to vX.Y.Z [--from X.Y.Z]
 // Đọc .env của sidecar (HERMES_HOME, cổng, lệnh khởi động lại). Xem self-update-lib.js.
 import { execFile, spawn } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRepoEnv } from './setup-env.js';
 import { runSelfUpdate } from './self-update-lib.js';
+import { pluginTargets } from './hermes-install-lib.js';
 import { createHermesAdmin } from '../dashboard/lib/hermes-admin.js';
 import { freeListenerPort, makeRestartSidecar, systemctlRestart } from '../dashboard/lib/restart.js';
 import { makeRestartAssistant } from '../dashboard/lib/restart-assistant.js';
@@ -76,6 +77,10 @@ const state = await runSelfUpdate({
     backup: async () => (await admin.write('backup.create', { dir: join(paths.dataDir, 'backups') }, { timeoutMs: 600_000 })).file,
     restartSidecar: makeRestartSidecar({ cmd: config.restartCmd, sidecarRoot: root, port: sidecarPort }),
     restartAssistant: makeRestartAssistant({ cmd: config.assistantRestartCmd, hermesHome: paths.hermesHome }),
+    removeUserPlugins: () => {
+      const t = pluginTargets(paths.hermesHome);
+      for (const dir of [t.platform, t.tools, t.memory]) rmSync(dir, { recursive: true, force: true });
+    },
   },
 }).catch((e) => { log(`LỖI: ${e.message}`); writeFileSync(stateFile, JSON.stringify({ status: 'failed', error: e.message, finishedAt: Date.now() })); return null; });
 process.exitCode = state?.status === 'done' ? 0 : 1;
