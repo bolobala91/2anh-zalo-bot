@@ -3,7 +3,7 @@
 // Mỗi người hiện số lượt đã dùng hôm nay và số còn, đọc từ sổ lượt xưởng (Sức khoẻ máy chủ dùng chung sổ này).
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
-import { MultiPick } from './multi-pick.js';
+import { BulkBar, MultiPick, flip, stillPicked } from './multi-pick.js';
 import { html, Notice, SaveBar } from '../ui.js';
 import { PAGE, knownNames, suggestions } from './dm-permissions.js';
 import { MAX_QUOTA, parseQuota, vnToday } from './studio-box.js';
@@ -62,6 +62,23 @@ export function addQuotaPerson(d, uid, name = '', quota = '') {
   return { draft: { ...d, people: [...d.people, { uid: id, name: String(name || '').trim().slice(0, 80), quota: String(q.value), image: '', video: '' }] } };
 }
 
+/**
+ * Đặt cùng số lượt cho nhiều người: `{ draft }` hoặc `{ error }`. Ô ảnh/video AI để trống thì giữ số riêng của từng người.
+ */
+export function setQuotas(d, uids, { quota, image = '', video = '' }) {
+  const q = parseQuota(quota, { allowEmpty: false });
+  if (q.error) return { error: `Số lượt: ${q.error}` };
+  const i = parseQuota(image);
+  const v = parseQuota(video);
+  if (i.error || v.error) return { error: `Ảnh/video AI: ${i.error || v.error}` };
+  const pick = new Set(uids);
+  return { draft: { ...d, people: d.people.map((p) => (pick.has(p.uid) ? { ...p, quota: String(q.value),
+    ...(i.value === null ? {} : { image: String(i.value) }), ...(v.value === null ? {} : { video: String(v.value) }) } : p)) } };
+}
+
+/** Bỏ hạn mức riêng của nhiều người (họ quay về số mặc định / số của nhóm). */
+export const removeQuotaPeople = (d, uids) => ({ ...d, people: d.people.filter((p) => !uids.includes(p.uid)) });
+
 /** Lượt đã tính hôm nay của một người (việc được trả lượt không tính); null khi chưa đọc được sổ. */
 export function usedToday(usage, uid, today = vnToday()) {
   if (!usage || usage.error) return null;
@@ -91,6 +108,10 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
   const [name, setName] = useState('');
   const [addError, setAddError] = useState('');
   const [limit, setLimit] = useState(PAGE);
+  // Chọn nhiều người: Set UID đã tích; `bulkSet` = các ô số đang soạn cho "Đặt số lượt" (null = đóng).
+  const [picked, setPicked] = useState(() => new Set());
+  const [bulkSet, setBulkSet] = useState(null);
+  const [bulkError, setBulkError] = useState('');
   const dirty = !sameQuota(draft, saved);
   useEffect(() => { onDirty(dirty); }, [dirty]);
   useEffect(() => () => onDirty(false), []);
@@ -138,6 +159,12 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
 
   const defaultError = parseQuota(draft.quota, { allowEmpty: false }).error;
   const visible = draft.people.slice(0, limit);
+  const sel = stillPicked(picked, draft.people);
+  const applyBulk = () => {
+    const r = setQuotas(draft, sel, bulkSet);
+    if (r.error) { setBulkError(`${r.error} Sửa rồi bấm lại.`); return; }
+    update(r.draft); setBulkSet(null); setBulkError(''); setPicked(new Set());
+  };
   return html`<form class="perm-form" onSubmit=${save} novalidate>
     <header class="thread-head">
       <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
@@ -183,12 +210,32 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
         </div>
         <p id="sq-add-error" class="small dm-add-error" aria-live="polite">${addError}</p>
       </details>
+      ${draft.people.length > 1 ? html`<${BulkBar} shown=${draft.people} picked=${new Set(sel)} onPick=${setPicked}>
+        <button type="button" class="btn btn-secondary btn-sm" onClick=${() => { setBulkSet({ quota: draft.quota, image: '', video: '' }); setBulkError(''); }}>Đặt số lượt</button>
+        <button type="button" class="btn btn-danger-outline btn-sm" onClick=${() => { update(removeQuotaPeople(draft, sel)); setPicked(new Set()); setBulkSet(null); }}>Bỏ hạn mức riêng (${sel.length})</button>
+      <//>` : null}
+      ${bulkSet && sel.length ? html`<div class="bulk-panel">
+        <p class="small"><strong>Số mỗi ngày cho ${sel.length} người đã chọn</strong></p>
+        <div class="row">
+          ${[['quota', 'lượt'], ['image', 'ảnh AI'], ['video', 'video AI']].map(([k, unit]) => html`<label key=${k} class="quota-edit">
+            <input class="quota-input" inputmode="numeric" maxlength="2" value=${bulkSet[k]} placeholder=${k === 'quota' ? '' : 'giữ'}
+              onInput=${(e) => { setBulkSet({ ...bulkSet, [k]: e.currentTarget.value }); setBulkError(''); }} /> <span class="muted small">${unit}</span></label>`)}
+        </div>
+        <p class="muted small">Ô ảnh/video AI để trống thì giữ số riêng đang có của từng người.</p>
+        <p class="small dm-add-error" aria-live="polite">${bulkError}</p>
+        <div class="row">
+          <button type="button" class="btn btn-primary btn-sm" onClick=${applyBulk}>Áp cho ${sel.length} người</button>
+          <button type="button" class="btn btn-ghost btn-sm" onClick=${() => { setBulkSet(null); setBulkError(''); }}>Huỷ</button>
+        </div>
+      </div>` : null}
       ${draft.people.length ? html`<ul class="dm-people">${visible.map((p, i) => {
         const shown = p.name || names.get(p.uid) || 'Chưa rõ tên';
         const bad = parseQuota(p.quota, { allowEmpty: false }).error;
         const left = remainText(usedToday(usage, p.uid, today), p.quota);
         return html`<li class="dm-person" key=${p.uid}>
           <div class="dm-row quota-row">
+            ${draft.people.length > 1 ? html`<input type="checkbox" class="bulk-check" checked=${picked.has(p.uid)} aria-label=${`Chọn ${shown}`}
+              onChange=${() => setPicked(flip(picked, p.uid))} />` : null}
             <span class="dm-who"><strong class="dm-name">${shown}</strong></span>
             <span class="quota-edit">
               <label for=${`sq-p-${p.uid}`} class="sr-only">Số lượt mỗi ngày của ${shown}</label>
@@ -214,6 +261,6 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
     </fieldset>
     ${draft.people.some((p) => p.quota.trim() === '0') ? html`<${Notice} kind="info">Người có 0 lượt không nhờ xưởng được nữa, kể cả khi nhóm đã bật.<//>` : null}
     <${SaveBar} count=${quotaChangeCount(draft, saved)} busy=${busy} canSave=${dirty} msg=${msg}
-      onUndo=${() => { setDraft(quotaDraft(studio)); setMsg({}); setAddError(''); }} />
+      onUndo=${() => { setDraft(quotaDraft(studio)); setMsg({}); setAddError(''); setPicked(new Set()); setBulkSet(null); }} />
   </form>`;
 }

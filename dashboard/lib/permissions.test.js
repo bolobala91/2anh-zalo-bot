@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, uti
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPermissionsStore, FEATURE_KEYS, InvalidPermissions, makeDmEnv, makeGlobalReplyOnlyTagged, normalize, parseDm, parseSettings, parseStudio, STUDIO_FEATURES, studioPolicy } from './permissions.js';
+import { createPermissionsStore, FEATURE_KEYS, InvalidPermissions, makeDmEnv, makeGlobalReplyOnlyTagged, normalize, parseDm, parseGroupsPatch, parseSettings, parseStudio, STUDIO_FEATURES, studioPolicy } from './permissions.js';
 
 const G = '2054797107487294899';
 const allOn = () => Object.fromEntries(FEATURE_KEYS.map((k) => [k, true]));
@@ -338,4 +338,39 @@ test('xưởng: chính sách máy chủ — Windows video tắt; Linux theo stud
   assert.deepEqual(studioPolicy('linux', file), { videoBlocked: true, note: 'Máy chủ chưa dùng được hộp cát systemd — video tắt' });
   writeFileSync(file, JSON.stringify({ version: 1, videoBlocked: false, note: '' }));
   assert.equal(studioPolicy('win32', file).videoBlocked, true, 'Windows luôn tắt, tệp nói gì cũng vậy');
+});
+
+test('nhiều nhóm một lượt: chỉ đổi mục đã chọn, mục khác giữ giá trị riêng; nhóm trong thư mục so với nền thư mục', (t) => {
+  const s = setup(t);
+  const A = '200';
+  const B = '300';
+  const C = '400';
+  s.store.setGroup(A, settings({}, { kb: false }), 'Tổ Hoá');
+  const { id: fid } = s.store.createFolder('Lớp học');
+  s.store.setFolderMembers(fid, [B]);
+  s.store.setFolderSettings(fid, settings({}, { web: false }));
+  const { changed } = s.store.setGroups([A, B, C], { active: false, studio: { studioSlides: true } }, { nameOf: (id) => (id === C ? 'Tổ Lý' : '') });
+  assert.equal(changed, 3);
+  const disk = s.disk();
+  assert.deepEqual(disk.groups[A], { name: 'Tổ Hoá', active: false, features: { kb: false, studioSlides: true } }, 'giữ kb tắt của riêng nhóm');
+  assert.deepEqual(disk.groups[B], { active: false, features: { studioSlides: true } }, 'web tắt là của thư mục — không chép vào nhóm');
+  assert.deepEqual(disk.groups[C], { name: 'Tổ Lý', active: false, features: { studioSlides: true } });
+  // Đưa về đúng nền thì mục riêng biến mất như setGroup.
+  s.store.setGroups([B, C], { active: true, studio: { studioSlides: false } });
+  assert.equal(s.disk().groups[B], undefined);
+  assert.equal(s.disk().groups[C], undefined);
+  // Nhóm thuộc danh sách cũ "chỉ chủ nhân" giữ mục chỉ có tên.
+  s.store.setGroups([C], { replyOnlyTagged: true }, { nameOf: () => 'Tổ Lý', keepOf: () => true });
+  assert.deepEqual(s.disk().groups[C], { name: 'Tổ Lý' });
+});
+
+test('parseGroupsPatch: đòi danh sách mã nhóm hợp lệ (tối đa 500, bỏ trùng) và ít nhất một thay đổi đúng kiểu', () => {
+  assert.deepEqual(parseGroupsPatch({ ids: ['200', '200', '300'], patch: { active: false, features: { web: true }, studio: {} } }),
+    { ids: ['200', '300'], patch: { active: false, features: { web: true } } });
+  for (const bad of [
+    null, { ids: [], patch: { active: true } }, { ids: ['abc'], patch: { active: true } }, { ids: [200], patch: { active: true } },
+    { ids: Array.from({ length: 501 }, (_, i) => String(1000 + i)), patch: { active: true } },
+    { ids: ['200'], patch: {} }, { ids: ['200'], patch: { active: 'có' } }, { ids: ['200'], patch: { features: { lạ: true } } },
+    { ids: ['200'], patch: { features: { web: 1 } } }, { ids: ['200'], patch: { studio: { web: true } } }, { ids: ['200'], patch: { studioQuota: 3 } },
+  ]) assert.throws(() => parseGroupsPatch(bad), InvalidPermissions, JSON.stringify(bad)?.slice(0, 60));
 });

@@ -4,7 +4,7 @@
 // hàng gập (tóm tắt cả nút xưởng), chỉ mở một người một lúc; thanh Lưu dính đáy.
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
-import { MultiPick } from './multi-pick.js';
+import { BulkBar, MultiPick, flip, stillPicked } from './multi-pick.js';
 import { html, Notice, SaveBar, Toggle, onText } from '../ui.js';
 import { fold } from '../fold.js';
 import { StudioBox, applyPolicy, effectiveStudio, lockedByPolicy } from './studio-box.js';
@@ -74,6 +74,36 @@ export function addPerson(d, uid, name = '') {
   const person = { uid: id, name: String(name || '').trim().slice(0, 80), custom: false, features: { ...d.features },
     ...(d.studio ? { studio: { ...d.studio } } : {}) };
   return { draft: { ...d, people: [...d.people, person] } };
+}
+
+/** Bỏ nhiều người khỏi bản nháp: `{ draft, removed: [{ person, index }] }` (vị trí cũ để hoàn tác). */
+export function removePeople(d, uids) {
+  const drop = new Set(uids);
+  const removed = d.people.map((person, index) => ({ person, index })).filter((x) => drop.has(x.person.uid));
+  return { draft: { ...d, people: d.people.filter((p) => !drop.has(p.uid)) }, removed };
+}
+
+/** Hoàn tác removePeople: chèn lại đúng chỗ cũ, bỏ qua người đã có lại trong danh sách. */
+export function restorePeople(d, removed) {
+  const people = [...d.people];
+  for (const { person, index } of [...removed].sort((a, b) => a.index - b.index)) {
+    if (!people.some((x) => x.uid === person.uid)) people.splice(Math.min(index, people.length), 0, person);
+  }
+  return { ...d, people };
+}
+
+/** Đặt cùng một bộ tính năng riêng (và nút xưởng, nếu có) cho nhiều người. */
+export function setPeopleFeatures(d, uids, features, studio) {
+  const pick = new Set(uids);
+  return { ...d, people: d.people.map((p) => (pick.has(p.uid)
+    ? { ...p, custom: true, features: { ...features }, ...(studio && p.studio ? { studio: { ...studio } } : {}) } : p)) };
+}
+
+/** Đưa nhiều người về theo Tính năng chung khi nhắn riêng (bỏ tính năng riêng). */
+export function resetPeople(d, uids) {
+  const pick = new Set(uids);
+  return { ...d, people: d.people.map((p) => (pick.has(p.uid)
+    ? { ...p, custom: false, features: { ...d.features }, ...(d.studio && p.studio ? { studio: { ...d.studio } } : {}) } : p)) };
 }
 
 /**
@@ -163,7 +193,7 @@ export function filterPeople(people, { q = '', customOnly = false, names = new M
 
 /** "…" + 7 số cuối của UID cho hàng gập (UID đầy đủ ở title). */
 
-function Person({ p, known, base, baseStudio, features, studioFeatures, policy, folder, open, onToggle, onChange, onRemove }) {
+function Person({ p, known, base, baseStudio, features, studioFeatures, policy, folder, open, onToggle, onChange, onRemove, picked, onPick }) {
   const id = `dm-p-${p.uid}`;
   const s = !p.custom && folder ? folderSummary(folder, features) : personSummary(p, features, studioFeatures, policy, base, baseStudio);
   // Bật/tắt "tính năng riêng" hoặc đặt lại: nút xưởng đi cùng nút tính năng.
@@ -171,6 +201,7 @@ function Person({ p, known, base, baseStudio, features, studioFeatures, policy, 
   const name = p.name || known || 'Chưa rõ tên';
   return html`<li class=${`dm-person${open ? ' open' : ''}`}>
     <div class="dm-row">
+      ${onPick ? html`<input type="checkbox" class="bulk-check" checked=${picked} aria-label=${`Chọn ${name}`} onChange=${onPick} />` : null}
       <span class="dm-who"><strong class="dm-name">${name}</strong></span>
       <span class=${`badge badge-${s.kind}`} title=${s.detail || undefined}>${s.text}</span>
       <button type="button" class="btn btn-secondary btn-sm dm-edit-btn" aria-expanded=${open ? 'true' : 'false'}
@@ -201,6 +232,26 @@ function Person({ p, known, base, baseStudio, features, studioFeatures, policy, 
   </li>`;
 }
 
+/** Một bộ nút tính năng (và xưởng) để áp cho nhiều người đã chọn. */
+function BulkFeatures({ value, features, studioFeatures, policy, count, onChange, onApply, onCancel }) {
+  return html`<div class="bulk-panel">
+    <p class="small"><strong>Tính năng riêng cho ${count} người đã chọn</strong></p>
+    <div class="perm-grid">
+      ${features.map((f) => html`<${Toggle} key=${f.key} id=${`dm-bulk-${f.key}`} checked=${value.features[f.key]} label=${f.label}
+        onChange=${(v) => onChange({ ...value, features: { ...value.features, [f.key]: v } })} />`)}
+    </div>
+    ${value.studio && studioFeatures.length ? html`<p class="small dm-studio-head">Xưởng tạo sản phẩm</p><div class="perm-grid">
+      ${studioFeatures.map((f) => html`<${Toggle} key=${f.key} id=${`dm-bulk-${f.key}`} label=${f.label}
+        checked=${lockedByPolicy(f.key, policy) ? false : value.studio[f.key]} disabled=${lockedByPolicy(f.key, policy)}
+        onChange=${(v) => onChange({ ...value, studio: { ...value.studio, [f.key]: v } })} />`)}
+    </div>` : null}
+    <div class="row">
+      <button type="button" class="btn btn-primary btn-sm" onClick=${onApply}>Áp cho ${count} người</button>
+      <button type="button" class="btn btn-ghost btn-sm" onClick=${onCancel}>Huỷ</button>
+    </div>
+  </div>`;
+}
+
 /** Lưu được khi có thay đổi, hoặc khi chưa từng lưu (đang theo cài đặt lúc cài bot — thông báo bảo bấm Lưu). */
 export const canSaveDm = (dm, dirty) => dirty || !dm.explicit;
 
@@ -218,6 +269,9 @@ export function DmEditor({ dm, folders = [], features, studioFeatures = [], stud
   const [customOnly, setCustomOnly] = useState(false);
   const [limit, setLimit] = useState(PAGE);
   const [removed, setRemoved] = useState(null);
+  // Chọn nhiều người: Set UID đã tích; `bulkFeat` = bộ nút đang soạn để áp cho người đã chọn.
+  const [picked, setPicked] = useState(() => new Set());
+  const [bulkFeat, setBulkFeat] = useState(null);
   const dirty = !sameDm(draft, dm);
   const canSave = canSaveDm(dm, dirty);
   useEffect(() => { onDirty(dirty); }, [dirty]);
@@ -248,23 +302,20 @@ export function DmEditor({ dm, folders = [], features, studioFeatures = [], stud
     if (next === draft) return;
     setAddError(''); setDraft(next); setMsg({}); setQ(''); setCustomOnly(false); setRemoved(null);
   };
-  const remove = (p) => {
-    const index = draft.people.findIndex((x) => x.uid === p.uid);
-    update({ people: draft.people.filter((x) => x.uid !== p.uid) });
-    setRemoved({ person: p, index, name: p.name || names.get(p.uid) || 'Người này' });
-    setOpenUid(null);
+  const removeMany = (uids, label) => {
+    const r = removePeople(draft, uids);
+    if (!r.removed.length) return;
+    setDraft(r.draft); setMsg({});
+    setRemoved({ items: r.removed, name: label });
+    setOpenUid(null); setPicked(new Set()); setBulkFeat(null);
   };
+  const remove = (p) => removeMany([p.uid], p.name || names.get(p.uid) || 'Người này');
   const undoRemove = () => {
     if (!removed) return;
-    setDraft((d) => {
-      if (d.people.some((x) => x.uid === removed.person.uid)) return d;
-      const people = [...d.people];
-      people.splice(Math.min(removed.index, people.length), 0, removed.person);
-      return { ...d, people };
-    });
+    setDraft((d) => restorePeople(d, removed.items));
     setRemoved(null); setMsg({});
   };
-  const reset = () => { setDraft(dmDraft(dm)); setOpenUid(null); setRemoved(null); setMsg({}); setAddError(''); };
+  const reset = () => { setDraft(dmDraft(dm)); setOpenUid(null); setRemoved(null); setMsg({}); setAddError(''); setPicked(new Set()); setBulkFeat(null); };
   const options = suggestions(known, draft, users);
 
   async function save(e) {
@@ -292,6 +343,7 @@ export function DmEditor({ dm, folders = [], features, studioFeatures = [], stud
   const inDraft = new Set(draft.people.map((p) => p.uid));
   const viaFolder = [...folderOf].filter(([uid]) => !inDraft.has(uid));
   const count = dmChangeCount(draft, dm);
+  const sel = stillPicked(picked, draft.people);
   return html`<form class="perm-form" onSubmit=${save} novalidate>
     <header class="thread-head">
       <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
@@ -348,11 +400,20 @@ export function DmEditor({ dm, folders = [], features, studioFeatures = [], stud
         <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${customOnly ? 'true' : 'false'}
           onClick=${() => { setCustomOnly(!customOnly); setLimit(PAGE); }}>Có chỉnh riêng (${customCount})</button>
       </div>` : null}
+      ${draft.people.length > 1 ? html`<${BulkBar} shown=${shown} picked=${new Set(sel)} onPick=${setPicked} filtered=${Boolean(q.trim()) || customOnly}>
+        <button type="button" class="btn btn-secondary btn-sm" onClick=${() => setBulkFeat({ features: { ...draft.features }, ...(draft.studio ? { studio: { ...draft.studio } } : {}) })}>Đặt tính năng giống nhau</button>
+        <button type="button" class="btn btn-secondary btn-sm" onClick=${() => { update(resetPeople(draft, sel)); setPicked(new Set()); setBulkFeat(null); }}>Về theo cài đặt chung</button>
+        <button type="button" class="btn btn-danger-outline btn-sm" onClick=${() => removeMany(sel, `${sel.length} người`)}>Bỏ khỏi danh sách (${sel.length})</button>
+      <//>` : null}
+      ${bulkFeat && sel.length ? html`<${BulkFeatures} value=${bulkFeat} features=${features} studioFeatures=${studioFeatures} policy=${studioPolicy} count=${sel.length}
+        onChange=${setBulkFeat} onCancel=${() => setBulkFeat(null)}
+        onApply=${() => { update(setPeopleFeatures(draft, sel, bulkFeat.features, bulkFeat.studio)); setBulkFeat(null); setPicked(new Set()); }} />` : null}
       ${draft.people.length ? html`<ul class="dm-people">
         ${visible.map((p) => html`<${Person} key=${p.uid} p=${p} known=${names.get(p.uid)} base=${draft.features} features=${features}
           baseStudio=${draft.studio} studioFeatures=${studioFeatures} policy=${studioPolicy} folder=${folderOf.get(p.uid)}
           open=${openUid === p.uid} onToggle=${() => setOpenUid(openUid === p.uid ? null : p.uid)}
-          onChange=${(patch) => setPerson(p.uid, patch)} onRemove=${() => remove(p)} />`)}
+          onChange=${(patch) => setPerson(p.uid, patch)} onRemove=${() => remove(p)}
+          picked=${picked.has(p.uid)} onPick=${draft.people.length > 1 ? () => setPicked(flip(picked, p.uid)) : null} />`)}
       </ul>
       ${shown.length > visible.length ? html`<button type="button" class="btn btn-ghost btn-sm dm-more" onClick=${() => setLimit(limit + PAGE)}>
         Xem thêm (còn ${shown.length - visible.length} người)</button>` : null}

@@ -2,6 +2,10 @@
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, fmtTime, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
+import { BulkBar, flip, stillPicked } from './multi-pick.js';
+
+/** Nghỉ giữa hai lần gọi Zalo khi xử lý hàng loạt, tránh bị Zalo chặn vì gọi dồn. */
+export const BULK_DELAY_MS = 400;
 
 export const KINDS = [
   { value: 'all', label: 'Tất cả' }, { value: 'friend', label: 'Bạn bè' },
@@ -13,10 +17,34 @@ export function contactBadges(c) {
   return [c.owner && 'Chủ nhân', c.friend && 'Bạn bè', c.lastDmAt && 'Đã nhắn riêng', c.profile && 'Có hồ sơ'].filter(Boolean);
 }
 
+/**
+ * Chạy `fn(item)` lần lượt từng mục, nghỉ `delay` ms giữa hai mục; `onProgress(i, total)` trước mỗi mục.
+ * Trả `{ done: [item], failed: [{ item, error }] }` — một mục lỗi không dừng các mục sau.
+ */
+export async function runSequential(items, fn, { delay = BULK_DELAY_MS, onProgress = () => {}, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  const done = [];
+  const failed = [];
+  for (const [i, item] of items.entries()) {
+    if (i) await sleep(delay);
+    onProgress(i + 1, items.length);
+    try { await fn(item); done.push(item); } catch (err) { failed.push({ item, error: err?.message || String(err) }); }
+  }
+  return { done, failed };
+}
+
+/** Câu tóm tắt sau khi xử lý hàng loạt: số đã xong + tên những lời mời chưa xử lý được. */
+export function bulkSummary({ done, failed }, accept) {
+  const ok = done.length ? `${accept ? 'Đã đồng ý' : 'Đã từ chối'} ${done.length} lời mời.` : '';
+  const bad = failed.length ? `${failed.length} lời mời chưa xử lý được: ${failed.map((f) => `${f.item.name || 'Chưa rõ tên'} (${f.error})`).join('; ')}` : '';
+  return { ok, error: bad };
+}
+
 function Requests({ onChanged }) {
   const [list, setList] = useState(null);
   const [msg, setMsg] = useState({});
   const [busy, setBusy] = useState('');
+  const [picked, setPicked] = useState(() => new Set());
+  const [progress, setProgress] = useState('');
   const load = () => api('/api/contacts/requests').then((r) => setList(r.requests)).catch((e) => setMsg({ error: e.message }));
   useEffect(() => { load(); }, []);
   async function answer(r, accept) {
@@ -28,14 +56,32 @@ function Requests({ onChanged }) {
       await load(); onChanged();
     } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
   }
+  async function answerMany(accept) {
+    const items = (list || []).filter((r) => picked.has(r.uid));
+    if (!items.length || (!accept && !confirm(`Từ chối ${items.length} lời mời kết bạn đã chọn?`))) return;
+    setBusy('bulk'); setMsg({});
+    const res = await runSequential(items, (r) => api(`/api/contacts/requests/${r.uid}`, { method: 'POST', body: { accept } }),
+      { onProgress: (i, n) => setProgress(`Đang xử lý ${i}/${n}…`) });
+    setProgress(''); setPicked(new Set());
+    setMsg(bulkSummary(res, accept));
+    try { await load(); if (res.done.length) onChanged(); } finally { setBusy(''); }
+  }
   if (!list && !msg.error) return null;
+  const sel = stillPicked(picked, list || []);
   return html`<section class="card">
     <h2>Lời mời kết bạn đang chờ ${list ? html`<span class="badge">${list.length}</span>` : null}</h2>
     <p class="muted small">Đồng ý thì người đó thành bạn của bot. Họ có nhắn riêng được với bot hay không vẫn theo mục Nhắn riêng ở Phân quyền Bot.</p>
     <${Live} error=${msg.error} ok=${msg.ok} />
+    ${progress ? html`<p class="small bulk-progress" aria-live="polite">${progress}</p>` : null}
     ${list && !list.length ? html`<p class="muted">Không có lời mời nào.</p>` : null}
+    ${list && list.length > 1 ? html`<${BulkBar} shown=${list} picked=${new Set(sel)} onPick=${setPicked} unit="lời mời">
+      <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== ''} onClick=${() => answerMany(true)}>Đồng ý đã chọn</button>
+      <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => answerMany(false)}>Từ chối đã chọn</button>
+    <//>` : null}
     <ul class="row-list">
       ${(list || []).map((r) => html`<li key=${r.uid} class="row-item">
+        ${list.length > 1 ? html`<input type="checkbox" class="bulk-check" checked=${picked.has(r.uid)} disabled=${busy !== ''}
+          aria-label=${`Chọn ${r.name || 'người này'}`} onChange=${() => setPicked(flip(picked, r.uid))} />` : null}
         <span class="avatar avatar-sm" aria-hidden="true">${(r.name || '?').slice(0, 1).toUpperCase()}</span>
         <span class="row-main"><strong>${r.name || 'Chưa rõ tên'}</strong>
           <small class="muted">${r.message ? `“${r.message}” · ` : ''}${r.at ? fmtTime(r.at) : ''}</small></span>

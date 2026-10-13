@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.34.0] — 2026-10-13
+
+### Thêm — chọn và sửa hàng loạt
+
+- **Phân quyền › danh sách nhóm:** nút **"Chọn nhiều"** — tích nhiều nhóm (theo bộ lọc tên/thư mục, có "Chọn tất cả"), rồi **"Chỉnh N nhóm"**: mỗi công tắc chọn Giữ nguyên / Bật / Tắt, chỉ áp phần đã đổi, phần còn lại giữ của từng nhóm.
+- **Nhắn riêng › Danh sách người:** tích nhiều người → **đặt tính năng giống nhau**, **về theo cài đặt chung**, hoặc **bỏ khỏi danh sách** (hoàn tác được).
+- **Hạn mức xưởng:** tích nhiều người → **đặt cùng số lượt** (kèm số ảnh/video AI nếu nhập) hoặc **bỏ hạn mức riêng**.
+- **Liên hệ › lời mời kết bạn:** tích chọn hoặc chọn tất cả → **Đồng ý / Từ chối đã chọn**, chạy lần lượt có báo tiến độ và báo lại lời mời nào lỗi.
+- **Chào thành viên mới:** tích nhiều nhóm → **đặt lời chào chung** (bật/tắt, nội dung, gom người, thời gian chờ) cho tất cả.
+
 ## [2.33.0] — 2026-10-13
 
 ### Thêm

@@ -6,9 +6,9 @@ import { html, Icon, Live, Notice, PageHead, SaveBar, Spinner, Toggle, onText } 
 import { fold } from '../fold.js';
 import { DmEditor, dmBadge } from './dm-permissions.js';
 import { FolderPeople } from './folder-people.js';
-import { toggleAll } from './multi-pick.js';
+import { BulkBar, flip, stillPicked, toggleAll } from './multi-pick.js';
 import { FolderChip, FolderColorPicker, FolderFilter, colorOf, inFolderFilter } from './folder-ui.js';
-import { StudioBox, applyPolicy, parseQuota, studioComplete } from './studio-box.js';
+import { StudioBox, applyPolicy, lockedByPolicy, parseQuota, studioComplete } from './studio-box.js';
 import { QuotaEditor, quotaBadge } from './studio-quota.js';
 import { CallWordsEditor } from './call-words.js';
 
@@ -17,6 +17,8 @@ export const DEFAULTS_KEY = 'defaults';
 export const DM_KEY = 'dm';
 export const QUOTA_KEY = 'studio';
 export const CALL_KEY = 'call';
+// Bảng "Chỉnh nhiều nhóm" (chế độ Chọn nhiều) — trên điện thoại mở bằng nút "Chỉnh N nhóm".
+export const BULK_KEY = 'bulk';
 // Thư mục nhóm: khoá chọn `f:<mã>` (mã nhóm Zalo luôn là số nên không trùng).
 export const FOLDER_PREFIX = 'f:';
 const pick = (s) => ({ active: s.active, replyOnlyTagged: s.replyOnlyTagged, features: { ...s.features },
@@ -184,6 +186,83 @@ export function Editor({ target, value, defaults, features, studioFeatures, stud
   </form>`;
 }
 
+/** Chọn ở bảng chỉnh nhiều nhóm: mỗi mục 'keep' (giữ nguyên), 'on' hoặc 'off'. */
+export const BULK_CHOICES = [{ value: 'keep', label: 'Giữ nguyên' }, { value: 'on', label: 'Bật' }, { value: 'off', label: 'Tắt' }];
+
+/**
+ * Thân `patch` của PUT /api/permissions/groups từ các lựa chọn `{ khoá: 'keep'|'on'|'off' }`: chỉ mục chọn Bật/Tắt;
+ * nút xưởng bị máy chủ khoá thì không gửi. Không có gì đổi → null.
+ */
+export function bulkPatch(choices, { features = [], studioFeatures = [], policy } = {}) {
+  const val = (k) => (choices[k] === 'on' ? true : choices[k] === 'off' ? false : undefined);
+  const patch = {};
+  for (const k of ['active', 'replyOnlyTagged']) if (val(k) !== undefined) patch[k] = val(k);
+  const pick = (list) => Object.fromEntries(list.filter((f) => val(f.key) !== undefined).map((f) => [f.key, val(f.key)]));
+  const f = pick(features);
+  const s = pick(studioFeatures.filter((x) => !lockedByPolicy(x.key, policy)));
+  if (Object.keys(f).length) patch.features = f;
+  if (Object.keys(s).length) patch.studio = s;
+  return Object.keys(patch).length ? patch : null;
+}
+
+/** Số mục một `patch` đổi (công tắc + từng nút). */
+export const bulkCount = (patch) => ['active', 'replyOnlyTagged'].filter((k) => k in patch).length
+  + Object.keys(patch.features || {}).length + Object.keys(patch.studio || {}).length;
+
+/** Bảng bên phải ở chế độ "Chọn nhiều": áp một thay đổi cho mọi nhóm đã chọn. */
+function BulkGroups({ picked, list, features, studioFeatures, studioPolicy, onSaved, onBack, onDirty }) {
+  const [choices, setChoices] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState({});
+  const patch = bulkPatch(choices, { features, studioFeatures, policy: studioPolicy });
+  useEffect(() => { onDirty(Boolean(patch)); }, [Boolean(patch)]);
+  useEffect(() => () => onDirty(false), []);
+  const names = list.filter((g) => picked.includes(g.id)).map((g) => g.name);
+  async function apply(e) {
+    e.preventDefault();
+    if (busy || !patch || !picked.length) return;
+    setBusy(true); setMsg({});
+    try {
+      const r = await api('/api/permissions/groups', { method: 'PUT', body: { ids: picked, patch } });
+      onSaved(r); setChoices({});
+      setMsg({ ok: `Đã áp cho ${picked.length} nhóm — bot áp dụng ngay.` });
+    } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
+  }
+  const row = (key, label, locked = false) => html`<div class="bulk-choice" key=${key}>
+    <label for=${`bulk-${key}`}>${label}</label>
+    <select id=${`bulk-${key}`} disabled=${locked} value=${locked ? 'keep' : choices[key] || 'keep'}
+      onChange=${(e) => { setChoices({ ...choices, [key]: e.currentTarget.value }); setMsg({}); }}>
+      ${BULK_CHOICES.map((c) => html`<option key=${c.value} value=${c.value}>${c.label}</option>`)}</select>
+  </div>`;
+  return html`<form class="perm-form" onSubmit=${apply} novalidate>
+    <header class="thread-head">
+      <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
+      <h2>Chỉnh ${picked.length} nhóm đã chọn</h2>
+    </header>
+    <p class="muted small perm-note">${picked.length
+      ? `${names.slice(0, 5).join(', ')}${names.length > 5 ? ` và ${names.length - 5} nhóm khác` : ''}. Chỉ mục chọn Bật/Tắt được đổi; mục "Giữ nguyên" giữ cài đặt riêng của từng nhóm.`
+      : 'Tích chọn nhóm ở danh sách bên trái.'}</p>
+    <fieldset class="perm-box">
+      <legend>Cách bot trả lời</legend>
+      <div class="perm-grid">${row('active', 'Hoạt động')}${row('replyOnlyTagged', 'Chỉ trả lời khi được tag')}</div>
+    </fieldset>
+    <fieldset class="perm-box">
+      <legend>Tính năng cho thành viên</legend>
+      <div class="perm-grid">${features.map((f) => row(f.key, f.label))}</div>
+    </fieldset>
+    ${studioFeatures.length ? html`<fieldset class="perm-box">
+      <legend>Xưởng tạo sản phẩm</legend>
+      <div class="perm-grid">${studioFeatures.map((f) => row(f.key, f.label, lockedByPolicy(f.key, studioPolicy)))}</div>
+    </fieldset>` : null}
+    <div class="save-bar">
+      <${Live} error=${msg.error} ok=${msg.ok} />
+      <span class=${`save-bar-text${patch ? '' : ' muted'}`}>${patch ? `${bulkCount(patch)} mục sẽ đổi` : 'Chưa chọn thay đổi.'}</span>
+      <button type="button" class="btn btn-secondary" disabled=${busy || !patch} onClick=${() => { setChoices({}); setMsg({}); }}>Hoàn tác</button>
+      <button class="btn btn-primary" disabled=${busy || !patch || !picked.length}>${busy ? 'Đang lưu…' : `Áp cho ${picked.length} nhóm`}</button>
+    </div>
+  </form>`;
+}
+
 /** Nhãn của thư mục ở danh sách bên trái. */
 export function folderBadge(f) {
   const n = (f.people || []).length;
@@ -279,6 +358,8 @@ export function Permissions({ me }) {
   const [selected, setSelected] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [flash, setFlash] = useState('');
+  // Chế độ "Chọn nhiều" ở danh sách nhóm: Set mã nhóm đã tích, null = tắt.
+  const [bulk, setBulk] = useState(null);
 
   // Đang có thay đổi chưa lưu: hỏi trước khi đóng/tải lại trang, hoặc đổi trang qua thanh bên / nút Lùi.
   useEffect(() => {
@@ -299,6 +380,12 @@ export function Permissions({ me }) {
   function choose(id) {
     if (id === selected || !mayLeave(dirty, (m) => window.confirm(m))) return;
     setFlash(''); setSelected(id);
+  }
+
+  function toggleBulk() {
+    if (!mayLeave(dirty, (m) => window.confirm(m))) return;
+    setFlash(''); setDirty(false);
+    if (bulk) { setBulk(null); if (selected === BULK_KEY) setSelected(null); } else { setBulk(new Set()); setSelected(null); }
   }
 
   function onSaved(r, id) {
@@ -342,6 +429,8 @@ export function Permissions({ me }) {
   const shown = list.filter((g) => (!needle || fold(g.name).includes(needle)) && inFolderFilter(folderFilter, groupFolder(g)));
   const defaultsTarget = { id: DEFAULTS_KEY, name: 'Mặc định cho nhóm mới', members: null, ...pick(perms.defaults) };
   const target = selected === DEFAULTS_KEY ? defaultsTarget : list.find((g) => g.id === selected) || null;
+  const picked = bulk ? stillPicked(bulk, list.map((g) => ({ uid: g.id }))) : [];
+  const bulkPane = Boolean(bulk) && (selected === null || selected === BULK_KEY);
   const sub = (g) => {
     if (g.members) return `${g.members} thành viên`;
     return groupsError ? 'Chưa rõ số thành viên' : 'Bot không còn thấy nhóm này';
@@ -352,7 +441,7 @@ export function Permissions({ me }) {
     ${perms.corrupt ? html`<${Notice} kind="warn">Tệp phân quyền bị hỏng nên bot đang dùng mặc định (mọi tính năng bật). Lưu lại một mục bất kỳ để ghi tệp mới.<//>` : null}
     ${groupsError ? html`<${Notice} kind="warn">Chưa lấy được danh sách nhóm: ${groupsError} Danh sách dưới đây chỉ có nhóm đã chỉnh trước đó hoặc đã có trong Phiên chat.<//>` : null}
     <${Live} ok=${flash} />
-    <div class=${`perm${target || selectedFolder || selected === DM_KEY || selected === QUOTA_KEY || selected === CALL_KEY ? ' has-sel' : ''}`}>
+    <div class=${`perm${target || selectedFolder || selected === DM_KEY || selected === QUOTA_KEY || selected === CALL_KEY || selected === BULK_KEY ? ' has-sel' : ''}`}>
       <section class="card perm-list" aria-label="Nhóm">
         <div class="chat-search">
           <label for="perm-q" class="sr-only">Lọc nhóm theo tên</label>
@@ -395,10 +484,22 @@ export function Permissions({ me }) {
               <span class="conv-preview">Cài đặt chung cho nhóm và người bên trong · bật/tắt hàng loạt</span>
             </button></li>`;
           }) : html`<li class="muted small folder-empty">Gom các nhóm cùng chủ đề vào thư mục để chỉnh và bật/tắt hàng loạt.</li>`}
-          <li class="folder-head"><span>Nhóm</span></li>
+          <li class="folder-head"><span>Nhóm</span>
+            ${list.length ? html`<button type="button" class="btn btn-ghost btn-sm" aria-pressed=${bulk ? 'true' : 'false'} onClick=${toggleBulk}>${bulk ? 'Xong' : 'Chọn nhiều'}</button>` : null}</li>
           ${folders.length ? html`<li><${FolderFilter} folders=${folders} items=${list} of=${groupFolder} value=${folderFilter} onChange=${setFolderFilter} label="Lọc nhóm theo thư mục" /></li>` : null}
+          ${bulk ? html`<li><${BulkBar} shown=${shown.map((g) => ({ uid: g.id }))} picked=${new Set(picked)} onPick=${setBulk} unit="nhóm"
+            filtered=${Boolean(needle) || folderFilter !== 'all'}>
+            <button type="button" class=${`btn btn-primary btn-sm${bulkPane ? ' only-mobile' : ''}`} disabled=${!picked.length} onClick=${() => choose(BULK_KEY)}>Chỉnh ${picked.length} nhóm</button><//></li>` : null}
           ${shown.map((g) => {
             const badge = groupBadge(g);
+            if (bulk) {
+              return html`<li key=${g.id}><label class="conv conv-pick">
+                <input type="checkbox" checked=${bulk.has(g.id)} onChange=${() => setBulk(flip(bulk, g.id))} />
+                <span class="conv-pick-body"><span class="conv-top"><span class="conv-name">${g.name}</span>
+                  ${badge ? html`<span class=${`badge badge-${badge.kind}`}>${badge.text}</span>` : null}</span>
+                <span class="conv-preview">${groupFolder(g) ? html`<${FolderChip} folder=${groupFolder(g)} /> ` : null}${sub(g)}</span></span>
+              </label></li>`;
+            }
             return html`<li key=${g.id}><button type="button" class=${`conv${selected === g.id ? ' active' : ''}`}
               aria-current=${selected === g.id ? 'true' : undefined} onClick=${() => choose(g.id)}>
               <span class="conv-top"><span class="conv-name">${g.name}</span>
@@ -410,8 +511,11 @@ export function Permissions({ me }) {
         ${list.length && !shown.length ? html`<p class="muted small">Không có nhóm nào trùng tên — xoá bớt chữ trong ô lọc.</p>` : null}
         ${!list.length && !groupsError ? html`<p class="muted small">Bot chưa ở nhóm nào — thêm bot vào nhóm Zalo rồi tải lại trang.</p>` : null}
       </section>
-      <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : selected === QUOTA_KEY ? 'Hạn mức xưởng' : selected === CALL_KEY ? 'Cách gọi bot' : selectedFolder ? 'Thư mục nhóm' : 'Quyền của nhóm'}>
-        ${selectedFolder
+      <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : selected === QUOTA_KEY ? 'Hạn mức xưởng' : selected === CALL_KEY ? 'Cách gọi bot' : selectedFolder ? 'Thư mục nhóm' : bulkPane ? 'Chỉnh nhiều nhóm' : 'Quyền của nhóm'}>
+        ${bulkPane
+          ? html`<${BulkGroups} key=${BULK_KEY} picked=${picked} list=${list} features=${perms.features} studioFeatures=${perms.studioFeatures || []}
+              studioPolicy=${perms.studioPolicy} onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => setSelected(null)} />`
+          : selectedFolder
           ? html`<${FolderEditor} key=${selected} folder=${selectedFolder} perms=${perms} list=${list} admin=${me?.role === 'admin'}
               onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} onDeleted=${() => { setDirty(false); setSelected(null); }} />`
           : selected === DM_KEY

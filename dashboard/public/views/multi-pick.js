@@ -18,6 +18,30 @@ export function toggleAll(picked, shown) {
   return next;
 }
 
+/** Tích/bỏ tích một mục: trả Set mới. */
+export function flip(picked, uid) {
+  const next = new Set(picked);
+  if (next.has(uid)) next.delete(uid); else next.add(uid);
+  return next;
+}
+
+/** Chỉ giữ các mục đã chọn còn có trong danh sách (mục vừa bị bỏ/xử lý thì thôi chọn). */
+export const stillPicked = (picked, items) => items.filter((o) => picked.has(o.uid)).map((o) => o.uid);
+
+/**
+ * Thanh chọn nhiều trên một danh sách có sẵn ô tích ở từng hàng: "Chọn tất cả (đang lọc)" / "Bỏ chọn",
+ * "Đã chọn N" và các nút hành động (`children`). `shown`: [{ uid }] đang hiện; `onPick(Set)`.
+ */
+export function BulkBar({ shown, picked, onPick, filtered = false, unit = 'người', children }) {
+  const allOn = shown.length > 0 && shown.every((o) => picked.has(o.uid));
+  return html`<div class="multi-pick-bar bulk-bar">
+    <button type="button" class="btn btn-ghost btn-sm" disabled=${!shown.length} onClick=${() => onPick(toggleAll(picked, shown))}>
+      ${allOn ? 'Bỏ chọn' : `Chọn tất cả${filtered ? ' (đang lọc)' : ''}`}</button>
+    <span class="muted small" aria-live="polite">${picked.size ? `Đã chọn ${picked.size} ${unit}` : 'Tích ô ở từng hàng để chọn nhiều'}</span>
+    ${picked.size ? children : null}
+  </div>`;
+}
+
 /**
  * Danh sách đang có (người trong thư mục…): cuộn được, lọc theo tên, tích chọn rồi bỏ hàng loạt.
  * `items`: [{ uid, name, note }] — `onRemove(uids)`.

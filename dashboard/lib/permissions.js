@@ -337,6 +337,35 @@ export function parseSettings(body) {
   return base;
 }
 
+/**
+ * Thân PUT /api/permissions/groups (chỉnh nhiều nhóm một lượt): `{ ids: [mã nhóm], patch: { active?, replyOnlyTagged?,
+ * features?: { khoá: bool }, studio?: { khoá: bool } } }`. Chỉ khoá có trong `patch` được đổi; phải có ít nhất một khoá.
+ */
+export function parseGroupsPatch(body) {
+  const ids = isObj(body) && Array.isArray(body.ids) ? body.ids : null;
+  if (!ids || !ids.length || ids.some((id) => typeof id !== 'string' || !GROUP_ID.test(id))) {
+    throw new InvalidPermissions('Danh sách nhóm không hợp lệ — tải lại trang rồi thử lại.');
+  }
+  const unique = [...new Set(ids)];
+  if (unique.length > MAX_GROUPS) throw new InvalidPermissions(`Mỗi lần chỉnh tối đa ${MAX_GROUPS} nhóm.`);
+  const p = body.patch;
+  const bad = () => new InvalidPermissions('Thay đổi không hợp lệ — tải lại trang rồi thử lại.');
+  if (!isObj(p) || Object.keys(p).some((k) => ![...SWITCHES, 'features', 'studio'].includes(k))) throw bad();
+  const patch = {};
+  for (const k of SWITCHES) {
+    if (p[k] === undefined) continue;
+    if (typeof p[k] !== 'boolean') throw bad();
+    patch[k] = p[k];
+  }
+  for (const [k, keys] of [['features', FEATURE_KEYS], ['studio', STUDIO_KEYS]]) {
+    if (p[k] === undefined) continue;
+    if (!isObj(p[k]) || Object.entries(p[k]).some(([key, v]) => !keys.includes(key) || typeof v !== 'boolean')) throw bad();
+    if (Object.keys(p[k]).length) patch[k] = { ...p[k] };
+  }
+  if (!Object.keys(patch).length) throw new InvalidPermissions('Chưa chọn thay đổi nào — chọn Bật hoặc Tắt ở ít nhất một mục.');
+  return { ids: unique, patch };
+}
+
 function parseSettings9(body) {
   if (!isObj(body)) throw new InvalidPermissions('Dữ liệu phân quyền không hợp lệ — tải lại trang rồi thử lại.');
   for (const k of SWITCHES) {
@@ -458,6 +487,23 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
     return { entry, changed };
   };
 
+  /** Ghi mục của một nhóm vào `data` (chưa ghi tệp): chỉ khoá khác nền; không còn khoá nào thì xoá mục. Trả `changed`. */
+  const putGroup = (data, groupId, settings, name, keep) => {
+    const prevName = data.groups[groupId]?.name;
+    // Nền của nhóm: thư mục chứa nó (nếu có), không thì mặc định — nhóm chỉ ghi khoá khác nền.
+    const base = baseOf(data, merge(builtin(), data.defaults), groupId);
+    const { entry, changed } = diffLayer(settings, base, data.groups[groupId] || {});
+    const cleanName = String(name || prevName || '').trim().slice(0, MAX_NAME);
+    if (Object.keys(entry).length && !data.groups[groupId] && Object.keys(data.groups).length >= MAX_GROUPS) {
+      throw new InvalidPermissions(`Đã có ${MAX_GROUPS} nhóm được chỉnh riêng, chưa thêm được nhóm nữa — đưa bớt nhóm về mặc định rồi thử lại.`);
+    }
+    if (Object.keys(entry).length) data.groups[groupId] = cleanName ? { name: cleanName, ...entry } : entry;
+    // `keep`: nhóm thuộc danh sách cũ "chỉ chủ nhân" — mục chỉ có tên vẫn là "đã phân quyền riêng" với bot.
+    else if (keep) data.groups[groupId] = { name: cleanName || 'Nhóm chưa rõ tên' };
+    else delete data.groups[groupId];
+    return changed;
+  };
+
   const folderOrThrow = (data, fid) => {
     if (!FOLDER_ID.test(String(fid)) || !data.folders?.[fid]) throw new InvalidPermissions('Không thấy thư mục này — tải lại trang rồi thử lại.');
     return data.folders[fid];
@@ -488,19 +534,28 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
     setGroup(groupId, settings, name = '', { keep = false } = {}) {
       if (!GROUP_ID.test(groupId)) throw new InvalidPermissions('Nhóm không hợp lệ — chọn lại từ danh sách.');
       const { data } = read();
-      const prevName = data.groups[groupId]?.name;
       seedReplyOnlyTagged(data);
-      // Nền của nhóm: thư mục chứa nó (nếu có), không thì mặc định — nhóm chỉ ghi khoá khác nền.
-      const base = baseOf(data, merge(builtin(), data.defaults), groupId);
-      const { entry, changed } = diffLayer(settings, base, data.groups[groupId] || {});
-      const cleanName = String(name || prevName || '').trim().slice(0, MAX_NAME);
-      if (Object.keys(entry).length && !data.groups[groupId] && Object.keys(data.groups).length >= MAX_GROUPS) {
-        throw new InvalidPermissions(`Đã có ${MAX_GROUPS} nhóm được chỉnh riêng, chưa thêm được nhóm nữa — đưa bớt nhóm về mặc định rồi thử lại.`);
+      const changed = putGroup(data, groupId, settings, name, keep);
+      write(data);
+      return { state: view({ data, exists: true, corrupt: false }), changed };
+    },
+    /**
+     * Áp một thay đổi cho nhiều nhóm (đã qua parseGroupsPatch): mỗi nhóm lấy cài đặt đang hiệu lực của chính nó,
+     * đè các khoá trong `patch`, rồi ghi như setGroup (chỉ khoá khác nền thư mục/mặc định). Một lần ghi tệp.
+     * `nameOf(id)` → tên nhóm; `keepOf(id)` → nhóm thuộc danh sách cũ "chỉ chủ nhân". Trả `{ state, changed }`
+     * (`changed` = số nhóm có chỉnh riêng sau lần lưu).
+     */
+    setGroups(ids, patch, { nameOf = () => '', keepOf = () => false } = {}) {
+      const { data } = read();
+      seedReplyOnlyTagged(data);
+      const defaults = merge(builtin(), data.defaults);
+      let changed = 0;
+      for (const id of ids) {
+        const cur = merge(baseOf(data, defaults, id), data.groups[id] || {});
+        const settings = { active: patch.active ?? cur.active, replyOnlyTagged: patch.replyOnlyTagged ?? cur.replyOnlyTagged,
+          features: { ...cur.features, ...patch.features }, studio: { ...cur.studio, ...patch.studio } };
+        if (putGroup(data, id, settings, nameOf(id), keepOf(id)).length) changed += 1;
       }
-      if (Object.keys(entry).length) data.groups[groupId] = cleanName ? { name: cleanName, ...entry } : entry;
-      // `keep`: nhóm thuộc danh sách cũ "chỉ chủ nhân" — mục chỉ có tên vẫn là "đã phân quyền riêng" với bot.
-      else if (keep) data.groups[groupId] = { name: cleanName || 'Nhóm chưa rõ tên' };
-      else delete data.groups[groupId];
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), changed };
     },

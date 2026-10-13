@@ -50,3 +50,27 @@ test('Lời chào nhóm: liệt kê nhóm của bot; bật cần nội dung; gi�
   assert.equal(JSON.parse(readFileSync(deps.welcomeFile, 'utf8')).groups['200'].message, 'Chào mừng!');
   assert.equal(deps.activity.list().find((e) => e.action === 'welcome_update').detail, 'Tổ Hoá: bật');
 });
+
+test('Lời chào nhiều nhóm: một cấu hình cho mọi nhóm đã chọn, một dòng Nhật ký; chỉ Quản trị; sai → 400, không ghi dở', async (t) => {
+  const deps = withSettings(t);
+  const { call } = await startApp(t, deps);
+  const owner = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const settings = { enabled: true, message: 'Chào mừng!', batchSize: 3, maxWaitMinutes: 10 };
+  assert.equal((await call('/api/admin/welcome', { method: 'PUT', cookie: owner, body: { ids: ['200'], settings } })).status, 403);
+  const admin = await loginAs(t, deps, call);
+  for (const body of [{ ids: [], settings }, { ids: ['abc'], settings }, { ids: [200], settings },
+    { ids: Array.from({ length: 501 }, (_, i) => String(1000 + i)), settings },
+    { ids: ['200'], settings: { ...settings, batchSize: 99 } }, { ids: ['200', '300'], settings: { ...settings, message: '  ' } }]) {
+    assert.equal((await call('/api/admin/welcome', { method: 'PUT', cookie: admin, body })).status, 400, JSON.stringify(body).slice(0, 60));
+  }
+  assert.throws(() => readFileSync(deps.welcomeFile, 'utf8'), 'chưa ghi nhóm nào');
+  const r = await call('/api/admin/welcome', { method: 'PUT', cookie: admin, body: { ids: ['200', '300', '200'], settings } });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json.groups.map((g) => [g.id, g.enabled, g.batchSize]), [['200', true, 3], ['300', true, 3]]);
+  const disk = JSON.parse(readFileSync(deps.welcomeFile, 'utf8')).groups;
+  assert.equal(disk['200'].name, 'Tổ Hoá', 'tên nhóm lấy từ kết nối Zalo');
+  assert.equal(disk['300'].message, 'Chào mừng!');
+  const logs = deps.activity.list().filter((e) => e.action === 'welcome_update');
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].detail, '2 nhóm: bật');
+});

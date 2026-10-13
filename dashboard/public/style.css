@@ -718,6 +718,7 @@ fieldset:disabled .radio-card { cursor: not-allowed; }
   .radio-cards { grid-template-columns: minmax(0, 1fr); }
   .dm-row { flex-wrap: wrap; gap: 4px 10px; }
   .dm-who { flex: 1 1 100%; }
+  .dm-row .bulk-check + .dm-who { flex-basis: calc(100% - 28px); }
   .dm-row .btn { margin-left: auto; }
   /* Vùng bấm tối thiểu 44px trên màn cảm ứng. */
   .btn, .btn-sm { min-height: 44px; }
@@ -1332,6 +1333,20 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .multi-pick-item input { width: 18px; height: 18px; flex: none; }
 .multi-pick > .btn { align-self: flex-start; }
 .multi-pick-head { margin: 10px 0 0; font-size: 14px; }
+.bulk-bar { margin: 4px 0 8px; }
+.bulk-bar > .muted { flex: 1 1 auto; }
+.bulk-check { flex: none; width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; accent-color: var(--brand); }
+.conv-pick { flex-direction: row; align-items: flex-start; gap: 10px; }
+.conv-pick > input { flex: none; width: 18px; height: 18px; min-height: 0; margin: 3px 0 0; padding: 0; accent-color: var(--brand); }
+.conv-pick-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bulk-choice { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; }
+.bulk-choice select { flex: none; width: auto; min-width: 120px; }
+.bulk-panel { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; }
+.bulk-panel .row { flex-wrap: wrap; }
+.bulk-progress { margin: 6px 0; }
+.welcome-row { display: flex; align-items: flex-start; gap: 10px; }
+.welcome-row > .bulk-check { margin-top: 16px; }
+.welcome-row > details { flex: 1; min-width: 0; }
 
 /* Tổng quan › Khách dùng bot. */
 .ov-uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }

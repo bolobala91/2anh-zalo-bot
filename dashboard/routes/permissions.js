@@ -2,7 +2,7 @@
 // Lưu là có hiệu lực ngay — plugin đọc lại permissions.json khi tệp đổi.
 import express from 'express';
 import { requireAuth } from '../lib/http-guards.js';
-import { DM_FEATURES, FEATURES, GROUP_ID, STUDIO_FEATURES, parseDm, parseSettings, parseStudio, studioPolicy } from '../lib/permissions.js';
+import { DM_FEATURES, FEATURES, GROUP_ID, STUDIO_FEATURES, parseDm, parseGroupsPatch, parseSettings, parseStudio, studioPolicy } from '../lib/permissions.js';
 import { fallbackName } from '../lib/thread-names.js';
 import { failSidecar } from '../lib/route-errors.js';
 
@@ -24,6 +24,17 @@ export function describeSettings(s) {
   const off = FEATURES.filter((f) => !s.features[f.key]).map((f) => label[f.key]);
   return [s.active ? 'Hoạt động' : 'Tạm tắt', s.replyOnlyTagged ? 'chỉ trả lời khi được tag' : 'trả lời mọi tin',
     off.length ? `tắt: ${off.join(', ')}` : 'bật mọi tính năng', ...describeStudio(s.studio, s.studioQuota)].join(' · ');
+}
+
+/** Dòng Nhật ký cho thay đổi hàng loạt: "Tạm tắt · bật: Tra cứu web · tắt: Video" — chỉ các mục đã đổi. */
+export function describePatch(p) {
+  const all = [...FEATURES, ...STUDIO_FEATURES];
+  const pick = (on) => all.filter((f) => (p.features?.[f.key] ?? p.studio?.[f.key]) === on).map((f) => f.label);
+  const on = pick(true);
+  const off = pick(false);
+  return [p.active === undefined ? '' : p.active ? 'Hoạt động' : 'Tạm tắt',
+    p.replyOnlyTagged === undefined ? '' : p.replyOnlyTagged ? 'chỉ trả lời khi được tag' : 'trả lời mọi tin',
+    on.length ? `bật: ${on.join(', ')}` : '', off.length ? `tắt: ${off.join(', ')}` : ''].filter(Boolean).join(' · ');
 }
 
 export const WHO_LABELS = { owners: 'Chỉ chủ nhân', list: 'Những người trong danh sách', everyone: 'Mọi người' };
@@ -174,6 +185,21 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity, 
       const { state, cleared } = permissions.setFolderActive(req.params.fid, req.body?.active);
       logFolder(req, `${req.body.active ? 'bật' : 'tắt'} bot cả thư mục "${folderLabel(state, req.params.fid)}"${cleared ? ` (bỏ chỉnh riêng ở ${cleared} nhóm)` : ''}`);
       res.json({ ...full(state), cleared });
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
+
+  // Chỉnh nhiều nhóm một lượt: chỉ các mục đã chọn, mục khác giữ giá trị riêng của từng nhóm. Một dòng Nhật ký.
+  r.put('/permissions/groups', requireAuth, async (req, res) => {
+    let p;
+    try { p = parseGroupsPatch(req.body); } catch (err) { return fail(res, err, SAVE_FAIL); }
+    try {
+      const names = await threadNames.load();
+      const legacy = legacyOwnerOnly();
+      const { state } = permissions.setGroups(p.ids, p.patch, { nameOf: (id) => names.get(id) || '', keepOf: (id) => legacy.includes(id) });
+      try {
+        activity.append({ actor: req.user.username, action: 'permissions_group', detail: `${p.ids.length} nhóm: ${describePatch(p.patch)}` });
+      } catch (err) { console.error('[dashboard] không ghi được Nhật ký phân quyền:', err); }
+      res.json(full(state));
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
 

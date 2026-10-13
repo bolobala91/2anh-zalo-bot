@@ -5,6 +5,16 @@ import { requireAuth, requireRole } from '../lib/http-guards.js';
 import { readWelcomeConfig, updateWelcomeGroup } from '../../zalo-welcome.js';
 import { GROUP_ID } from '../lib/permissions.js';
 
+const MAX_WELCOME_GROUPS = 500;
+const WELCOME_BAD = 'Lời chào ≤ 1500 ký tự, gom 1–20 người, chờ 1–1440 phút — sửa lại rồi lưu.';
+
+/** Cấu hình lời chào gửi lên có đúng kiểu và trong giới hạn không (dùng chung cho một nhóm và nhiều nhóm). */
+export function validWelcome(b) {
+  return Boolean(b) && typeof b.enabled === 'boolean' && typeof b.message === 'string' && b.message.length <= 1500
+    && Number.isInteger(b.batchSize) && b.batchSize >= 1 && b.batchSize <= 20
+    && Number.isInteger(b.maxWaitMinutes) && b.maxWaitMinutes >= 1 && b.maxWaitMinutes <= 1440;
+}
+
 const show = (v) => (Array.isArray(v) ? (v.join(', ') || 'trống') : typeof v === 'boolean' ? (v ? 'bật' : 'tắt') : String(v));
 
 export function settingsRoutes({ settings, restartFlags, activity, welcomeFile, sidecar, replyStyle }) {
@@ -59,14 +69,34 @@ export function settingsRoutes({ settings, restartFlags, activity, welcomeFile, 
         batchSize: conf[id]?.batchSize ?? 5, maxWaitMinutes: conf[id]?.maxWaitMinutes ?? 15 })) });
     } catch (err) { fail(res, err, 'Chưa đọc được lời chào.'); }
   });
+  // Một cấu hình lời chào cho nhiều nhóm: `{ ids: [mã nhóm], settings: { enabled, message, batchSize, maxWaitMinutes } }`.
+  r.put('/admin/welcome', ...guard, async (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
+    if (!ids || !ids.length || ids.length > MAX_WELCOME_GROUPS || ids.some((id) => typeof id !== 'string' || !GROUP_ID.test(id))) {
+      return res.status(400).json({ ok: false, error: 'Danh sách nhóm không hợp lệ — chọn lại.' });
+    }
+    const b = req.body.settings || {};
+    if (!validWelcome(b)) return res.status(400).json({ ok: false, error: WELCOME_BAD });
+    // Kiểm trước khi ghi nhóm nào, để không lưu dở dang.
+    if (b.enabled && !b.message.trim()) return res.status(400).json({ ok: false, error: 'Cần nội dung lời chào trước khi bật.' });
+    let known = [];
+    try { known = await sidecar.groups(); } catch { /* tên nhóm đã lưu (nếu có) được giữ */ }
+    const nameOf = (id) => (Array.isArray(known) ? known : []).find((g) => String(g.id) === id)?.name;
+    try {
+      const groups = [...new Set(ids)].map((id) => {
+        const name = nameOf(id);
+        return { id, ...updateWelcomeGroup(id, { enabled: b.enabled, message: b.message, batchSize: b.batchSize, maxWaitMinutes: b.maxWaitMinutes,
+          ...(name ? { name: String(name).slice(0, 200) } : {}) }, welcomeFile) };
+      });
+      log(req, 'welcome_update', `${groups.length} nhóm: ${b.enabled ? 'bật' : 'tắt'}`);
+      res.json({ ok: true, groups });
+    } catch (err) { fail(res, err, 'Chưa lưu được lời chào.'); }
+  });
   r.put('/admin/welcome/:groupId', ...guard, (req, res) => {
     const { groupId } = req.params;
     if (!GROUP_ID.test(groupId)) return res.status(400).json({ ok: false, error: 'Nhóm không hợp lệ — chọn lại.' });
     const b = req.body || {};
-    if (typeof b.enabled !== 'boolean' || typeof b.message !== 'string' || b.message.length > 1500
-      || !Number.isInteger(b.batchSize) || b.batchSize < 1 || b.batchSize > 20 || !Number.isInteger(b.maxWaitMinutes) || b.maxWaitMinutes < 1 || b.maxWaitMinutes > 1440) {
-      return res.status(400).json({ ok: false, error: 'Lời chào ≤ 1500 ký tự, gom 1–20 người, chờ 1–1440 phút — sửa lại rồi lưu.' });
-    }
+    if (!validWelcome(b)) return res.status(400).json({ ok: false, error: WELCOME_BAD });
     try {
       const g = updateWelcomeGroup(groupId, { enabled: b.enabled, message: b.message, name: String(b.name || '').slice(0, 200), batchSize: b.batchSize, maxWaitMinutes: b.maxWaitMinutes }, welcomeFile);
       log(req, 'welcome_update', `${b.name || groupId}: ${g.enabled ? 'bật' : 'tắt'}`);

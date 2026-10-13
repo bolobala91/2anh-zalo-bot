@@ -216,3 +216,26 @@ test('xưởng: phản hồi phân quyền mang chính sách máy chủ (Windows
   writeFileSync(file, JSON.stringify({ version: 1, videoBlocked: true, note: 'Máy chủ chưa dùng được hộp cát systemd — video tắt', sandbox: 'plain' }));
   assert.deepEqual(await policy(), { videoBlocked: true, note: 'Máy chủ chưa dùng được hộp cát systemd — video tắt' });
 });
+
+test('PUT /api/permissions/groups: áp một thay đổi cho nhiều nhóm, một dòng Nhật ký; sai → 400; chưa đăng nhập → 401', async (t) => {
+  const G2 = '2054797107487294811';
+  const { call, owner, disk, deps } = await ready(t, { sidecar: fakeSidecar({ groups: async () => [{ id: G, name: 'Tổ Hoá', members: 12 }] }) });
+  const patch = { ids: [G, G2], patch: { replyOnlyTagged: false, features: { web: false } } };
+  assert.equal((await call('/api/permissions/groups', { method: 'PUT', body: patch })).status, 401);
+  await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: owner, body: body({}, { kb: false }) });
+  const res = await call('/api/permissions/groups', { method: 'PUT', cookie: owner, body: patch });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json.features.map((f) => f.key), FEATURE_KEYS, 'cùng dạng trả về với route một nhóm');
+  assert.deepEqual(disk().groups[G], { name: 'Tổ Hoá', replyOnlyTagged: false, features: { kb: false, web: false } });
+  assert.deepEqual(disk().groups[G2], { replyOnlyTagged: false, features: { web: false } });
+  const log = deps.activity.list();
+  assert.equal(log[0].action, 'permissions_group');
+  assert.equal(log[0].detail, '2 nhóm: trả lời mọi tin · tắt: Tra cứu web');
+  const before = JSON.stringify(disk());
+  for (const bad of [{ ids: ['abc'], patch: { active: true } }, { ids: [G], patch: {} }, { ids: [G], patch: { features: { web: 'x' } } }]) {
+    const r = await call('/api/permissions/groups', { method: 'PUT', cookie: owner, body: bad });
+    assert.equal(r.status, 400);
+    assert.match(r.json.error, /—/);
+  }
+  assert.equal(JSON.stringify(disk()), before);
+});
