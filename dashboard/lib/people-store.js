@@ -11,6 +11,8 @@ import { writeFileAtomic } from './json-store.js';
 import { ZALO_UID } from './users.js';
 
 export const LIMITS = { name: 80, note: 400, fields: 12, key: 40, value: 120 };
+/** Trần số hồ sơ mỗi lần xoá hàng loạt. */
+export const MAX_BULK = 500;
 /**
  * Nơi bot được dùng một mục chủ bot sửa trên dashboard: `all` = mọi nhóm và tin nhắn riêng (nơi dùng `"*"`),
  * `dm` = chỉ khi chính người đó nhắn riêng, `keep` = như cũ (nơi bot đã nghe — chỉ khi mục không đổi nội dung).
@@ -138,6 +140,27 @@ export function createPeopleStore({ file, now = Date.now }) {
       delete data[uid];
       save(data, stamp);
       return true;
+    },
+    /**
+     * Xoá nhiều hồ sơ `[{ uid, updatedAt }]` trong MỘT lần ghi. Kiểm hết trước: UID sai → 400, hồ sơ không còn → 404,
+     * bot vừa sửa (mốc khác) → 409 — có lỗi thì không xoá ai. `updatedAt` không gửi = không kiểm, như xoá một người.
+     */
+    removeMany(items) {
+      if (!Array.isArray(items) || !items.length) throw err(400, 'Chưa chọn ai.');
+      if (items.length > MAX_BULK) throw err(400, `Tối đa ${MAX_BULK} người mỗi lần.`);
+      const { data, stamp } = load();
+      const uids = new Set();
+      for (const it of items) {
+        const uid = String(it?.uid ?? '');
+        if (!ZALO_UID.test(uid)) throw err(400, 'UID Zalo không hợp lệ — chọn lại người trong danh sách.');
+        if (!Object.hasOwn(data, uid)) throw err(404, 'Có hồ sơ không còn — tải lại trang.');
+        const seen = it && Object.hasOwn(it, 'updatedAt') ? (it.updatedAt === null || Number.isFinite(it.updatedAt) ? it.updatedAt : NaN) : undefined;
+        checkSeen(data, uid, seen);
+        uids.add(uid);
+      }
+      for (const uid of uids) delete data[uid];
+      save(data, stamp);
+      return uids.size;
     },
   };
 }

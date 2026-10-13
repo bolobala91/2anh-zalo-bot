@@ -76,3 +76,26 @@ test('Skill tải lên: chỉ .zip/.md, ghi tệp tạm cho Hermes đọc rồi 
   assert.equal(existsSync(seen.path), false, 'tệp tạm đã xoá');
   assert.deepEqual(deps.restartFlags.get().assistant.reasons, ['Skill: my-skill']);
 });
+
+test('Skill: bật/tắt nhiều skill — chỉ Quản trị, kiểm tên trước, chạy lần lượt, báo skill lỗi, một dòng Nhật ký', async (t) => {
+  const deps = makeDeps(t);
+  deps.hermesAdmin = fakeAdmin({
+    'skills.toggle': (a) => { if (a.name === 'loi') throw Object.assign(new Error('Skill này là lõi của Hermes, không tắt được.'), { statusCode: 400 }); return { name: a.name, enabled: a.enabled }; },
+  });
+  const { call } = await startApp(t, deps);
+  const owner = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const url = '/api/admin/skills/toggle-many';
+  assert.equal((await call(url, { method: 'PUT', cookie: owner, body: { names: ['a'], enabled: false } })).status, 403);
+  const admin = await loginAs(t, deps, call);
+  for (const body of [{ names: ['a'], enabled: 'no' }, { names: [], enabled: false }, { names: ['a', '../x'], enabled: false },
+    { names: Array.from({ length: 51 }, (_, i) => `s${i}`), enabled: false }]) {
+    assert.equal((await call(url, { method: 'PUT', cookie: admin, body })).status, 400);
+  }
+  assert.equal(deps.hermesAdmin.calls.length, 0, 'từ chối trước khi gọi Hermes');
+  const r = await call(url, { method: 'PUT', cookie: admin, body: { names: ['bao-cao', 'loi', 'bao-cao', 'pdf'], enabled: false } });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json.done, ['bao-cao', 'pdf']);
+  assert.deepEqual(r.json.failed, [{ name: 'loi', error: 'Skill này là lõi của Hermes, không tắt được.' }]);
+  assert.deepEqual(deps.hermesAdmin.calls.map((c) => [c.kind, c.args.name, c.args.everywhere]), [['write', 'bao-cao', false], ['write', 'loi', false], ['write', 'pdf', false]]);
+  assert.deepEqual(deps.activity.list().filter((e) => e.action.startsWith('skill_')).map((e) => [e.action, e.detail]), [['skill_disable', '2 skill: bao-cao, pdf']]);
+});

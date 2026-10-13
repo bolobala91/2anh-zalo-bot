@@ -22,6 +22,9 @@ export function testText(t) {
   return t.tools.length === on ? `Kết nối được — ${on} công cụ.` : `Kết nối được — dùng ${on}/${t.tools.length} công cụ.`;
 }
 
+/** Kết nối đang tắt bớt công cụ (exclude) hoặc chỉ dùng một số (include) → có nút "Bật hết công cụ". */
+export const someToolsOff = (s) => Boolean(s.toolsOff) || (s.toolsOnly !== null && s.toolsOnly !== undefined);
+
 const restartNote = 'Khởi động lại trợ lý để áp dụng.';
 
 /** Chọn công cụ của một kết nối: kiểm tra thật rồi bật/tắt từng công cụ. */
@@ -170,6 +173,11 @@ export function Mcp() {
     setTests((t) => ({ ...t, [s.name]: 'busy' }));
     try { const r = await api(`/api/admin/mcp/${encodeURIComponent(s.name)}/test`, { method: 'POST' }); setTests((t) => ({ ...t, [s.name]: r })); } catch (e) { setTests((t) => ({ ...t, [s.name]: { connected: false, error: e.message, tools: [] } })); }
   }
+  async function allToolsOn(s) {
+    if (!confirm(`Bật hết công cụ của ${s.name}? Cần khởi động lại trợ lý để áp dụng.`)) return;
+    setBusy(s.name); setMsg({});
+    try { await api(`/api/admin/mcp/${encodeURIComponent(s.name)}/tools`, { method: 'PUT', body: { disabled: [] } }); done(`Đã bật hết công cụ của ${s.name}. ${restartNote}`); } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
+  }
   async function remove(s) {
     if (!confirm(`Gỡ hẳn kết nối ${s.name}? Trợ lý sẽ mất các công cụ của nó.`)) return;
     setBusy(s.name); setMsg({});
@@ -192,6 +200,7 @@ export function Mcp() {
         <span class="key-actions">
           ${data.manage ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== '' || tests[s.name] === 'busy'} onClick=${() => test(s)}>Kiểm tra</button>
             <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => setDialog({ kind: 'tools', server: s })}>Công cụ</button>
+            ${someToolsOff(s) ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => allToolsOn(s)}>Bật hết công cụ</button>` : null}
             ${s.auth === 'oauth' ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => setDialog({ kind: 'login', server: s })}>Đăng nhập</button>` : null}` : null}
           <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => toggle(s)}>${s.enabled ? 'Tắt' : 'Bật'}</button>
           ${data.manage ? html`<button type="button" class="btn btn-ghost btn-sm" aria-label=${`Gỡ kết nối ${s.name}`} disabled=${busy !== ''} onClick=${() => remove(s)}><${Icon} name="close" size=${14} /></button>` : null}

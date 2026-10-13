@@ -15,6 +15,8 @@ import { writeFileAtomic } from './json-store.js';
 const chars = (s) => [...s].length;
 
 export const DELIMITER = '\n§\n';
+/** Trần số mục mỗi lần xoá/gắn thẻ hàng loạt. */
+export const MAX_BULK = 500;
 export const TARGETS = {
   memory: { file: 'MEMORY.md', key: 'memory_char_limit', fallback: 2200, label: 'Ghi chú của trợ lý' },
   user: { file: 'USER.md', key: 'user_char_limit', fallback: 1375, label: 'Hồ sơ chủ nhân' },
@@ -64,6 +66,18 @@ export function createHermesMemory({ hermesHome, configFile }) {
       throw err(409, 'Mục này đã đổi hoặc không còn — tải lại trang rồi thử lại.');
     }
   }
+  /** Kiểm từng mục đã chọn còn đúng như người dùng thấy, không trùng; trả Set chỉ số. */
+  function checkPicks(entries, picks) {
+    if (!Array.isArray(picks) || !picks.length) throw err(400, 'Chưa chọn mục nào.');
+    if (picks.length > MAX_BULK) throw err(400, `Tối đa ${MAX_BULK} mục mỗi lần.`);
+    const idx = new Set();
+    for (const p of picks) {
+      checkEntry(entries, p?.index, p?.old);
+      if (idx.has(p.index)) throw err(400, 'Danh sách chọn bị trùng — tải lại trang.');
+      idx.add(p.index);
+    }
+    return idx;
+  }
   return {
     view() {
       return Object.fromEntries(Object.entries(TARGETS).map(([target, t]) => {
@@ -104,6 +118,22 @@ export function createHermesMemory({ hermesHome, configFile }) {
       checkEntry(entries, index, old);
       entries.splice(index, 1);
       save(target, file, stamp, entries, { allowOver: true });
+    },
+    /** Xoá nhiều mục `[{ index, old }]` trong MỘT lần đọc–ghi; một mục lệch → 409, không xoá gì. */
+    removeMany(target, picks) {
+      const { file, stamp, entries } = load(target);
+      const drop = checkPicks(entries, picks);
+      save(target, file, stamp, entries.filter((_, i) => !drop.has(i)), { allowOver: true });
+      return drop.size;
+    },
+    /** Sửa nhiều mục bằng `edit(old) → mới` trong MỘT lần ghi (gắn cùng một thẻ…); một mục lệch → 409. */
+    editMany(target, picks, edit) {
+      const { file, stamp, entries } = load(target);
+      const idx = checkPicks(entries, picks);
+      const next = entries.map((e, i) => (idx.has(i) ? String(edit(e) ?? '').replace(/\r\n/g, '\n').trim() : e));
+      if (next.some((e, i) => idx.has(i) && (!e || e.includes(DELIMITER) || /^§$/m.test(e)))) throw err(400, 'Nội dung không được có dòng chỉ gồm dấu §.');
+      save(target, file, stamp, next);
+      return idx.size;
     },
   };
 }

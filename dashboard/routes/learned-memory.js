@@ -55,6 +55,14 @@ export function learnedMemoryRoutes({ learnedMemory, activity }) {
       res.json({ ok: true });
     } catch (err) { fail(res, err); }
   });
+  /** Xoá nhiều mục: `{ uris: [...] }` → `{ done, failed }`; một dòng Nhật ký. */
+  r.post(`${base}/:scope/bulk-delete`, ...anyRole, async (req, res) => {
+    try {
+      const out = await lm(req).removeMany(scope(req), req.body?.uris);
+      if (out.done.length) log(req, 'learned_memory_delete', `${scope(req)}: ${out.done.length} mục`);
+      res.json({ ok: true, ...out });
+    } catch (err) { fail(res, err); }
+  });
   r.post(`${base}/:scope/extract`, ...adminOnly, async (req, res) => {
     try {
       const out = await lm(req).extractNow(scope(req));

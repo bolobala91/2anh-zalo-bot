@@ -72,3 +72,24 @@ test('xoá luôn được dù tệp đã vượt trần; sửa vẫn bị chặn
   assert.equal(e.view().user.used, 10);
   assert.throws(() => e.replace('user', 0, '😀'.repeat(10), '😀'.repeat(11)), (err) => err.statusCode === 400);
 });
+
+test('xoá nhiều mục trong một lần ghi (chỉ số không lệch nhau); một mục đã đổi/trùng → không xoá gì', (t) => {
+  const { h, mem } = home(t, { memory: 'a\n§\nb\n§\nc\n§\nd' });
+  const file = join(h, 'memories', 'MEMORY.md');
+  assert.throws(() => mem.removeMany('memory', [{ index: 0, old: 'a' }, { index: 2, old: 'sai' }]), (e) => e.statusCode === 409);
+  assert.throws(() => mem.removeMany('memory', [{ index: 0, old: 'a' }, { index: 0, old: 'a' }]), (e) => e.statusCode === 400);
+  assert.throws(() => mem.removeMany('memory', []), (e) => e.statusCode === 400);
+  assert.equal(readFileSync(file, 'utf8'), 'a\n§\nb\n§\nc\n§\nd');
+  assert.equal(mem.removeMany('memory', [{ index: 3, old: 'd' }, { index: 0, old: 'a' }, { index: 2, old: 'c' }]), 3);
+  assert.equal(readFileSync(file, 'utf8'), 'b');
+});
+
+test('sửa nhiều mục một lần (gắn thẻ); vượt trần → 400, không ghi', (t) => {
+  const { h, mem } = home(t, { user: 'a\n§\nb\n§\nc', config: 'memory:\n  user_char_limit: 30\n' });
+  const file = join(h, 'memories', 'USER.md');
+  assert.equal(mem.editMany('user', [{ index: 0, old: 'a' }, { index: 2, old: 'c' }], (e) => `[X] ${e}`), 2);
+  assert.equal(readFileSync(file, 'utf8'), '[X] a\n§\nb\n§\n[X] c');
+  assert.throws(() => mem.editMany('user', [{ index: 1, old: 'b' }], () => 'y'.repeat(40)), (e) => e.statusCode === 400);
+  assert.throws(() => mem.editMany('user', [{ index: 1, old: 'b' }], () => 'x\n§\ny'), (e) => e.statusCode === 400);
+  assert.equal(readFileSync(file, 'utf8'), '[X] a\n§\nb\n§\n[X] c');
+});

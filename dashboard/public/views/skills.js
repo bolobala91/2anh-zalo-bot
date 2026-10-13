@@ -6,6 +6,7 @@ import { api, sendFile } from '../api.js';
 import { html, Dialog, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
 import { fold } from '../fold.js';
 import { RestartBanner } from './restart-banner.js';
+import { BulkBar, bulkMessage, flip, stillPicked } from './multi-pick.js';
 
 export const ORIGIN = { bundled: 'Có sẵn', local: 'Tự tạo', hub: 'Từ kho', upload: 'Tải lên' };
 export const TRUST = { builtin: 'Chính thức', trusted: 'Tin cậy', community: 'Cộng đồng' };
@@ -14,6 +15,11 @@ const SEVERITY = { critical: 'nghiêm trọng', high: 'cao', medium: 'vừa', lo
 
 /** Lọc skill theo chữ gõ (không dấu) trên tên, mô tả, nhóm. */
 export const matchSkill = (s, q) => !q || fold(`${s.name} ${s.description} ${s.category || ''}`).includes(q);
+
+/** Skill đã chọn cần đổi sang `enabled` (bỏ skill đã đúng trạng thái và skill lõi luôn bật). */
+export function skillsToToggle(list, picked, enabled) {
+  return list.filter((s) => picked.includes(s.name) && !s.essential && s.enabled !== enabled);
+}
 
 /** Câu kết luận quét an toàn cho người không rành kỹ thuật. */
 export function scanText(scan) {
@@ -92,6 +98,7 @@ function Installed({ onChanged }) {
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState({});
   const [view, setView] = useState('');
+  const [picked, setPicked] = useState(() => new Set());
   const load = () => api('/api/admin/skills').then((r) => setList(r.skills)).catch((e) => setMsg({ error: e.message }));
   useEffect(() => { load(); }, []);
   async function toggle(s, enabled) {
@@ -101,6 +108,20 @@ function Installed({ onChanged }) {
     try { await api('/api/admin/skills/toggle', { method: 'PUT', body: { name: s.name, enabled, everywhere } }); setList((l) => l.map((x) => (x.name === s.name ? { ...x, enabled, offEverywhere: enabled ? false : x.offEverywhere } : x)));
       setMsg({ ok: `${enabled ? 'Đã bật' : 'Đã tắt'} ${s.name} — áp dụng từ cuộc trò chuyện mới.` }); } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
   }
+  async function toggleMany(enabled) {
+    const items = skillsToToggle(list || [], sel, enabled);
+    if (!items.length) { setMsg({ ok: `Các skill đã chọn đều đang ${enabled ? 'bật' : 'tắt'}.` }); return; }
+    const everywhere = enabled && items.some((s) => s.offEverywhere);
+    if (everywhere && !confirm('Có skill đang tắt cho mọi nơi (cả dòng lệnh, Telegram). Bật lại ở mọi nơi?')) return;
+    setBusy('bulk'); setMsg({});
+    try {
+      const r = await api('/api/admin/skills/toggle-many', { method: 'PUT', body: { names: items.map((s) => s.name), enabled, everywhere } });
+      setPicked(new Set());
+      const m = bulkMessage(r, { verb: enabled ? 'Đã bật' : 'Đã tắt', unit: 'skill', name: (f) => f.name });
+      setMsg({ ...m, ok: m.ok && `${m.ok.slice(0, -1)} — áp dụng từ cuộc trò chuyện mới.` });
+      await load();
+    } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
+  }
   async function remove(s) {
     if (!confirm(`Gỡ hẳn skill ${s.name}? Muốn dùng lại phải cài lại.`)) return;
     setBusy(s.name); setMsg({});
@@ -109,6 +130,8 @@ function Installed({ onChanged }) {
   const n = fold(q).trim();
   const shown = (list || []).filter((s) => matchSkill(s, n));
   const on = (list || []).filter((s) => s.enabled).length;
+  const pickable = shown.filter((s) => !s.essential).map((s) => ({ uid: s.name }));
+  const sel = stillPicked(picked, (list || []).map((s) => ({ uid: s.name })));
   return html`<div class="stack">
     <div class="toolbar"><label class="sr-only" for="skill-q">Tìm skill</label>
       <input id="skill-q" type="search" placeholder="Tìm theo tên hoặc mô tả…" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
@@ -116,7 +139,12 @@ function Installed({ onChanged }) {
     <${Live} error=${msg.error} ok=${msg.ok} />
     ${!list && !msg.error ? html`<${Spinner} />` : null}
     ${list && !shown.length ? html`<p class="muted">Không có skill nào khớp.</p>` : null}
+    ${pickable.length > 1 ? html`<${BulkBar} shown=${pickable} picked=${new Set(sel)} onPick=${setPicked} filtered=${Boolean(n)} unit="skill">
+      <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => toggleMany(true)}>Bật ${sel.length} skill</button>
+      <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => toggleMany(false)}>Tắt ${sel.length} skill</button><//>` : null}
     <ul class="row-list">${shown.map((s) => html`<li key=${s.name} class="row-item">
+      ${pickable.length > 1 ? html`<input type="checkbox" class="bulk-check" checked=${picked.has(s.name)} disabled=${busy !== '' || s.essential}
+        aria-label=${`Chọn ${s.name}`} onChange=${() => setPicked(flip(picked, s.name))} />` : null}
       <span class="row-main"><strong>${s.name}</strong><small class="clamp-2">${s.description}</small>
         <small class="muted">${ORIGIN[s.origin] || s.origin}${s.category ? ` · ${s.category}` : ''}${s.usage ? ` · đã dùng ${s.usage} lần` : ''}${s.essential ? ' · lõi Hermes, luôn bật' : ''}${s.offEverywhere ? ' · đang tắt cho mọi nơi' : ''}</small></span>
       <label class="check"><input type="checkbox" checked=${s.enabled} disabled=${busy !== '' || s.essential} onChange=${(e) => toggle(s, e.currentTarget.checked)} />Bật</label>

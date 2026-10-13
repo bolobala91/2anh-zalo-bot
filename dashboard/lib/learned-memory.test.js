@@ -189,3 +189,20 @@ test('tóm tắt thư mục chưa sinh (lộ ID nhóm) không hiện ra giao di�
   assert.equal(cleanAbstract('Sở thích: cầu lông'), 'Sở thích: cầu lông');
   assert.equal(cleanAbstract(undefined), '');
 });
+
+test('xoá nhiều mục: kiểm quyền + mọi URI trước khi gọi mạng; bỏ trùng; một mục lỗi không dừng mục sau', async () => {
+  const a = `viking://user/${G}/memories/preferences/mem_1.md`;
+  const b = `viking://user/${G}/memories/events/mem_2.md`;
+  const ov = fakeOv();
+  const failing = { ...ov, fetchImpl: async (url, opts) => (new URL(url).searchParams.get('uri') === b ? { ok: false, json: async () => ({ status: 'error' }) } : ov.fetchImpl(url, opts)) };
+  const lm = make(failing).as('admin');
+  await assert.rejects(lm.removeMany(G, [a, `viking://user/${U}/memories/x.md`]), (e) => e.statusCode === 400);
+  await assert.rejects(lm.removeMany(G, []), (e) => e.statusCode === 400);
+  await assert.rejects(lm.removeMany(G, Array(201).fill(a)), (e) => e.statusCode === 400);
+  await assert.rejects(make(ov).as('owner').removeMany(O, [`viking://user/${O}/memories/a.md`]), (e) => e.statusCode === 404);
+  assert.equal(ov.calls.length, 0, 'từ chối trước khi gọi mạng');
+  const out = await lm.removeMany(G, [a, a, b]);
+  assert.deepEqual(out.done, [a]);
+  assert.deepEqual(out.failed.map((f) => f.uri), [b]);
+  assert.deepEqual(ov.calls.map((c) => [c.method, c.query]), [['DELETE', { uri: a, recursive: 'false' }]]);
+});

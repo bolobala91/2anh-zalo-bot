@@ -15,6 +15,22 @@ export function groupTools(tools) {
 /** Số khác biệt giữa bản nháp và đã lưu (tập tên công cụ tắt). */
 export const offDiff = (draft, saved) => [...draft].filter((n) => !saved.has(n)).length + [...saved].filter((n) => !draft.has(n)).length;
 
+/** Bật (`on`) / tắt hàng loạt cho người ngoài: chỉ công cụ công khai trong `tools`; trả Set nháp mới. */
+export function setOffMany(draft, tools, on) {
+  const next = new Set(draft);
+  for (const t of tools) { if (t.toolset !== 'zalo_public') continue; if (on) next.delete(t.name); else next.add(t.name); }
+  return next;
+}
+
+/** Nút "Bật tất cả / Tắt tất cả" cho một nhóm công cụ (chỉ hiện khi có công cụ công khai). */
+function AllSwitch({ tools, draft, setDraft, suffix = '' }) {
+  const pub = tools.filter((t) => t.toolset === 'zalo_public');
+  if (!pub.length) return null;
+  return html`<span class="toolbar-actions">
+    <button type="button" class="btn btn-ghost btn-sm" disabled=${pub.every((t) => !draft.has(t.name))} onClick=${() => setDraft(setOffMany(draft, pub, true))}>Bật tất cả${suffix}</button>
+    <button type="button" class="btn btn-ghost btn-sm" disabled=${pub.every((t) => draft.has(t.name))} onClick=${() => setDraft(setOffMany(draft, pub, false))}>Tắt tất cả${suffix}</button></span>`;
+}
+
 export function Tools() {
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState(new Set());
@@ -29,6 +45,7 @@ export function Tools() {
   const saved = new Set(data.tools.filter((t) => t.off).map((t) => t.name));
   const count = offDiff(draft, saved);
   const n = fold(q).trim();
+  const shown = data.tools.filter((t) => !n || fold(`${t.name} ${t.description}`).includes(n));
   const toggle = (name, on) => { const d = new Set(draft); if (on) d.delete(name); else d.add(name); setDraft(d); };
   async function save(e) {
     e.preventDefault(); setBusy(true); setMsg({});
@@ -40,8 +57,11 @@ export function Tools() {
         <input id="tool-q" type="search" placeholder="Tìm theo tên hoặc mô tả…" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
         <small class="muted">Danh sách cập nhật lúc ${fmtTime(data.generatedAt)}</small></div>
       ${data.publicMcp.length ? html`<${Notice} kind="info">Công cụ MCP mở cho thành viên (ZALO_PUBLIC_MCP): ${data.publicMcp.join(', ')}. Đổi ở trang Cấu hình của người cài đặt.<//>` : null}
-      ${groupTools(data.tools.filter((t) => !n || fold(`${t.name} ${t.description}`).includes(n))).map((g) => html`<div key=${g.level} class="mem-block">
-        <h3>${g.level} <small class="muted">${g.list.length}</small></h3>
+      ${n ? html`<div class="toolbar"><span class="muted small">${shown.length} công cụ khớp</span>
+        <${AllSwitch} tools=${shown} draft=${draft} setDraft=${setDraft} suffix=" (đang lọc)" /></div>` : null}
+      ${groupTools(shown).map((g) => html`<div key=${g.level} class="mem-block">
+        <div class="toolbar"><h3>${g.level} <small class="muted">${g.list.length}</small></h3>
+          <${AllSwitch} tools=${g.list} draft=${draft} setDraft=${setDraft} /></div>
         <ul class="row-list">${g.list.map((t) => html`<li key=${t.name} class="row-item">
           <span class="row-main"><strong class="mono">${t.name}</strong><small>${t.description}</small>
             <small class="muted">${t.switch ? `Nút: ${t.switch}` : 'Không có nút ở Phân quyền Bot'}${t.confirm ? ' · cần mã xác nhận' : ''}${t.dmOnly ? ' · chỉ trong tin nhắn riêng' : ''}${t.registered ? '' : ' · đang tắt ở cài đặt (ZALO_FRIEND_TOOLS)'}</small></span>

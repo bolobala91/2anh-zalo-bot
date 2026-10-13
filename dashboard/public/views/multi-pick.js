@@ -29,6 +29,16 @@ export function flip(picked, uid) {
 export const stillPicked = (picked, items) => items.filter((o) => picked.has(o.uid)).map((o) => o.uid);
 
 /**
+ * Câu báo sau một lệnh hàng loạt máy chủ trả `{ done: [...], failed: [{ ..., error }] }`:
+ * `{ ok: "Đã xoá 3 mục.", error: "1 mục chưa xử lý được: Tên (lý do)" }`. `name(f)` → tên hiện cho mục lỗi.
+ */
+export function bulkMessage({ done = [], failed = [] } = {}, { verb = 'Đã xoá', unit = 'mục', name = () => '' } = {}) {
+  const ok = done.length ? `${verb} ${done.length} ${unit}.` : '';
+  const error = failed.length ? `${failed.length} ${unit} chưa xử lý được: ${failed.map((f) => `${name(f) || 'Chưa rõ tên'} (${f.error})`).join('; ')}` : '';
+  return { ok, error };
+}
+
+/**
  * Thanh chọn nhiều trên một danh sách có sẵn ô tích ở từng hàng: "Chọn tất cả (đang lọc)" / "Bỏ chọn",
  * "Đã chọn N" và các nút hành động (`children`). `shown`: [{ uid }] đang hiện; `onPick(Set)`.
  */

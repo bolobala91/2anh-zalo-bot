@@ -4,6 +4,7 @@
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, fmtTime, Icon, Live, Notice, Spinner } from '../ui.js';
+import { BulkBar, bulkMessage, flip, stillPicked } from './multi-pick.js';
 
 const CATEGORY = {
   'profile.md': 'Hồ sơ', preferences: 'Sở thích, cách xưng hô', entities: 'Người, việc, đồ vật', events: 'Sự việc',
@@ -82,6 +83,9 @@ function ScopeView({ s, canAdmin, onForgotten }) {
   const [open, setOpen] = useState('');
   const [msg, setMsg] = useState({});
   const [tick, setTick] = useState(0);
+  // Chế độ "Chọn nhiều": Set URI tệp đã tích, null = tắt.
+  const [bulk, setBulk] = useState(null);
+  const [busy, setBusy] = useState(false);
   const base = `/api/learned-memory/${s.scope}`;
   useEffect(() => { setEntries(null); api(`${base}/list?${new URLSearchParams({ uri: cwd })}`).then((r) => setEntries(r.entries)).catch((e) => setMsg({ error: e.message })); }, [cwd, tick]);
   async function search(e) {
@@ -99,6 +103,17 @@ function ScopeView({ s, canAdmin, onForgotten }) {
       setMsg({ ok: r.committed ? `Đã gửi ${r.committed} phiên đi rút — mục mới hiện sau khoảng 1–2 phút (còn ${r.left} lần hôm nay).` : 'Không có tin nào chờ rút ở kho này.' });
     } catch (err) { setMsg({ error: err.message }); }
   }
+  async function removeMany(uris) {
+    if (!confirm(`Xoá ${uris.length} mục? Không hoàn tác được.`)) return;
+    setBusy(true); setMsg({});
+    try {
+      const r = await api(`${base}/bulk-delete`, { method: 'POST', body: { uris } });
+      setBulk(new Set()); setOpen(''); setHits(null); setTick(tick + 1);
+      setMsg(bulkMessage(r, { name: (f) => entryLabel(f.uri) }));
+    } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
+  }
+  const files = (entries || []).filter((e) => !e.dir).map((e) => ({ uid: e.uri }));
+  const sel = bulk ? stillPicked(bulk, files) : [];
   const changed = (text) => { setOpen(''); setHits(null); setMsg({ ok: text }); setTick(tick + 1); };
   return html`<div>
     <${Live} error=${msg.error} ok=${msg.ok} />
@@ -112,10 +127,15 @@ function ScopeView({ s, canAdmin, onForgotten }) {
       <span class="badge">${Math.round(h.score * 100)}%</span></li>`) : html`<li class="muted">Không thấy gì.</li>`}</ul>` : null}
     ${open ? html`<${Item} key=${open} scope=${s.scope} uri=${open} onChanged=${changed} />` : null}
     <div class="toolbar">${cwd !== root ? html`<button type="button" class="btn btn-secondary btn-sm" onClick=${() => setCwd(cwd.replace(/\/[^/]+\/?$/, '').length < root.length ? root : cwd.replace(/\/[^/]+\/?$/, ''))}><${Icon} name="prev" size=${14} /> Lên</button>` : null}
-      <span class="muted small">${cwd === root ? 'Tất cả mục' : entryLabel(cwd)}</span></div>
+      <span class="muted small">${cwd === root ? 'Tất cả mục' : entryLabel(cwd)}</span>
+      ${files.length > 1 ? html`<button type="button" class="btn btn-ghost btn-sm" aria-pressed=${bulk ? 'true' : 'false'} onClick=${() => setBulk(bulk ? null : new Set())}>${bulk ? 'Xong' : 'Chọn nhiều'}</button>` : null}</div>
+    ${bulk && files.length ? html`<${BulkBar} shown=${files} picked=${new Set(sel)} onPick=${setBulk} unit="mục">
+      <button type="button" class="btn btn-danger-outline btn-sm" disabled=${busy} onClick=${() => removeMany(sel)}>Xoá ${sel.length} mục</button><//>` : null}
     ${!entries && !msg.error ? html`<${Spinner} />` : null}
     ${entries && !entries.length ? html`<p class="muted">${cwd === root ? 'Chưa tự học được gì.' : 'Chưa có gì ở đây.'}</p>` : null}
     <ul class="row-list">${(entries || []).map((e) => html`<li key=${e.uri} class="row-item">
+      ${bulk && !e.dir ? html`<input type="checkbox" class="bulk-check" checked=${bulk.has(e.uri)} disabled=${busy}
+        aria-label=${`Chọn ${entryLabel(e.uri)}`} onChange=${() => setBulk(flip(bulk, e.uri))} />` : null}
       <${Icon} name=${e.dir ? 'list' : 'file'} />
       <span class="row-main"><button type="button" class="link-btn" onClick=${() => (e.dir ? setCwd(e.uri) : setOpen(e.uri))}>${entryLabel(e.uri)}</button>
         ${e.abstract ? html`<small class="muted">${e.abstract}</small>` : null}</span>

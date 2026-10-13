@@ -5,6 +5,7 @@ import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { Dialog, html, fmtTime, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
 import { fold } from '../fold.js';
+import { BulkBar, bulkMessage, flip, stillPicked } from './multi-pick.js';
 import { DAY_LABELS, DAY_NAMES, REPEATS, describeSpec, mondayOf, moveSpec, specProblem, weekOccurrences } from '../schedule-spec.js';
 
 export const REPEAT_LABELS = { 0: 'Một lần', 1: 'Hằng ngày', 2: 'Hằng tuần', 3: 'Hằng tháng' };
@@ -21,6 +22,13 @@ export function jobState(j) {
 export function filterJobs(jobs, q) {
   const n = fold(q).trim();
   return n ? jobs.filter((j) => fold(`${j.name} ${j.prompt} ${j.targetName} ${j.creatorName}`).includes(n)) : jobs;
+}
+
+/** Câu báo cho lệnh hàng loạt trên việc hẹn giờ (máy chủ trả `{ done, failed }`). */
+export const BULK_VERBS = { pause: 'Đã tạm dừng', resume: 'Đã chạy lại', remove: 'Đã xoá' };
+export function jobsBulkMessage(res, action, jobs) {
+  const nameOf = (id) => jobs.find((j) => j.id === id)?.name || '';
+  return bulkMessage(res, { verb: BULK_VERBS[action], unit: 'việc', name: (f) => nameOf(f.id) });
 }
 
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -238,6 +246,8 @@ function Jobs({ admin }) {
   const [over, setOver] = useState(0);
   const [msg, setMsg] = useState({});
   const [view, setView] = useState(readView);
+  // Chế độ "Chọn nhiều": Set mã việc đã tích, null = tắt (hiện danh sách thay cho lịch tuần/luồng).
+  const [bulk, setBulk] = useState(null);
   const pickView = (v) => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* chỉ là tiện ích */ } };
   const load = () => api('/api/schedules').then(setData).catch((e) => setMsg({ error: e.message }));
   useEffect(() => { load(); api('/api/chats').then((r) => setConvs(r.conversations || [])).catch(() => {}); }, []);
@@ -246,6 +256,16 @@ function Jobs({ admin }) {
   const board = weekBoard(jobs, week);
   const advanced = jobs.filter((j) => !j.spec);
   const today = todayVN();
+  async function runMany(action, ids) {
+    if (action === 'remove' && !confirm(`Xoá ${ids.length} việc? Không hoàn tác được.`)) return;
+    setSaving(true); setMsg({});
+    try {
+      const r = await api('/api/schedules/cron/bulk', { method: 'POST', body: { action, ids } });
+      setBulk(new Set()); setMsg(jobsBulkMessage(r, action, data?.jobs || [])); load();
+    } catch (e) { setMsg({ error: e.message }); } finally { setSaving(false); }
+  }
+  const picks = bulk ? stillPicked(bulk, jobs.map((j) => ({ uid: j.id }))) : [];
+  const pickedJobs = jobs.filter((j) => picks.includes(j.id));
   async function drop(day) {
     setOver(0);
     const d = drag; setDrag(null);
@@ -269,8 +289,9 @@ function Jobs({ admin }) {
         <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${view === 'week' ? 'true' : 'false'} onClick=${() => pickView('week')}>Lịch tuần</button>
         <button type="button" class="btn btn-secondary btn-sm chip" aria-pressed=${view === 'flow' ? 'true' : 'false'} onClick=${() => pickView('flow')}>Luồng</button>
       </div>
+      ${data?.jobs?.length > 1 ? html`<button type="button" class="btn btn-ghost btn-sm" aria-pressed=${bulk ? 'true' : 'false'} onClick=${() => setBulk(bulk ? null : new Set())}>${bulk ? 'Xong' : 'Chọn nhiều'}</button>` : null}
       <button type="button" class="btn btn-primary btn-sm" disabled=${!data} onClick=${() => setOpen({ job: null })}><${Icon} name="plus" size=${16} /> Tạo lịch hẹn</button></div>
-    <div class="toolbar week-nav">${view === 'flow' ? null : html`
+    <div class="toolbar week-nav">${view === 'flow' || bulk ? null : html`
       <button type="button" class="btn btn-secondary btn-sm" aria-label="Tuần trước" onClick=${() => setWeek(shiftDays(week, -7))}>‹</button>
       <strong>${ddmm(week)} – ${ddmm(shiftDays(week, 6))}</strong>
       <button type="button" class="btn btn-secondary btn-sm" aria-label="Tuần sau" onClick=${() => setWeek(shiftDays(week, 7))}>›</button>
@@ -281,10 +302,19 @@ function Jobs({ admin }) {
     <${Live} error=${msg.error} ok=${msg.ok} />
     ${data?.cronError ? html`<${Notice} kind="warn">${data.cronError}<//>` : null}
     ${!data && !msg.error ? html`<${Spinner} />` : null}
-    ${data && view === 'flow' ? html`<p class="muted small">Mỗi luồng: Khi nào → Bot làm gì → Gửi vào. <span class="drag-hint">Kéo nhóm từ bảng bên phải vào cột "Gửi vào" để gửi thêm nơi; kéo khối nơi nhận sang luồng khác để chuyển. </span>Bấm khối để sửa.</p>
+    ${data && bulk ? html`<${BulkBar} shown=${jobs.map((j) => ({ uid: j.id }))} picked=${new Set(picks)} onPick=${setBulk} filtered=${Boolean(q.trim())} unit="việc">
+        ${pickedJobs.some((j) => !j.paused) ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${saving} onClick=${() => runMany('pause', pickedJobs.filter((j) => !j.paused).map((j) => j.id))}>Tạm dừng</button>` : null}
+        ${pickedJobs.some((j) => j.paused) ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${saving} onClick=${() => runMany('resume', pickedJobs.filter((j) => j.paused).map((j) => j.id))}>Chạy lại</button>` : null}
+        <button type="button" class="btn btn-danger-outline btn-sm" disabled=${saving} onClick=${() => runMany('remove', picks)}>Xoá ${picks.length} việc</button><//>
+      <ul class="row-list">${jobs.map((j) => { const st = jobState(j); return html`<li key=${j.id} class="row-item">
+        <input type="checkbox" class="bulk-check" checked=${bulk.has(j.id)} disabled=${saving} aria-label=${`Chọn ${j.name}`} onChange=${() => setBulk(flip(bulk, j.id))} />
+        <span class="row-main"><strong>${j.name || 'Chưa đặt tên'}</strong><small class="muted">${j.spec ? describeSpec(j.spec) : j.schedule} · gửi vào ${j.targetName}</small></span>
+        <span class=${`badge badge-${st.kind}`}>${st.text}</span></li>`; })}</ul>
+      ${!jobs.length ? html`<p class="muted">${q ? 'Không có lịch hẹn nào khớp.' : 'Chưa có lịch hẹn nào.'}</p>` : null}` : null}
+    ${data && !bulk && view === 'flow' ? html`<p class="muted small">Mỗi luồng: Khi nào → Bot làm gì → Gửi vào. <span class="drag-hint">Kéo nhóm từ bảng bên phải vào cột "Gửi vào" để gửi thêm nơi; kéo khối nơi nhận sang luồng khác để chuyển. </span>Bấm khối để sửa.</p>
       ${jobs.length ? html`<${Flow} jobs=${jobs} convs=${convs} onOpen=${(j) => setOpen({ job: j })} onChanged=${done} onError=${(t) => setMsg({ error: t })} />`
         : html`<p class="muted">${q ? 'Không có lịch hẹn nào khớp.' : 'Chưa có lịch hẹn nào — bấm "Tạo lịch hẹn".'}</p>`}` : null}
-    ${data && view === 'week' ? html`<p class="muted small"><span class="drag-hint">Kéo thẻ sang ngày khác để dời lịch; </span>Bấm vào thẻ để sửa, tạm dừng hoặc xoá.</p>
+    ${data && !bulk && view === 'week' ? html`<p class="muted small"><span class="drag-hint">Kéo thẻ sang ngày khác để dời lịch; </span>Bấm vào thẻ để sửa, tạm dừng hoặc xoá.</p>
       <div class="week-grid">${board.map((d) => html`<div key=${d.day} class=${`week-col${d.date === today ? ' is-today' : ''}${over === d.day ? ' is-over' : ''}`}
         onDragOver=${(e) => { if (drag) { e.preventDefault(); setOver(d.day); } }} onDragLeave=${(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(0); }} onDrop=${(e) => { e.preventDefault(); drop(d); }}>
         <div class="week-head"><strong>${d.label}</strong> <small class="muted">${ddmm(d.date)}</small></div>
@@ -312,15 +342,28 @@ function Reminders() {
   const [sel, setSel] = useState('');
   const [list, setList] = useState(null);
   const [msg, setMsg] = useState({});
+  const [picked, setPicked] = useState(() => new Set());
+  const [busy, setBusy] = useState(false);
   useEffect(() => { api('/api/chats').then((r) => setConvs(r.conversations || [])).catch((e) => setMsg({ error: e.message })); }, []);
   const conv = (convs || []).find((c) => `${c.threadType}:${c.threadId}` === sel);
   const load = () => conv && api(`/api/schedules/reminders?${new URLSearchParams({ threadId: conv.threadId, threadType: String(conv.threadType) })}`)
     .then((r) => setList(r.reminders)).catch((e) => setMsg({ error: e.message }));
-  useEffect(() => { setList(null); setMsg({}); load(); }, [sel]);
+  useEffect(() => { setList(null); setMsg({}); setPicked(new Set()); load(); }, [sel]);
   async function remove(r) {
     if (!confirm(`Xoá lời nhắc "${r.title}" trong ${conv.name}?`)) return;
     try { await api('/api/schedules/reminders/remove', { method: 'POST', body: { reminderId: r.id, threadId: conv.threadId, threadType: conv.threadType } }); setMsg({ ok: 'Đã xoá lời nhắc.' }); load(); } catch (e) { setMsg({ error: e.message }); }
   }
+  async function removeMany(ids) {
+    if (!confirm(`Xoá ${ids.length} lời nhắc? Không hoàn tác được.`)) return;
+    setBusy(true); setMsg({});
+    try {
+      const r = await api('/api/schedules/reminders/bulk-remove', { method: 'POST', body: { reminderIds: ids, threadId: conv.threadId, threadType: conv.threadType } });
+      setPicked(new Set());
+      setMsg(bulkMessage(r, { unit: 'lời nhắc', name: (f) => (list || []).find((x) => x.id === f.id)?.title || '' })); load();
+    } catch (e) { setMsg({ error: e.message }); } finally { setBusy(false); }
+  }
+  const items = (list || []).map((r) => ({ uid: r.id }));
+  const pick = stillPicked(picked, items);
   return html`<section class="card">
     <h2>Lời nhắc Zalo</h2>
     <p class="muted small">Lời nhắc tạo trong Zalo (bởi bot hoặc thành viên). Chọn hội thoại để xem.</p>
@@ -332,7 +375,11 @@ function Reminders() {
     <${Live} error=${msg.error} ok=${msg.ok} />
     ${sel && !list && !msg.error ? html`<${Spinner} />` : null}
     ${list && !list.length ? html`<p class="muted">Hội thoại này chưa có lời nhắc.</p>` : null}
+    ${list && list.length > 1 ? html`<${BulkBar} shown=${items} picked=${new Set(pick)} onPick=${setPicked} unit="lời nhắc">
+      <button type="button" class="btn btn-danger-outline btn-sm" disabled=${busy} onClick=${() => removeMany(pick)}>Xoá ${pick.length} lời nhắc</button><//>` : null}
     <ul class="row-list">${(list || []).map((r) => html`<li key=${r.id} class="row-item">
+      ${list.length > 1 ? html`<input type="checkbox" class="bulk-check" checked=${picked.has(r.id)} disabled=${busy}
+        aria-label=${`Chọn ${r.title || 'lời nhắc này'}`} onChange=${() => setPicked(flip(picked, r.id))} />` : null}
       <span class="row-main"><strong>${r.title || '(không tên)'}</strong>
         <small class="muted">${fmtTime(r.startAt)} · ${REPEAT_LABELS[r.repeat] || 'Lặp lại'}${r.mine ? ' · bot tạo' : ''}</small></span>
       <button class="btn btn-secondary btn-sm" onClick=${() => remove(r)}><${Icon} name="close" size=${14} /> Xoá</button>

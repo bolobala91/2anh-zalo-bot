@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { Dialog, html, fmtTime, Icon, Live, Spinner } from '../ui.js';
+import { BulkBar, flip } from './multi-pick.js';
 
 export const TAG_COLORS = ['blue', 'indigo', 'green', 'teal', 'pink', 'orange', 'purple', 'red', 'gray'];
 export const COLOR_LABELS = { blue: 'Xanh dương', indigo: 'Chàm', green: 'Xanh lá', teal: 'Xanh ngọc', pink: 'Hồng', orange: 'Cam', purple: 'Tím', red: 'Đỏ', gray: 'Xám' };
@@ -27,6 +28,11 @@ export function tagCounts(entries) {
   const out = new Map();
   for (const e of entries) { const { tag } = splitTag(e); out.set(tag, (out.get(tag) || 0) + 1); }
   return out;
+}
+
+/** Các mục đã tích (theo chỉ số) → `[{ index, old }]` gửi lên máy chủ để kiểm từng mục còn nguyên. */
+export function pickedEntries(entries, picked) {
+  return entries.flatMap((old, index) => (picked.has(index) ? [{ index, old }] : []));
 }
 
 const colorOf = (tags, tag) => tags.find((t) => t.label === tag)?.color || 'gray';
@@ -174,16 +180,42 @@ function History({ tags, labels, onChanged }) {
   </details>`;
 }
 
+/** Thanh "Chọn nhiều" của một tệp: Gắn thẻ / Xoá N mục đã tích. */
+function BulkMem({ target, entries, shown, picked, onPick, tags, onSaved, onError }) {
+  const [tag, setTag] = useState('');
+  const [busy, setBusy] = useState(false);
+  // Chỉ mục đang hiện (theo bộ lọc loại) — mục đã tích mà đang bị lọc ẩn không bị xoá/gắn thẻ nhầm.
+  const visible = new Set(shown.map((o) => o.uid));
+  const items = pickedEntries(entries, new Set([...picked].filter((i) => visible.has(i))));
+  async function run(path, body, done) {
+    setBusy(true);
+    try { const r = await api(`/api/admin/agent-memory/${target}/${path}`, { method: 'POST', body }); onPick(new Set()); onSaved(r, done(r.count)); } catch (e) { onError(e.message); } finally { setBusy(false); }
+  }
+  const remove = () => { if (confirm(`Xoá ${items.length} mục? Không hoàn tác được.`)) run('bulk-delete', { items }, (n) => `Đã xoá ${n} mục.`); };
+  return html`<${BulkBar} shown=${shown} picked=${picked} onPick=${onPick} unit="mục">
+    ${tags.length ? html`<label class="sr-only" for=${`bulk-tag-${target}`}>Loại cần gắn</label>
+      <select id=${`bulk-tag-${target}`} class="bulk-select" value=${tag} onChange=${(e) => setTag(e.currentTarget.value)}>
+        <option value="">Chọn loại…</option>
+        ${tags.map((t) => html`<option key=${t.label} value=${t.label}>${t.label}</option>`)}</select>
+      <button type="button" class="btn btn-secondary btn-sm" disabled=${busy || !tag}
+        onClick=${() => run('bulk-tag', { items, tag }, (n) => `Đã gắn loại "${tag}" cho ${n} mục.`)}>Gắn thẻ</button>` : null}
+    <button type="button" class="btn btn-danger-outline btn-sm" disabled=${busy} onClick=${remove}>Xoá ${items.length} mục</button>
+  <//>`;
+}
+
 export function AgentMemory() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const [open, setOpen] = useState(null); // { kind: 'entry'|'tags'|'organize', target?, entry? }
   const [filter, setFilter] = useState('all');
+  // Chế độ "Chọn nhiều" theo từng tệp: { user?: Set chỉ số, memory?: Set } — không có khoá = tắt.
+  const [bulk, setBulk] = useState({});
   const refresh = () => api('/api/admin/agent-memory').then(setData).catch((e) => setError(e.message));
   useEffect(() => { refresh(); }, []);
   const saved = (r, text) => {
     setData(r); setOpen(null); setOk(text); setError('');
+    setBulk((b) => Object.fromEntries(Object.keys(b).map((k) => [k, new Set()])));
     if (r.autoTagging) { setTimeout(refresh, 8000); setTimeout(refresh, 20000); }
   };
   const tags = data?.tags || [];
@@ -205,11 +237,18 @@ export function AgentMemory() {
     ${data ? ['user', 'memory'].map((t) => html`<div key=${t} class="mem-block">
       <div class="toolbar"><h3>${data[t].label} <small class="muted">${usageText(data[t].used, data[t].limit)}</small></h3>
         <span class="toolbar-actions">
+          ${data[t].entries.length > 1 ? html`<button type="button" class="btn btn-ghost btn-sm" aria-pressed=${bulk[t] ? 'true' : 'false'}
+            onClick=${() => setBulk((b) => { const { [t]: on, ...rest } = b; return on ? rest : { ...b, [t]: new Set() }; })}>${bulk[t] ? 'Xong' : 'Chọn nhiều'}</button>` : null}
           ${data.tags && data[t].entries.length ? html`<button type="button" class="btn btn-secondary btn-sm" onClick=${() => setOpen({ kind: 'organize', target: t })}><${Icon} name="brain" size=${14} /> Sắp xếp lại bằng AI</button>` : null}
           <button type="button" class="btn btn-secondary btn-sm" onClick=${() => setOpen({ kind: 'entry', target: t, entry: null })}><${Icon} name="plus" size=${14} /> Thêm điều cần nhớ</button></span></div>
       <progress class="mem-usage" max=${data[t].limit} value=${Math.min(data[t].used, data[t].limit)} aria-label=${`Dung lượng ${data[t].label}`}></progress>
       ${data[t].entries.length ? null : html`<p class="muted">Chưa có điều nào.</p>`}
-      <ul class="mem-list">${data[t].entries.map((text, i) => (shown(text) ? html`<li key=${`${t}-${i}-${text.length}`}>
+      ${bulk[t] ? html`<${BulkMem} target=${t} entries=${data[t].entries} tags=${data.tags || []} picked=${bulk[t]}
+        shown=${data[t].entries.flatMap((text, i) => (shown(text) ? [{ uid: i }] : []))}
+        onPick=${(p) => setBulk((b) => ({ ...b, [t]: p }))} onSaved=${saved} onError=${(m) => { setError(m); setOk(''); }} />` : null}
+      <ul class="mem-list">${data[t].entries.map((text, i) => (shown(text) ? html`<li key=${`${t}-${i}-${text.length}`} class=${bulk[t] ? 'mem-pick' : null}>
+        ${bulk[t] ? html`<input type="checkbox" class="bulk-check" checked=${bulk[t].has(i)} aria-label=${`Chọn mục ${i + 1}`}
+          onChange=${() => setBulk((b) => ({ ...b, [t]: flip(b[t], i) }))} />` : null}
         <button type="button" class="mem-line" onClick=${() => setOpen({ kind: 'entry', target: t, entry: { index: i, text } })}>
           ${data.tags ? html`<${TagBadge} tags=${tags} tag=${splitTag(text).tag} /> ` : null}${data.tags ? splitTag(text).text : text}</button></li>` : null))}</ul>
     </div>`) : null}

@@ -82,3 +82,18 @@ test('chu kỳ rút và "Rút trí nhớ ngay": chỉ Quản trị; ghi memory.j
   assert.deepEqual(deps.activity.list().filter((e) => e.action.startsWith('learned_memory_')).map((e) => e.action).sort(),
     ['learned_memory_extract', 'learned_memory_settings']);
 });
+
+test('Kho tri thức tự học: xoá nhiều mục một lần — một dòng Nhật ký; kho DM chủ nhân vẫn chặn Chủ bot', async (t) => {
+  const { learnedMemory, calls } = realLearned(t);
+  const deps = makeDeps(t, { learnedMemory });
+  const { call } = await startApp(t, deps);
+  const owner = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const second = `viking://user/${G}/memories/events/mem_3.md`;
+  assert.equal((await call(`/api/learned-memory/${O}/bulk-delete`, { method: 'POST', cookie: owner, body: { uris: [OWNER_FILE] } })).status, 404);
+  assert.equal((await call(`/api/learned-memory/${G}/bulk-delete`, { method: 'POST', cookie: owner, body: { uris: [FILE, OWNER_FILE] } })).status, 400);
+  assert.equal(calls.filter((c) => c.method === 'DELETE').length, 0);
+  const r = await call(`/api/learned-memory/${G}/bulk-delete`, { method: 'POST', cookie: owner, body: { uris: [FILE, second] } });
+  assert.deepEqual([r.status, r.json.done, r.json.failed], [200, [FILE, second], []]);
+  assert.equal(calls.filter((c) => c.method === 'DELETE').length, 2);
+  assert.deepEqual(deps.activity.list().filter((e) => e.action === 'learned_memory_delete').map((e) => e.detail), [`${G}: 2 mục`]);
+});

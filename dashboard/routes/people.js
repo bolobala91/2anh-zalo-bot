@@ -61,6 +61,15 @@ export function peopleRoutes({ people, activity, threadNames }) {
     } catch (err) { fail(res, err, 'Chưa lưu được hồ sơ — thử lại, nếu vẫn lỗi hãy báo người cài đặt.'); }
   });
 
+  /** Xoá nhiều hồ sơ: `{ people: [{ uid, updatedAt }] }` — kiểm hết rồi ghi một lần; một dòng Nhật ký. */
+  r.post('/people/bulk-delete', requireAuth, (req, res) => {
+    try {
+      const n = people.removeMany(req.body?.people);
+      log(req, 'people_delete', `${n} người`);
+      res.json({ ok: true, count: n });
+    } catch (err) { fail(res, err, 'Chưa xoá được hồ sơ — thử lại, nếu vẫn lỗi hãy báo người cài đặt.'); }
+  });
+
   r.delete('/people/:uid', requireAuth, (req, res) => {
     try {
       if (!ZALO_UID.test(req.params.uid)) return res.status(400).json({ ok: false, error: 'UID Zalo không hợp lệ — chọn lại người trong danh sách.' });

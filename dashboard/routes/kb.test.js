@@ -75,3 +75,18 @@ test('kho tri thức gọn: viết tài liệu, sửa/đổi tên; đổi nguồ
   assert.ok(deps.restartFlags.get().assistant, 'cần khởi động lại trợ lý');
   assert.ok(deps.activity.list().some((e) => e.action === 'kb_source'));
 });
+
+test('kho tri thức: xoá nhiều tài liệu một lần — kiểm từng đường dẫn như xoá một tệp; một dòng Nhật ký', async (t) => {
+  const deps = withKb(t);
+  const { base, call } = await startApp(t, deps);
+  const paths = [];
+  const owner = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  for (const name of ['a.pdf', 'b.pdf']) paths.push((await upload(base, owner, name, Buffer.from('%PDF-1.7 x'))).json.path);
+  assert.equal((await call('/api/kb/files/delete', { method: 'POST', body: { paths } })).status, 401);
+  assert.equal((await call('/api/kb/files/delete', { method: 'POST', cookie: owner, body: { paths: [...paths, '../config.yaml'] } })).status, 403);
+  assert.equal((await call('/api/kb', { cookie: owner })).json.own.length, 2);
+  const r = await call('/api/kb/files/delete', { method: 'POST', cookie: owner, body: { paths } });
+  assert.deepEqual([r.status, r.json.count], [200, 2]);
+  assert.equal((await call('/api/kb?fresh=1', { cookie: owner })).json.own.length, 0);
+  assert.deepEqual(deps.activity.list().filter((e) => e.action === 'kb_delete').map((e) => e.detail), ['2 tài liệu']);
+});

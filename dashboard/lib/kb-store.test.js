@@ -193,3 +193,17 @@ test('danh sách gọn: đếm vượt trần 3000; tài liệu tự tạo đọ
   assert.deepEqual(r.own.map((f) => f.path), [p]);
   assert.equal(r.truncated, true);
 });
+
+test('xoá nhiều tài liệu tự tạo: kiểm mọi đường dẫn trước (một cái ngoài thư mục → 403, chưa xoá gì); bỏ trùng', (t) => {
+  const { root, store } = kb(t);
+  const a = store.upload('a.pdf', PDF);
+  const b = store.upload('b.pdf', PDF);
+  assert.throws(() => store.removeMany([a, 'Luu tru/cu.pdf']), (e) => e.statusCode === 403);
+  assert.throws(() => store.removeMany([a, 'tai-len-dashboard/khong-co.pdf']), (e) => e.statusCode === 404);
+  assert.throws(() => store.removeMany([]), (e) => e.statusCode === 400);
+  assert.throws(() => store.removeMany('a'), (e) => e.statusCode === 400);
+  assert.ok(existsSync(join(root, a)) && existsSync(join(root, b)), 'chưa xoá gì');
+  assert.equal(store.removeMany([a, b, a]), 2);
+  assert.equal(existsSync(join(root, a)) || existsSync(join(root, b)), false);
+  assert.equal(readFileSync(join(root, 'Luu tru', 'cu.pdf'), 'latin1').slice(0, 5), '%PDF-');
+});

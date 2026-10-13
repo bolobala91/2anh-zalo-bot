@@ -89,6 +89,15 @@ export function kbRoutes({ kb, activity, restartFlags }) {
     } catch (err) { fail(res, err, 'Chưa xoá được — thử lại.'); }
   });
 
+  /** Xoá nhiều tài liệu tự tạo: `{ paths: [...] }` — kiểm hết đường dẫn trước; một dòng Nhật ký. */
+  r.post('/kb/files/delete', requireAuth, (req, res) => {
+    try {
+      const n = kb.removeMany(req.body?.paths);
+      log(req, 'kb_delete', `${n} tài liệu`);
+      res.json({ ok: true, count: n });
+    } catch (err) { fail(res, err, 'Chưa xoá được — thử lại.'); }
+  });
+
   // Lỗi của express.raw (quá cỡ) đi qua đây thay vì câu chung của app.
   r.use(['/kb', '/admin/kb'], (err, req, res, next) => (err?.type === 'entity.too.large' ? fail(res, err, '') : next(err)));
   return r;

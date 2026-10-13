@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import { Dialog, html, fmtTime, Icon, Live, PageHead, Spinner } from '../ui.js';
 import { LearnedMemory } from './learned-memory.js';
 import { AgentMemory } from './agent-memory.js';
+import { BulkBar, flip, stillPicked } from './multi-pick.js';
 
 /** Gợi ý tên mục hay dùng — bấm là thêm dòng, khỏi nghĩ tên. */
 export const FIELD_PRESETS = ['Xưng hô', 'Chức vụ', 'Lớp', 'Môn dạy', 'Đơn vị', 'Sở thích', 'Ngày sinh'];
@@ -97,26 +98,45 @@ function PersonDialog({ person, onDone, onStale, onClose }) {
   <//>`;
 }
 
+/** Thân POST /api/people/bulk-delete: người đã chọn kèm mốc sửa khách đã thấy (bot sửa sau đó → 409). */
+export function peopleDeletePayload(people, picked) {
+  return { people: people.filter((p) => picked.includes(p.uid)).map((p) => ({ uid: p.uid, updatedAt: p.updatedAt ?? null })) };
+}
+
 function People() {
   const [q, setQ] = useState('');
   const [data, setData] = useState(null);
   const [msg, setMsg] = useState({});
   const [open, setOpen] = useState(null);
+  // Chế độ "Chọn nhiều": Set UID đã chọn, null = tắt (bấm thẻ để chọn thay vì mở).
+  const [bulk, setBulk] = useState(null);
+  const [busy, setBusy] = useState(false);
   const load = () => api(`/api/people?${new URLSearchParams({ q })}`).then((r) => setData(r)).catch((e) => setMsg({ error: e.message }));
   useEffect(() => { const id = setTimeout(load, 250); return () => clearTimeout(id); }, [q]);
   const done = (text) => { setOpen(null); setMsg(text ? { ok: text } : {}); load(); };
   const stale = (text) => { setOpen(null); setMsg({ error: text }); load(); };   // bot vừa sửa hồ sơ: đóng cửa sổ, tải lại
+  const list = data?.people || [];
+  const sel = bulk ? stillPicked(bulk, list) : [];
+  async function removeMany() {
+    if (!confirm(`Xoá ${sel.length} người? Không hoàn tác được.`)) return;
+    setBusy(true); setMsg({});
+    try { const r = await api('/api/people/bulk-delete', { method: 'POST', body: peopleDeletePayload(list, sel) }); setBulk(new Set()); done(`Đã xoá ${r.count} người.`); } catch (err) { if (err.status === 409) stale(err.message); else setMsg({ error: err.message }); } finally { setBusy(false); }
+  }
   return html`<section class="card">
     <div class="toolbar"><h2>Sổ người quen</h2>
       <label class="sr-only" for="people-q">Tìm hồ sơ</label>
       <input id="people-q" type="search" placeholder="Tìm theo tên, lớp, chức vụ…" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
-      ${data ? html`<small class="muted">${data.total} người</small>` : null}</div>
+      ${data ? html`<small class="muted">${data.total} người</small>` : null}
+      ${list.length > 1 ? html`<button type="button" class="btn btn-ghost btn-sm" aria-pressed=${bulk ? 'true' : 'false'} onClick=${() => setBulk(bulk ? null : new Set())}>${bulk ? 'Xong' : 'Chọn nhiều'}</button>` : null}</div>
     <p class="muted small">Bot tự ghi khi được dặn "nhớ giúp…" (lời tự khai — không dùng để cấp quyền). Bấm vào thẻ để sửa; có hiệu lực từ tin nhắn sau.</p>
     <${Live} error=${msg.error} ok=${msg.ok} />
     ${!data && !msg.error ? html`<${Spinner} />` : null}
     ${data && !data.people.length ? html`<p class="muted">${data.total ? 'Không có ai khớp.' : 'Bot chưa nhớ ai.'}</p>` : null}
-    <div class="person-grid">${(data?.people || []).map((p) => html`<button type="button" key=${p.uid} class="person-card" onClick=${() => setOpen(p)}>
-      <strong>${p.name || 'Chưa rõ tên'}</strong>
+    ${bulk && list.length ? html`<${BulkBar} shown=${list} picked=${new Set(sel)} onPick=${setBulk} filtered=${Boolean(q.trim())}>
+      <button type="button" class="btn btn-danger-outline btn-sm" disabled=${busy} onClick=${removeMany}>Xoá ${sel.length} người</button><//>` : null}
+    <div class="person-grid">${list.map((p) => html`<button type="button" key=${p.uid} class="person-card" aria-pressed=${bulk ? (bulk.has(p.uid) ? 'true' : 'false') : null}
+      onClick=${() => (bulk ? setBulk(flip(bulk, p.uid)) : setOpen(p))}>
+      <strong>${bulk ? html`<span class="pick-mark" aria-hidden="true">${bulk.has(p.uid) ? '✓' : ''}</span>` : null}${p.name || 'Chưa rõ tên'}</strong>
       ${p.note ? html`<span class="person-note">${p.note}</span>` : null}
       ${p.fields.length ? html`<span class="chips">${p.fields.slice(0, 6).map((f) => html`<span key=${f.key} class="tag" title=${`Dùng ở: ${placesText(f.places)}`}>${f.key}: ${f.value}</span>`)}${p.fields.length > 6 ? html`<span class="tag">+${p.fields.length - 6}</span>` : null}</span>` : null}
       <small class="muted">Sửa ${fmtTime(p.updatedAt)}</small>

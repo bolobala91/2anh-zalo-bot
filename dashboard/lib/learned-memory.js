@@ -29,6 +29,7 @@ const GENERATED = new Set(['.abstract.md', '.overview.md']);
  * vô nghĩa với người dùng và lộ ID nhóm/người, nên coi như chưa có tóm tắt. */
 export const cleanAbstract = (s) => { const t = String(s || ''); return /^#\s*viking:\/\//.test(t.trim()) || /abstract is not ready/i.test(t) ? '' : t; };
 const MAX_TEXT = 8000;
+export const MAX_BULK = 200;
 export const WINDOWS_NOTE = 'Kho tri thức tự học chỉ bật trên máy chủ Linux/VPS.';
 export const OFF_NOTE = 'Trí nhớ dài hạn chưa bật — người cài đặt đặt memory.provider: zalo_memory trong config.yaml của Hermes (xem README, mục Trí nhớ dài hạn).';
 export const NOT_LOOPBACK_NOTE = 'OPENVIKING_ENDPOINT phải là địa chỉ trên cùng máy (127.0.0.1) — báo người cài đặt sửa lại.';
@@ -174,6 +175,23 @@ export function createLearnedMemory({ settings, names = () => '', owners = () =>
         need(scope, role);
         if (!memoryUri(uri, scope, { file: true })) throw err(400, 'Chỉ xoá được từng mục trí nhớ — chọn lại từ danh sách.');
         await call(scope, '/api/v1/fs', { method: 'DELETE', query: { uri, recursive: 'false' } });
+      },
+      /**
+       * Xoá nhiều mục của một phạm vi: kiểm quyền và TẤT CẢ URI trước (một URI sai → 400, chưa xoá gì), rồi xoá lần
+       * lượt. OpenViking không có xoá hàng loạt nên không nguyên tử: trả `{ done: [uri], failed: [{ uri, error }] }`.
+       */
+      async removeMany(scope, uris) {
+        need(scope, role);
+        if (!Array.isArray(uris) || !uris.length) throw err(400, 'Chưa chọn mục nào.');
+        if (uris.length > MAX_BULK) throw err(400, `Tối đa ${MAX_BULK} mục mỗi lần.`);
+        const list = [...new Set(uris.map((u) => String(u ?? '')))];
+        if (!list.every((u) => memoryUri(u, scope, { file: true }))) throw err(400, 'Chỉ xoá được từng mục trí nhớ — chọn lại từ danh sách.');
+        const done = [];
+        const failed = [];
+        for (const uri of list) {
+          try { await call(scope, '/api/v1/fs', { method: 'DELETE', query: { uri, recursive: 'false' } }); done.push(uri); } catch (e) { failed.push({ uri, error: e?.message || 'Lỗi' }); }
+        }
+        return { done, failed };
       },
       /** "Quên hẳn" một nhóm/người: xoá cả trí nhớ lẫn bản ghi phiên thô của phạm vi đó. */
       async forget(scope) {

@@ -74,3 +74,19 @@ test('sổ người quen: nơi dùng từng mục thành chữ dễ hiểu (tên
   assert.deepEqual(lan.fields.map((f) => [f.key, f.places]), [['lop', ['Nhóm 12A1', 'Nhắn riêng']], ['mon', []]]);
   assert.deepEqual(lan.notePlaces, ['Nhắn riêng của Chủ']);
 });
+
+test('sổ người quen: xoá nhiều người một lần — kiểm hết trước, một dòng Nhật ký', async (t) => {
+  const B = '2222222222222222222';
+  const deps = makeDeps(t);
+  seed(deps, { [A]: { name: 'Cô Lan', updated_at: 1 }, [B]: { name: 'Thầy Minh', updated_at: 2 } });
+  const { call } = await startApp(t, deps);
+  assert.equal((await call('/api/people/bulk-delete', { method: 'POST', body: { people: [{ uid: A }] } })).status, 401);
+  const owner = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  assert.equal((await call('/api/people/bulk-delete', { method: 'POST', cookie: owner, body: { people: [{ uid: A, updatedAt: 1000 }, { uid: B, updatedAt: 5 }] } })).status, 409);
+  assert.equal((await call('/api/people/bulk-delete', { method: 'POST', cookie: owner, body: { people: 'x' } })).status, 400);
+  assert.equal((await call('/api/people', { cookie: owner })).json.total, 2);
+  const r = await call('/api/people/bulk-delete', { method: 'POST', cookie: owner, body: { people: [{ uid: A, updatedAt: 1000 }, { uid: B, updatedAt: 2000 }] } });
+  assert.deepEqual([r.status, r.json.count], [200, 2]);
+  assert.equal((await call('/api/people', { cookie: owner })).json.total, 0);
+  assert.deepEqual(deps.activity.list().filter((e) => e.action === 'people_delete').map((e) => e.detail), ['2 người']);
+});

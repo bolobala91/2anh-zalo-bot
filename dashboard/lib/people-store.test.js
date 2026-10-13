@@ -100,3 +100,16 @@ test('"Dùng ở" từng mục: Mọi nơi → "*", Chỉ nhắn riêng → khô
   store.put(A, parsePerson({ name: 'Thu Giang', note: 'Đã đổi', noteUse: 'all', fields: [{ key: 'mon', value: 'Lý', use: 'bậy' }] }), 'anh');
   assert.deepEqual(store.list()[0].notePlaces, ['*'], 'lựa chọn lạ coi như "như cũ"; ghi chú Mọi nơi');
 });
+
+test('xoá nhiều hồ sơ một lần ghi; UID sai/hồ sơ không còn/bot vừa sửa → không xoá ai', (t) => {
+  const C = '3333333333333333333';
+  const { file, store } = setup(t, { [A]: { name: 'An', updated_at: 10 }, [B]: { name: 'Bình', updated_at: 20 }, [C]: { name: 'Chi' } });
+  const before = readFileSync(file, 'utf8');
+  assert.throws(() => store.removeMany([{ uid: A }, { uid: 'abc' }]), (e) => e.statusCode === 400);
+  assert.throws(() => store.removeMany([{ uid: A }, { uid: '4444444444444444444' }]), (e) => e.statusCode === 404);
+  assert.throws(() => store.removeMany([{ uid: A, updatedAt: 10_000 }, { uid: B, updatedAt: 1 }]), (e) => e.statusCode === 409);
+  assert.throws(() => store.removeMany([]), (e) => e.statusCode === 400);
+  assert.equal(readFileSync(file, 'utf8'), before);
+  assert.equal(store.removeMany([{ uid: A, updatedAt: 10_000 }, { uid: B }, { uid: A }]), 2);
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(file, 'utf8'))), [C]);
+});

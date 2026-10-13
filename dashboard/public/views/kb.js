@@ -5,6 +5,7 @@ import { api, sendFile } from '../api.js';
 import { Dialog, html, fmtTime, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
 import { fold } from '../fold.js';
 import { RestartBanner } from './restart-banner.js';
+import { BulkBar, flip, stillPicked } from './multi-pick.js';
 
 /** "12 KB", "3,4 MB". */
 export function fmtSize(bytes) {
@@ -167,6 +168,7 @@ export function Kb({ me }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(null); // { kind: 'doc', file } | { kind: 'note' } | { kind: 'source' }
   const [rev, setRev] = useState(0);
+  const [picked, setPicked] = useState(() => new Set());
   const isAdmin = me?.role === 'admin';
   const load = (fresh) => api(`/api/kb${fresh ? '?fresh=1' : ''}`).then(setData).catch((e) => setMsg({ error: e.message }));
   useEffect(() => { load(); }, []);
@@ -179,6 +181,11 @@ export function Kb({ me }) {
     if (problem) { setMsg({ error: problem }); return; }
     setBusy(true); setMsg({});
     try { const r = await sendFile('/api/kb/upload', file); setMsg({ ok: `Đã tải lên ${nameOf(r.path)}. Bot thấy tệp mới trong vòng 5 phút.` }); await load(true); } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
+  }
+  async function removeMany(paths) {
+    if (!confirm(`Xoá ${paths.length} tài liệu? Không hoàn tác được.`)) return;
+    setBusy(true); setMsg({});
+    try { const r = await api('/api/kb/files/delete', { method: 'POST', body: { paths } }); setPicked(new Set()); setMsg({ ok: `Đã xoá ${r.count} tài liệu.` }); await load(true); } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
   }
   const head = html`<${PageHead} title="Kho tri thức" sub="Tài liệu bot được tra cứu khi trả lời trong nhóm và tin nhắn riêng." />`;
   const banner = isAdmin ? html`<${RestartBanner} version=${rev} />` : null;
@@ -196,6 +203,8 @@ export function Kb({ me }) {
   const n = fold(q).trim();
   const hits = n ? data.files.filter((f) => fold(f.path).includes(n)) : [];
   const total = data.sources.reduce((a, s) => a + s.files + s.links, 0);
+  const own = data.own.map((f) => ({ uid: f.path }));
+  const sel = stillPicked(picked, own);
   return html`${head}${banner}
     <${Live} error=${msg.error} ok=${msg.ok} />
     <section class="card">
@@ -223,7 +232,11 @@ export function Kb({ me }) {
           <input class="sr-only" type="file" accept=${data.uploadTypes.join(',')} disabled=${busy} onChange=${onPick} />
           ${busy ? 'Đang tải lên…' : 'Tải tệp lên…'}</label></div>
       <p class="muted small">Nhận ${data.uploadTypes.join(', ')}, tối đa ${fmtSize(data.maxBytes)}.</p>
+      ${data.own.length > 1 ? html`<${BulkBar} shown=${own} picked=${new Set(sel)} onPick=${setPicked} unit="tài liệu">
+        <button type="button" class="btn btn-danger-outline btn-sm" disabled=${busy} onClick=${() => removeMany(sel)}>Xoá ${sel.length} tài liệu</button><//>` : null}
       ${data.own.length ? html`<ul class="row-list">${data.own.map((f) => html`<li key=${f.path} class="row-item">
+        ${data.own.length > 1 ? html`<input type="checkbox" class="bulk-check" checked=${picked.has(f.path)} disabled=${busy}
+          aria-label=${`Chọn ${nameOf(f.path)}`} onChange=${() => setPicked(flip(picked, f.path))} />` : null}
         <${Icon} name="file" />
         <span class="row-main"><span>${nameOf(f.path)}</span><small class="muted">${fmtSize(f.size)} · ${fmtTime(f.mtime)}</small></span>
         <button type="button" class="btn btn-secondary btn-sm" aria-label=${`Chi tiết ${nameOf(f.path)}`} onClick=${() => setOpen({ kind: 'doc', file: f })}>Chi tiết</button>

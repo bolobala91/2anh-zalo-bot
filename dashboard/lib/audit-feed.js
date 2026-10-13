@@ -61,6 +61,7 @@ export const ACTION_LABELS = {
   dashboard_friend_accept: 'Chấp nhận lời mời kết bạn từ dashboard',
   dashboard_friend_reject: 'Từ chối lời mời kết bạn từ dashboard',
   dashboard_reminder_remove: 'Xoá lời nhắc Zalo từ dashboard',
+  reminder_remove: 'Xoá nhiều lời nhắc Zalo từ dashboard',
   cron_pause: 'Tạm dừng việc hẹn giờ của trợ lý',
   cron_resume: 'Chạy lại việc hẹn giờ của trợ lý',
   cron_remove: 'Xoá việc hẹn giờ của trợ lý',
@@ -76,7 +77,7 @@ export const ACTION_LABELS = {
   second_brain_note: 'Thêm ghi chú vào Second brain',
   // Giai đoạn 8 (spec §19.6)
   learned_memory_edit: 'Sửa trí nhớ tự học',
-  learned_memory_delete: 'Xoá một mục trí nhớ tự học',
+  learned_memory_delete: 'Xoá mục trí nhớ tự học',
   learned_memory_forget: 'Xoá toàn bộ trí nhớ tự học của một nhóm/người',
   learned_memory_settings: 'Đổi chu kỳ rút trí nhớ tự học',
   learned_memory_extract: 'Rút trí nhớ tự học ngay',

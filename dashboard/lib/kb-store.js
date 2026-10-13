@@ -12,6 +12,8 @@ import { writeEnvKeys } from './env-file.js';
 
 export const UPLOAD_DIR = 'tai-len-dashboard';
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** Trần số tài liệu mỗi lần xoá hàng loạt. */
+export const MAX_BULK = 200;
 export const UPLOAD_TYPES = ['.docx', '.pdf', '.md', '.txt'];
 // Khớp tools.py (KB_TEXT_SUFFIXES | KB_DOC_SUFFIXES | KB_LINK_SUFFIXES, KB_SKIP_DIRS, KB_SKIP_PATTERNS).
 const READABLE = new Set(['.md', '.txt', '.html', '.htm', '.json', '.yaml', '.yml', '.csv', '.xml', '.rst', '.ini', '.toml',
@@ -274,6 +276,15 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
       const { target } = ownTarget(rel);
       unlinkSync(target);
       cache = null;
+    },
+    /** Xoá nhiều tài liệu tự tạo: kiểm TẤT CẢ đường dẫn như xoá một tệp trước (một cái sai → lỗi, chưa xoá gì). */
+    removeMany(rels) {
+      if (!Array.isArray(rels) || !rels.length) throw err(400, 'Chưa chọn tài liệu nào.');
+      if (rels.length > MAX_BULK) throw err(400, `Tối đa ${MAX_BULK} tài liệu mỗi lần.`);
+      const targets = [...new Set([...new Set(rels.map((x) => String(x ?? '')))].map((rel) => ownTarget(rel).target))];
+      for (const target of targets) unlinkSync(target);
+      cache = null;
+      return targets.length;
     },
     /** Nội dung một tài liệu tự tạo dạng chữ (.md/.txt) để sửa trong cửa sổ chi tiết. */
     readOwn(rel) {

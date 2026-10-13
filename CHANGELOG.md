@@ -2,6 +2,19 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.35.0] — 2026-10-13
+
+### Thêm — chọn và sửa hàng loạt (tiếp)
+
+- **Trí nhớ trợ lý:** "Chọn nhiều" → **xoá N mục** hoặc **gắn cùng một loại thẻ** (một lần ghi, có kiểm trùng thay đổi; chỉ tác động mục đang hiện theo bộ lọc).
+- **Trí nhớ tự học:** chọn nhiều mục → xoá.
+- **Lịch hẹn:** chọn nhiều việc hẹn giờ → **tạm dừng / chạy lại / xoá**; chọn nhiều lời nhắc → xoá.
+- **Kho tri thức:** chọn nhiều tài liệu → xoá.
+- **Sổ người quen:** chọn nhiều hồ sơ → xoá.
+- **Công cụ:** "Bật tất cả / Tắt tất cả" theo nhóm và theo kết quả tìm.
+- **MCP:** nút "Bật hết công cụ" cho kết nối đang tắt bớt công cụ. **Skill:** chọn nhiều → bật/tắt.
+- Việc nào làm lần lượt (trí nhớ tự học, lịch hẹn, lời nhắc, skill) thì báo lại mục nào lỗi.
+
 ## [2.34.0] — 2026-10-13
 
 ### Thêm — chọn và sửa hàng loạt

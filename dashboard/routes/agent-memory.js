@@ -62,8 +62,30 @@ export function agentMemoryRoutes({ agentMemory, memoryTags, activity }) {
     if (!t) return res.status(400).json({ ok: false, error: 'Không có mục bộ nhớ này — tải lại trang.' });
     try { agentMemory.remove(t, i, req.body?.old); log(req, 'agent_memory_delete', t, i); res.json({ ok: true, ...view() }); } catch (err) { fail(res, err, 'Chưa xoá được — thử lại.'); }
   });
+  /** Xoá nhiều mục: `{ items: [{ index, old }] }` — một lần ghi, một dòng Nhật ký. */
+  r.post('/admin/agent-memory/:target/bulk-delete', ...guard, (req, res) => {
+    const t = target(req);
+    if (!t) return res.status(400).json({ ok: false, error: 'Không có mục bộ nhớ này — tải lại trang.' });
+    try {
+      const n = agentMemory.removeMany(t, req.body?.items);
+      note(req, 'agent_memory_delete', `${TARGETS[t].label}, ${n} mục`);
+      res.json({ ok: true, ...view(), count: n });
+    } catch (err) { fail(res, err, 'Chưa xoá được — thử lại.'); }
+  });
 
   if (!memoryTags) return r;
+  /** Gắn cùng một loại cho nhiều mục: `{ items: [{ index, old }], tag }` — thay thẻ cũ nếu có. */
+  r.post('/admin/agent-memory/:target/bulk-tag', ...guard, (req, res) => {
+    const t = target(req);
+    if (!t) return res.status(400).json({ ok: false, error: 'Không có mục bộ nhớ này — tải lại trang.' });
+    const tag = String(req.body?.tag ?? '').trim();
+    if (!memoryTags.tags().some((x) => x.label === tag)) return res.status(400).json({ ok: false, error: 'Loại này không còn — tải lại trang.' });
+    try {
+      const n = agentMemory.editMany(t, req.body?.items, (e) => withTag(tag, splitTag(e).text));
+      note(req, 'agent_memory_edit', `${TARGETS[t].label}: gắn loại "${tag}" cho ${n} mục`);
+      res.json({ ok: true, ...view(), count: n });
+    } catch (err) { fail(res, err, 'Chưa gắn thẻ được — thử lại.'); }
+  });
   r.put('/admin/agent-memory-tags', ...guard, (req, res) => {
     try {
       const tags = memoryTags.saveTags(req.body?.tags, req.body?.renames);
