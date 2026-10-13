@@ -142,7 +142,7 @@ export function Overview({ me, status: s }) {
         facts=${[['RAM', host ? `${Math.round(host.ramPct)}%` : '—'], ['Ổ đĩa', host ? `${Math.round(host.diskPct)}%` : '—'], ['Đã chạy', host ? fmtUptime(host.uptimeSec) : '—']]}>
         ${cpu.length ? html`<${Dots} values=${bucket(cpu, 30)} max=${100} label="CPU 60 phút gần nhất" />` : null}
       <//>
-      <${Metric} tint="purple" icon="bot" title="Trợ lý AI" href=${admin && assistantOk ? '#/ai' : ''} label="Lượt gọi AI hôm nay"
+      <${Metric} tint="purple" icon="bot" title="Trợ lý AI" href="#/health" label="Lượt gọi AI hôm nay"
         big=${aiToday ? aiToday.calls.toLocaleString('vi-VN') : '0'} unit="lượt"
         pill=${assistantOk ? null : { kind: down ? 'warn' : 'danger', text: down ? 'Chưa rõ' : 'Chưa phản hồi' }}
         facts=${[['Trạng thái', assistantOk ? 'Sẵn sàng' : down ? 'Chưa rõ' : 'Chưa phản hồi'], ['Chữ vào', aiToday ? compact.format(aiToday.input) : '0'], ['Chữ ra', aiToday ? compact.format(aiToday.output) : '0']]}>

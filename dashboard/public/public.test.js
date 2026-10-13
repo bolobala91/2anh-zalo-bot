@@ -756,7 +756,7 @@ test('thanh bên: 5 nhóm theo mẫu; Second brain chỉ Quản trị và chỉ 
   assert.deepEqual(admin.map((g) => g.label), ['Tổng quan', 'Hội thoại', 'Dữ liệu', 'Hệ thống', 'Quản trị']);
   assert.deepEqual(admin[1].items.map((i) => i.text), ['Phiên chat', 'Liên hệ', 'Phân quyền Bot', 'Lịch hẹn']);
   assert.deepEqual(admin[2].items.map((i) => i.text), ['Trí nhớ', 'Kho tri thức', 'Insight nhóm', 'Second brain', 'Kết nối MCP']);
-  assert.deepEqual(admin[3].items.map((i) => i.text), ['Tài khoản Zalo', 'Agent', 'Khoá API & Model', 'Công cụ', 'Skill', 'Nhật ký', 'Thương hiệu', 'Sức khoẻ máy chủ', 'Bảo trì', 'Cấu hình']);
+  assert.deepEqual(admin[3].items.map((i) => i.text), ['Tài khoản Zalo', 'Tính cách AI', 'Khoá API & Model', 'Công cụ', 'Skill', 'Nhật ký', 'Thương hiệu', 'Sức khoẻ máy chủ', 'Bảo trì', 'Cấu hình']);
   const owner = visibleGroups('owner', { secondBrain: true });
   assert.deepEqual(owner.map((g) => g.label), ['Tổng quan', 'Hội thoại', 'Dữ liệu', 'Hệ thống']);
   assert.ok(!owner.flatMap((g) => g.items).some((i) => i.admin), 'Chủ bot không thấy mục admin nào');

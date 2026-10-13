@@ -61,7 +61,7 @@ export function Agent() {
     setBusy(key); setMsg({});
     try { take(await api(path, { method: key === 'restore' ? 'POST' : 'PUT', body })); setMsg({ ok }); } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
   }
-  const head = html`<${PageHead} title="Agent" sub="Bot suy nghĩ kỹ đến đâu và tính cách ra sao. Chỉ Quản trị." />`;
+  const head = html`<${PageHead} title="Tính cách AI" sub="Bot là ai, nói chuyện ra sao (SOUL) và suy nghĩ kỹ đến đâu. Chỉ Quản trị." />`;
   if (!data) return html`${head}<${Live} error=${msg.error} />${msg.error ? null : html`<${Spinner} />`}`;
   const dirty = soul !== data.soul.text;
   return html`${head}<${RestartBanner} version=${version} />

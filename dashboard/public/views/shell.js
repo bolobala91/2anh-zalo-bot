@@ -76,7 +76,7 @@ export const GROUPS = [
   ] },
   { label: 'Hệ thống', items: [
     { path: '/zalo', text: 'Tài khoản Zalo', icon: 'phone' },
-    { path: '/agent', text: 'Agent', icon: 'bot', admin: true },
+    { path: '/agent', text: 'Tính cách AI', icon: 'bot', admin: true },
     { path: '/ai', text: 'Khoá API & Model', icon: 'key', admin: true },
     { path: '/tools', text: 'Công cụ', icon: 'tool', admin: true },
     { path: '/skills', text: 'Skill', icon: 'book', admin: true },

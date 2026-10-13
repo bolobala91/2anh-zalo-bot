@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.27.1] — 2026-10-13
+
+### Sửa
+
+- Menu "Agent" đổi tên thành **"Tính cách AI"**: chỗ chọn tính cách (SOUL) và mức suy nghĩ của bot giờ dễ tìm.
+- Tổng quan: ô "Lượt gọi AI" dẫn tới Sức khoẻ máy chủ › Dùng AI theo ngày. Trước đây nó mở trang Khoá API & Model, và trang này nhớ tab xem lần trước nên hay nhảy vào "API miễn phí".
+
 ## [2.27.0] — 2026-10-13
 
 ### Thêm

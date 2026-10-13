@@ -48,7 +48,7 @@ function Models({ onRestart }) {
       ${c.testable ? html`<p><button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => test(c.id, c.model)}>${busy === c.id ? 'Đang thử…' : 'Thử'}</button></p>` : null}
       ${tests[c.id] ? html`<p class=${`ai-result ${tests[c.id].ok ? 'is-ok' : 'is-bad'}`} role="status">${resultText(tests[c.id])}</p>` : null}
     </section>`)}</div>
-    <p class="muted small"><${Icon} name="info" size=${14} /> Mức suy nghĩ và tính cách của bot nằm ở trang Agent. Giọng đọc, nghe giọng nói, tạo ảnh đặt bằng cấu hình trên máy chủ — nhờ người cài đặt nếu muốn đổi.</p>`;
+    <p class="muted small"><${Icon} name="info" size=${14} /> Mức suy nghĩ và tính cách của bot nằm ở trang Tính cách AI. Giọng đọc, nghe giọng nói, tạo ảnh đặt bằng cấu hình trên máy chủ — nhờ người cài đặt nếu muốn đổi.</p>`;
 }
 
 const hhmm = (ms) => new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(new Date(ms));
