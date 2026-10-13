@@ -509,3 +509,7 @@ def make_video_provider():
 def register(ctx) -> None:
     ctx.register_image_gen_provider(make_image_provider())
     ctx.register_video_gen_provider(make_video_provider())
+    # Dashboard chỉ hiện nguồn ChatGPT ở máy đã đăng nhập Codex: ghi trạng thái sau khi các backend lõi đã nạp xong.
+    timer = threading.Timer(30, codex_available)
+    timer.daemon = True
+    timer.start()

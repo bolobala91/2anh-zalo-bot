@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.30.1] — 2026-10-13
+
+### Sửa
+
+- **Tạo ảnh & video:** nguồn ChatGPT hiện ra ngay khi máy chủ đã đăng nhập Codex (trước đây phải đợi lần vẽ ảnh đầu tiên mới biết).
+
 ## [2.30.0] — 2026-10-13
 
 ### Thêm
