@@ -30,6 +30,8 @@ export const REGISTRY = [
   { key: 'VBEE_ACCESS_TOKEN', label: 'Giọng đọc — Vbee (token)', feature: 'Đọc tin nhắn thoại tiếng Việt' },
   { key: 'APIFY_TOKEN', label: 'Thu thập web — Apify', feature: 'Đọc Facebook, TikTok, trang khó đọc',
     test: (v) => ({ url: 'https://api.apify.com/v2/users/me', init: { headers: bearer(v) } }) },
+  { key: 'STALI_API_KEY', label: 'Tạo ảnh — Stali', feature: 'Vẽ/sửa ảnh khi được nhờ (GPT Image 2, 1.000đ/ảnh). Đặt khoá là bot dùng Stali để vẽ ảnh.',
+    test: (v) => ({ url: 'https://api.stali.vn/v1/models', init: { headers: bearer(v) } }) },
   { key: 'ANH_AI_KEY', label: 'Ảnh cho xưởng (2Anh Studio)', feature: 'Tạo ảnh minh hoạ trong slide, tài liệu' },
   { key: 'TELEGRAM_BOT_TOKEN', label: 'Telegram', feature: 'Kênh Telegram của trợ lý',
     test: (v) => ({ url: `https://api.telegram.org/bot${v}/getMe`, init: {} }) },
@@ -49,7 +51,11 @@ const INTERNAL = new Set(['VBEE_WEBHOOK_SECRET', 'OPENVIKING_API_KEY']);
 
 // Khoá chỉ được đọc lúc trợ lý khởi động (kết nối Telegram/Discord, cổng AI) — đổi xong vẫn phải khởi động lại.
 // Các khoá khác: plugin đồng bộ kho khoá vào bộ nhớ trợ lý trước mỗi lời gọi công cụ → có hiệu lực ngay.
-const NEEDS_RESTART = new Set([MODEL_KEY, 'TELEGRAM_BOT_TOKEN', 'DISCORD_BOT_TOKEN', 'CUSTOM_API_KEY']);
+// STALI_API_KEY: khoá thì có hiệu lực ngay, nhưng đặt/gỡ khoá đổi nguồn vẽ ảnh (image_gen.provider) — trợ lý chỉ
+// lập danh sách công cụ lúc tạo phiên, nên khởi động lại để mọi phiên thấy công cụ vẽ ảnh mới.
+const NEEDS_RESTART = new Set([MODEL_KEY, 'TELEGRAM_BOT_TOKEN', 'DISCORD_BOT_TOKEN', 'CUSTOM_API_KEY', 'STALI_API_KEY']);
+export const IMAGE_KEY = 'STALI_API_KEY';
+export const IMAGE_PROVIDER = 'stali';
 const MAX_POOL = 10;
 
 /** "••••a1b2" — chỉ 4 ký tự cuối, và chỉ khi khoá đủ dài để 4 ký tự không đoán được phần còn lại. */
@@ -95,6 +101,20 @@ export function createAiKeys({ envFile, configFile, poolFile = null, now = Date.
   function editable(key) {
     return key === MODEL_KEY || (SECRET_NAME.test(key) && !INTERNAL.has(key));
   }
+  // Nguồn vẽ ảnh trước khi chuyển sang Stali — gỡ khoá Stali thì trả lại đúng nguồn đó.
+  const imagePrevFile = () => (poolFile ? poolFile.replace(/key-pool\.json$/, 'image-provider-before-stali.json') : `${envFile}.image-provider-before-stali.json`);
+  /** Có khoá Stali → image_gen.provider = stali; gỡ khoá khi đang dùng Stali → trả nguồn cũ. */
+  function syncImageProvider(hasKey) {
+    const cur = String(readConfigYaml(configFile)?.image_gen?.provider ?? '');
+    if (hasKey) {
+      if (cur === IMAGE_PROVIDER) return;
+      writeJsonAtomic(imagePrevFile(), { provider: cur });
+      editConfigYaml(configFile, [{ path: ['image_gen', 'provider'], value: IMAGE_PROVIDER }]);
+    } else if (cur === IMAGE_PROVIDER) {
+      const prev = String(readJson(imagePrevFile(), null)?.provider ?? '');
+      editConfigYaml(configFile, [{ path: ['image_gen', 'provider'], value: prev === IMAGE_PROVIDER ? '' : prev }]);
+    }
+  }
   return {
     /** Danh sách cho giao diện: khoá quen thuộc trước (kể cả chưa đặt), rồi khoá bí mật khác đang có trong .env. */
     list() {
@@ -111,7 +131,7 @@ export function createAiKeys({ envFile, configFile, poolFile = null, now = Date.
           pool: entries, events: entries.length ? events(key) : [], restart: NEEDS_RESTART.has(key), poolable: key !== MODEL_KEY && Boolean(poolFile),
           testable: Boolean(known?.test) || key === MODEL_KEY || (Boolean(v) && v === String(modelConf().api_key || '')), editable: editable(key) };
       };
-      const known = REGISTRY.filter((r) => r.key === MODEL_KEY || Object.hasOwn(env, r.key) || ['TAVILY_API_KEY', 'CORE_API_KEY', 'GEMINI_API_KEY'].includes(r.key))
+      const known = REGISTRY.filter((r) => r.key === MODEL_KEY || Object.hasOwn(env, r.key) || ['TAVILY_API_KEY', 'CORE_API_KEY', 'GEMINI_API_KEY', IMAGE_KEY].includes(r.key))
         .map((r) => row(r.key, r));
       const others = Object.keys(env).filter((k) => !KNOWN.has(k) && !INTERNAL.has(k) && SECRET_NAME.test(k)).sort().map((k) => row(k, null));
       const more = REGISTRY.filter((r) => !known.some((x) => x.key === r.key)).map((r) => ({ key: r.key, label: r.label, feature: r.feature }));
@@ -140,6 +160,7 @@ export function createAiKeys({ envFile, configFile, poolFile = null, now = Date.
           }
           writePool(data);
         }
+        if (k === IMAGE_KEY) syncImageProvider(Boolean(v));
       }
       return true;
     },

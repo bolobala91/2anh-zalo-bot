@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAiKeys, maskTail, MODEL_KEY } from './ai-keys.js';
+import { readConfigYaml } from './config-yaml.js';
 
 const SECRET = 'tvly-abcdefghijklmnopqrstuvwxyz123456';
 const MODEL_SECRET = 'sk-9router-0123456789abcdefWXYZ';
@@ -49,6 +50,27 @@ test('thay / gỡ khoá: luật giá trị chặt, không ghi được khoá h�
   assert.throws(() => keys.set(MODEL_KEY, ''), /Không gỡ được/);
   keys.set(MODEL_KEY, 'sk-moi-0000111122223333');
   assert.match(readFileSync(configFile, 'utf8'), /api_key: sk-moi-0000111122223333/);
+  assert.match(readFileSync(configFile, 'utf8'), /default: 2anhPRO/, 'giữ nguyên phần khác');
+});
+
+test('khoá Stali: đặt khoá → bot vẽ ảnh bằng Stali; gỡ khoá → trả nguồn vẽ ảnh cũ; config chưa có mục image_gen vẫn được', (t) => {
+  const { keys, configFile } = setup(t);
+  const provider = () => readConfigYaml(configFile)?.image_gen?.provider;
+  assert.equal(keys.list().keys.find((r) => r.key === 'STALI_API_KEY').set, false, 'hiện sẵn ô khoá Stali');
+  assert.equal(keys.needsRestart('STALI_API_KEY'), true);
+  keys.set('STALI_API_KEY', 'sk-stali-0123456789abcdef');
+  assert.equal(provider(), 'stali', 'tạo mục image_gen khi chưa có');
+  keys.set('STALI_API_KEY', '');
+  assert.equal(provider(), '', 'gỡ khoá → về nguồn cũ (không có)');
+
+  writeFileSync(configFile, `${readFileSync(configFile, 'utf8').replace(/image_gen:[\s\S]*$/, '')}image_gen:\n  model: gpt-image-2-medium\n  provider: openai-codex\n`);
+  keys.set('STALI_API_KEY', 'sk-stali-0123456789abcdef');
+  assert.equal(provider(), 'stali');
+  assert.match(readFileSync(configFile, 'utf8'), /model: gpt-image-2-medium/, 'giữ model cũ');
+  keys.set('STALI_API_KEY', 'sk-stali-fedcba9876543210');
+  assert.equal(provider(), 'stali', 'đổi khoá không đụng nguồn');
+  keys.set('STALI_API_KEY', '');
+  assert.equal(provider(), 'openai-codex', 'gỡ khoá → trả lại openai-codex');
   assert.match(readFileSync(configFile, 'utf8'), /default: 2anhPRO/, 'giữ nguyên phần khác');
 });
 

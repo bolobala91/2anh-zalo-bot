@@ -75,6 +75,7 @@ const suites = [
   { label: 'test_zalo_reply_style.py', module: 'test_zalo_reply_style', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_memory_tags.py', module: 'test_zalo_memory_tags', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_freshness.py', module: 'test_zalo_freshness', cwd: REPO_ROOT, requires: 'import gateway' },
+  { label: 'test_zalo_stali_image.py', module: 'test_zalo_stali_image', cwd: REPO_ROOT, requires: 'import gateway, requests' },
   { label: 'test_zalo_model_command.py', module: 'test_zalo_model_command', cwd: REPO_ROOT, requires: 'import gateway, yaml' },
   { label: 'test_zalo_permissions.py', module: 'test_zalo_permissions', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_studio.py', module: 'test_zalo_studio', cwd: REPO_ROOT, requires: 'import gateway' },

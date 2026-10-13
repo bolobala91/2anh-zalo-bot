@@ -78,6 +78,12 @@ def register(ctx) -> None:
         ctx.register_hook("transform_tool_result", key_pool.on_tool_result)
     except Exception:  # cố hết sức — thiếu kho khoá thì công cụ vẫn chạy với khoá trong .env
         logger.warning("[zalo] không bật được kho khoá dự phòng", exc_info=True)
+    # Nguồn vẽ ảnh Stali cho image_generate (chọn bằng image_gen.provider: stali — dashboard tự đặt khi lưu khoá).
+    try:
+        from . import stali_image
+        stali_image.register(ctx)
+    except Exception:  # cố hết sức — thiếu thì image_generate dùng nguồn khác đã cấu hình
+        logger.warning("[zalo] không đăng ký được nguồn vẽ ảnh Stali", exc_info=True)
     # Phải chạy sau register_tools: định nghĩa dựa trên bộ công cụ lõi và
     # cần dọn bộ nhớ đệm của resolve_toolset sau khi registry đã đổi.
     define_platform_composite()

@@ -19,7 +19,7 @@ const PLAIN = /^[A-Za-z0-9._/][A-Za-z0-9._/@:+-]*$/;
 // Gồm cả các chuỗi YAML 1.1 mơ hồ (ngày, 0b/0o/0x, sáu mươi phân như 1:30, .inf/.nan): bộ đọc khác có thể hiểu thành số/ngày.
 const RESERVED = /^(true|false|yes|no|on|off|null|~|[-+]?(\d[\d_]*(\.\d*)?|\.\d+)([eE][-+]?\d+)?|0x[0-9a-f_]+|0b[01_]+|0o[0-7_]+|\d{4}-\d{2}-\d{2}.*|[-+]?\d[\d_]*(:[0-5]?\d)+(\.\d*)?|[-+]?\.inf|\.nan)$/i;
 // Đường dẫn được phép TẠO khối cha cấp 1 khi config.yaml chưa có (vd. VPS chưa có mục `agent:`).
-const CREATABLE_PARENT = new Set(['agent.reasoning_effort']);
+const CREATABLE_PARENT = new Set(['agent.reasoning_effort', 'image_gen.provider']);
 
 /** Giá trị → chữ YAML một dòng: chuỗi thường để trần, còn lại JSON (hợp lệ trong YAML); mảng thành [..]. */
 export function renderScalar(v) {

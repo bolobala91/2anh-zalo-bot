@@ -43,7 +43,7 @@ export function createAiModels({ configFile, envValue = () => null, ovConf = joi
         { id: 'fallback', label: 'Dự phòng khi model chính lỗi', model: str(c.fallback_model?.model || c.fallback_model || ''), via: str(c.fallback_provider || c.fallback_model?.provider || ''), note: 'Bot tự chuyển sang khi model chính không trả lời được.' },
         { id: 'tts', label: 'Giọng đọc (tin nhắn thoại)', model: ttsVoice(tts) ? `giọng ${ttsVoice(tts)}` : '', via: str(tts.provider), note: tts.fallback_provider ? `Dự phòng: ${str(tts.fallback_provider)}.` : '' },
         { id: 'stt', label: 'Nghe giọng nói', model: str(stt?.openai?.model || stt?.model || ''), via: stt.enabled === false ? 'đang tắt' : str(stt.provider), note: 'Chuyển tin nhắn thoại thành chữ.' },
-        { id: 'image', label: 'Tạo ảnh', model: str(img.model), via: str(img.provider), note: 'Khi được nhờ vẽ/tạo ảnh.' },
+        { id: 'image', label: 'Tạo ảnh', ...(img.provider === 'stali' ? { model: 'req/gpt-image-2', via: 'Stali API' } : { model: str(img.model), via: str(img.provider) }), note: 'Khi được nhờ vẽ/tạo ảnh.' },
         ...(studio ? [{ id: 'studio', label: 'Ảnh cho xưởng (slide, tài liệu)', model: '', via: studio, note: 'Ảnh minh hoạ trong sản phẩm của 2Anh Studio.' }] : []),
         ...(ov ? [{ id: 'memory', label: 'Trí nhớ tự học (OpenViking)', model: ov.vlm, via: ov.via, note: `Rút trí nhớ sau trò chuyện; tìm theo ý nghĩa bằng ${ov.embedding || 'embedding'}.` }] : []),
       ].filter((x) => x.id === 'main' || x.model || x.via);

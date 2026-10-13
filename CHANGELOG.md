@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.29.0] — 2026-10-13
+
+### Thêm
+
+- **Tạo ảnh bằng Stali API:** vào **Khoá API & Model › Khoá API**, dán khoá Stali (`sk-stali-...`) ở dòng **"Tạo ảnh — Stali"** là bot vẽ ảnh bằng GPT Image 2 qua Stali (1.000đ/ảnh): tạo ảnh từ mô tả, và sửa ảnh theo tối đa 4 ảnh tham chiếu. Có nút **Kiểm tra** khoá (không tốn tiền), khoá dự phòng tự đổi khi hết số dư. Gỡ khoá thì bot trả về nguồn vẽ ảnh trước đó. Lỗi báo rõ: khoá sai, hết số dư ví, giới hạn lượt. Khởi động lại trợ lý sau khi đặt khoá lần đầu.
+
 ## [2.28.1] — 2026-10-13
 
 ### Sửa
