@@ -6,6 +6,7 @@ import { html, Icon, Live, Notice, PageHead, SaveBar, Spinner, Toggle, onText } 
 import { fold } from '../fold.js';
 import { DmEditor, dmBadge } from './dm-permissions.js';
 import { FolderPeople } from './folder-people.js';
+import { toggleAll } from './multi-pick.js';
 import { FolderChip, FolderColorPicker, FolderFilter, colorOf, inFolderFilter } from './folder-ui.js';
 import { StudioBox, applyPolicy, parseQuota, studioComplete } from './studio-box.js';
 import { QuotaEditor, quotaBadge } from './studio-quota.js';
@@ -19,7 +20,10 @@ export const CALL_KEY = 'call';
 // Thư mục nhóm: khoá chọn `f:<mã>` (mã nhóm Zalo luôn là số nên không trùng).
 export const FOLDER_PREFIX = 'f:';
 const pick = (s) => ({ active: s.active, replyOnlyTagged: s.replyOnlyTagged, features: { ...s.features },
-  studio: { ...(s.studio || {}) }, studioQuota: s.studioQuota ?? null });
+  studio: { ...(s.studio || {}) }, studioQuota: s.studioQuota ?? null, imageQuota: s.imageQuota ?? null, videoQuota: s.videoQuota ?? null });
+// Hạn mức theo nhóm/thư mục: lượt xưởng, ảnh AI, video AI (null = theo lớp trên).
+const QUOTA_KEYS = ['studioQuota', 'imageQuota', 'videoQuota'];
+const sameQuotas = (a, b) => QUOTA_KEYS.every((k) => (a[k] ?? null) === (b[k] ?? null));
 const sameBools = (a = {}, b = {}) => Object.keys({ ...a, ...b }).every((k) => a[k] === b[k]);
 const quotaText = (v) => (v === null || v === undefined ? '' : String(v));
 
@@ -59,12 +63,12 @@ export function mergeGroups(groups, perms) {
 
 export function sameSettings(a, b) {
   return a.active === b.active && a.replyOnlyTagged === b.replyOnlyTagged && sameBools(a.features, b.features)
-    && sameBools(a.studio, b.studio) && (a.studioQuota ?? null) === (b.studioQuota ?? null);
+    && sameBools(a.studio, b.studio) && sameQuotas(a, b);
 }
 
 /** Số thay đổi của một nhóm/mặc định: Hoạt động, Chỉ trả lời khi được tag, từng tính năng, từng nút xưởng, số lượt. */
 export function changeCount(a, b) {
-  let n = (a.active !== b.active) + (a.replyOnlyTagged !== b.replyOnlyTagged) + ((a.studioQuota ?? null) !== (b.studioQuota ?? null));
+  let n = (a.active !== b.active) + (a.replyOnlyTagged !== b.replyOnlyTagged) + QUOTA_KEYS.filter((k) => (a[k] ?? null) !== (b[k] ?? null)).length;
   for (const k of Object.keys({ ...a.features, ...b.features })) if (a.features[k] !== b.features[k]) n += 1;
   for (const k of Object.keys({ ...a.studio, ...b.studio })) if (a.studio?.[k] !== b.studio?.[k]) n += 1;
   return n;
@@ -74,7 +78,7 @@ export function changeCount(a, b) {
 export function settingsPayload(d, { isGroup, studioFeatures = [], policy }) {
   const body = { active: d.active, replyOnlyTagged: d.replyOnlyTagged, features: { ...d.features } };
   if (studioComplete(d.studio, studioFeatures)) body.studio = applyPolicy(d.studio, policy);
-  if (isGroup) body.studioQuota = d.studioQuota ?? null;
+  if (isGroup) for (const k of QUOTA_KEYS) body[k] = d[k] ?? null;
   return body;
 }
 
@@ -102,15 +106,20 @@ export function staysListed(id, perms, groups) {
 }
 
 /** Sửa quyền một nhóm/mặc định. `head=false` khi nhúng vào bảng Quyền của Phiên chat (bảng đã có tiêu đề). */
-export function Editor({ target, value, defaults, features, studioFeatures, studioPolicy, defaultQuota, onSaved, onBack, onDirty, head = true,
+export function Editor({ target, value, defaults, features, studioFeatures, studioPolicy, defaultQuota, mediaDefaults = null, onSaved, onBack, onDirty, head = true,
   path: savePath = null, baseLabel = 'Dùng mặc định', note = null }) {
   const isGroup = target.id !== DEFAULTS_KEY;
   const [draft, setDraft] = useState(() => pick(value));
   const [qText, setQText] = useState(() => quotaText(value.studioQuota));
+  const [mText, setMText] = useState(() => ({ imageQuota: quotaText(value.imageQuota), videoQuota: quotaText(value.videoQuota) }));
+  const mQuota = { imageQuota: parseQuota(mText.imageQuota), videoQuota: parseQuota(mText.videoQuota) };
+  const mError = mQuota.imageQuota.error || mQuota.videoQuota.error;
+  const resetMedia = (v) => setMText({ imageQuota: quotaText(v.imageQuota), videoQuota: quotaText(v.videoQuota) });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
   const quota = parseQuota(qText);
-  const dirty = !sameSettings(draft, value) || quotaText(draft.studioQuota) !== qText.trim();
+  const dirty = !sameSettings(draft, value) || quotaText(draft.studioQuota) !== qText.trim()
+    || ['imageQuota', 'videoQuota'].some((k) => quotaText(draft[k]) !== mText[k].trim());
   useEffect(() => { onDirty(dirty); }, [dirty]);
   useEffect(() => () => onDirty(false), []);
   const set = (patch) => { setDraft((d) => ({ ...d, ...patch })); setMsg({}); };
@@ -120,6 +129,7 @@ export function Editor({ target, value, defaults, features, studioFeatures, stud
     e.preventDefault();
     if (busy || !dirty) return;
     if (quota.error) { setMsg({ error: `Số lượt xưởng: ${quota.error} Sửa ô đó rồi lưu lại, hoặc để trống để theo mặc định.` }); return; }
+    if (mError) { setMsg({ error: `Số ảnh/video AI: ${mError} Sửa ô đó rồi lưu lại, hoặc để trống để theo mặc định.` }); return; }
     setBusy(true); setMsg({});
     try {
       const path = savePath || (isGroup ? `/api/permissions/groups/${encodeURIComponent(target.id)}` : '/api/permissions/defaults');
@@ -141,7 +151,7 @@ export function Editor({ target, value, defaults, features, studioFeatures, stud
         ? 'Chỉ áp cho thành viên trong nhóm này. Chủ nhân bot luôn dùng được mọi tính năng.'
         : 'Áp cho mọi nhóm. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Chủ nhân bot luôn dùng được mọi tính năng; tin nhắn riêng chỉnh ở mục Nhắn riêng.')}</p>
       ${isGroup ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy || sameSettings(draft, defaults)}
-        onClick=${() => { set(pick(defaults)); setQText(quotaText(defaults.studioQuota)); }}>${baseLabel}</button>` : null}
+        onClick=${() => { set(pick(defaults)); setQText(quotaText(defaults.studioQuota)); resetMedia(defaults); }}>${baseLabel}</button>` : null}
     </div>
     <fieldset class="perm-box">
       <legend>Cách bot trả lời</legend>
@@ -166,9 +176,11 @@ export function Editor({ target, value, defaults, features, studioFeatures, stud
       onChange=${(studio) => set({ studio })} policy=${studioPolicy} quota=${qText} defaultQuota=${defaultQuota} quotaError=${quota.error}
       quotaHint=${isGroup ? `Để trống để theo mặc định (${defaultQuota}); 0 = không ai trong nhóm được nhờ, trừ người có hạn mức riêng (đặt ở mục Hạn mức xưởng, thắng số của nhóm).` : ''}
       onQuota=${isGroup ? (text) => { setQText(text); setMsg({}); const q = parseQuota(text); if (!q.error) set({ studioQuota: q.value }); } : null}
+      media=${isGroup ? mText : null} mediaDefaults=${mediaDefaults || { image: 5, video: 1 }} mediaErrors=${{ imageQuota: mQuota.imageQuota.error, videoQuota: mQuota.videoQuota.error }}
+      onMedia=${isGroup ? (k, text) => { setMText((m) => ({ ...m, [k]: text })); setMsg({}); const q = parseQuota(text); if (!q.error) set({ [k]: q.value }); } : null}
       note=${isGroup ? '' : `Số lượt mỗi người mỗi ngày chỉnh ở mục Hạn mức xưởng (đang là ${defaultQuota}).`} />
-    <${SaveBar} count=${changeCount(draft, value) || (dirty ? 1 : 0)} busy=${busy} canSave=${dirty && !quota.error} msg=${msg}
-      onUndo=${() => { setDraft(pick(value)); setQText(quotaText(value.studioQuota)); setMsg({}); }} />
+    <${SaveBar} count=${changeCount(draft, value) || (dirty ? 1 : 0)} busy=${busy} canSave=${dirty && !quota.error && !mError} msg=${msg}
+      onUndo=${() => { setDraft(pick(value)); setQText(quotaText(value.studioQuota)); resetMedia(value); setMsg({}); }} />
   </form>`;
 }
 
@@ -217,7 +229,11 @@ function FolderEditor({ folder, perms, list, admin, onSaved, onBack, onDirty, on
       <summary><span>Nhóm trong thư mục</span><span class="muted perm-box-sum">· ${picked.size} nhóm${membersDirty ? ' (chưa lưu)' : ''}</span></summary>
       <p class="muted small">Mỗi nhóm thuộc một thư mục — chọn nhóm đang ở thư mục khác sẽ chuyển nó sang đây.</p>
       <label for="folder-q" class="sr-only">Lọc nhóm theo tên</label>
-      <input id="folder-q" type="search" maxlength="100" placeholder="Lọc nhóm theo tên" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
+      <div class="multi-pick-bar">
+        <input id="folder-q" type="search" maxlength="100" placeholder="Lọc nhóm theo tên" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
+        <button type="button" class="btn btn-ghost btn-sm" disabled=${!shown.length}
+          onClick=${() => setPicked(toggleAll(picked, shown.map((g) => ({ uid: g.id }))))}>${shown.length && shown.every((g) => picked.has(g.id)) ? 'Bỏ chọn' : `Chọn tất cả${q.trim() ? ' (đang lọc)' : ''}`}</button>
+      </div>
       <ul class="folder-members">${shown.map((g) => html`<li key=${g.id}><label>
         <input type="checkbox" checked=${picked.has(g.id)} onChange=${() => toggle(g.id)} />
         <span>${g.name}</span>${g.folder && g.folder.id !== folder.id ? html`<small class="muted"> · đang ở "${g.folder.name}"</small>` : null}
@@ -247,7 +263,7 @@ function FolderEditor({ folder, perms, list, admin, onSaved, onBack, onDirty, on
     <h3 class="folder-settings-head">Cài đặt chung của thư mục</h3>
     <${Editor} key=${`fs-${folder.id}`} head=${false} target=${{ id: `${FOLDER_PREFIX}${folder.id}`, name: folder.name, members: null }}
       value=${pick(folder)} defaults=${pick(perms.defaults)} features=${perms.features} studioFeatures=${perms.studioFeatures || []}
-      studioPolicy=${perms.studioPolicy} defaultQuota=${perms.studio?.quota ?? 3} path=${`${base}/settings`}
+      studioPolicy=${perms.studioPolicy} defaultQuota=${perms.studio?.quota ?? 3} mediaDefaults=${perms.studio} path=${`${base}/settings`}
       note=${`Mọi nhóm trong thư mục thừa hưởng các cài đặt này ngay khi lưu, kể cả nhóm thêm vào sau; người trong thư mục dùng các tính năng này khi nhắn riêng (bật bot, chỉ trả lời khi tag chỉ áp cho nhóm). Nhóm/người chỉnh riêng mục nào thì mục đó của họ thắng. Chủ nhân bot luôn dùng được mọi tính năng.`}
       onSaved=${(r) => { onSaved(r); return true; }} onDirty=${onDirty} onBack=${onBack} />
   </div>`;
@@ -409,7 +425,7 @@ export function Permissions({ me }) {
           : target
           ? html`<${Editor} key=${target.id} target=${target} value=${pick(target)}
               defaults=${pick(target.folder ? baseOfGroup(perms, target.id) : perms.defaults)} features=${perms.features} studioFeatures=${perms.studioFeatures || []} studioPolicy=${perms.studioPolicy}
-              defaultQuota=${perms.studio?.quota ?? 3} onSaved=${onSaved} onDirty=${setDirty} onBack=${() => choose(null)}
+              defaultQuota=${perms.studio?.quota ?? 3} mediaDefaults=${perms.studio} onSaved=${onSaved} onDirty=${setDirty} onBack=${() => choose(null)}
               baseLabel=${target.folder ? 'Theo thư mục' : 'Dùng mặc định'}
               note=${target.folder ? `Nhóm thuộc thư mục "${target.folder.name}": mục nào chưa chỉnh riêng thì theo thư mục. Chủ nhân bot luôn dùng được mọi tính năng.` : null} />`
           : html`<p class="muted chat-empty">Chọn "Nhắn riêng", "Hạn mức xưởng", "Mặc định" hoặc một nhóm bên trái để chỉnh.</p>`}

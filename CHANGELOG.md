@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.32.0] — 2026-10-13
+
+### Thêm
+
+- **Vẽ ảnh AI, tạo video AI trong Phân quyền:** hộp Xưởng tạo sản phẩm có thêm hai nút **"Vẽ ảnh AI"** và **"Tạo video AI"** (mặc định tắt vì tốn tiền), bật được theo mặc định, thư mục, từng nhóm và nhắn riêng. Mỗi người có **hạn mức số ảnh và số video mỗi ngày** (mặc định 5 ảnh, 1 video) — chỉnh ở Hạn mức xưởng, trong hộp Xưởng của nhóm/thư mục, và riêng từng người. Vẽ hỏng thì trả lại lượt. Người trong nhóm nhờ bot vẽ thì ảnh gửi ngay vào nhóm; video chạy nền rồi tự gửi. Ảnh mẫu chỉ nhận link https hoặc ảnh vừa gửi trong cuộc trò chuyện. Chủ nhân không giới hạn.
+- **Báo về tin riêng khi có người tag chủ nhân trong nhóm:** "🔔 Tên (UID …) nhắc bạn trong nhóm «…» lúc 21:05" kèm nội dung tin. Không báo khi chủ nhân hay bot tự gửi, không tính @All, mỗi tin một lần, tối đa 30 thông báo/10 phút. Bật/tắt ở **Cấu hình › Trả lời** — có hiệu lực ngay; nhiều bot cùng ở một nhóm thì chỉ bật ở một bot.
+- **Chọn nhiều cùng lúc:** thêm người vào thư mục, vào danh sách nhắn riêng, vào hạn mức xưởng giờ là danh sách có ô tích + ô lọc + **"Chọn tất cả (đang lọc)"**; danh sách nhóm của thư mục cũng có nút chọn/bỏ chọn tất cả theo bộ lọc.
+
 ## [2.31.0] — 2026-10-13
 
 ### Đổi

@@ -8,7 +8,7 @@ import { createPermissionsStore, FEATURE_KEYS, InvalidPermissions, makeDmEnv, ma
 
 const G = '2054797107487294899';
 const allOn = () => Object.fromEntries(FEATURE_KEYS.map((k) => [k, true]));
-const studioOff = () => ({ studioSlides: false, studioDocs: false, studioExams: false, studioVideo: false });
+const studioOff = () => Object.fromEntries(STUDIO_FEATURES.map((f) => [f.key, false]));
 const settings = (over = {}, features = {}) => ({ active: true, replyOnlyTagged: true, ...over, features: { ...allOn(), ...features } });
 
 function setup(t, opts = {}) {
@@ -261,12 +261,12 @@ test('makeDmEnv: config.yaml thắng .env; "open" → mọi người; cờ mở 
 // --- Xưởng tạo sản phẩm (spec §17) ---
 const studioOn = (over = {}) => ({ ...studioOff(), ...over });
 
-test('xưởng: chưa có gì → 4 nút tắt, 3 lượt mỗi ngày; danh sách nút khớp STUDIO_FEATURES của plugin Python', (t) => {
+test('xưởng: chưa có gì → 6 nút tắt, 3 lượt mỗi ngày; danh sách nút khớp STUDIO_FEATURES của plugin Python', (t) => {
   const s = setup(t);
   const v = s.store.get();
   assert.deepEqual(v.defaults.studio, studioOff());
   assert.deepEqual(v.dm.studio, studioOff());
-  assert.deepEqual(v.studio, { quota: 3, people: [] });
+  assert.deepEqual(v.studio, { quota: 3, image: 5, video: 1, people: [] });
   const py = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'hermes-plugin', 'zalo_tools', 'group_permissions.py'), 'utf8');
   const tuple = /^STUDIO_FEATURES = \(([^)]*)\)/m.exec(py)[1];
   assert.deepEqual([...tuple.matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]), STUDIO_FEATURES.map((f) => f.key));
@@ -302,7 +302,7 @@ test('xưởng: bản giao diện cũ (không gửi studio/studioQuota) lưu m�
   assert.equal(v.groups[G].studioQuota, 9);
   assert.deepEqual(v.dm.studio, studioOn({ studioSlides: true }));
   assert.deepEqual(v.dm.people[0].studio, studioOn({ studioDocs: true }), 'người có tính năng riêng giữ nút xưởng riêng');
-  assert.deepEqual(v.studio, { quota: 4, people: [{ uid: P2, name: 'Thầy Nam', quota: 10 }] });
+  assert.deepEqual(v.studio, { quota: 4, image: 5, video: 1, people: [{ uid: P2, name: 'Thầy Nam', quota: 10, image: null, video: null }] });
 });
 
 test('xưởng: normalize giữ mục studio hợp lệ, bỏ rác; parseSettings/parseStudio từ chối số lượt sai', () => {
@@ -321,7 +321,7 @@ test('xưởng: normalize giữ mục studio hợp lệ, bỏ rác; parseSetting
     assert.throws(() => parseStudio(bad), (e) => e instanceof InvalidPermissions && /—/.test(e.message), JSON.stringify(bad));
   }
   assert.deepEqual(parseStudio({ quota: 0, people: [{ uid: P1, quota: 2 }, { uid: P1, quota: 9 }] }),
-    { quota: 0, people: [{ uid: P1, name: '', quota: 2 }] });
+    { quota: 0, image: 5, video: 1, people: [{ uid: P1, name: '', quota: 2, image: null, video: null }] });
 });
 
 test('xưởng: chính sách máy chủ — Windows video tắt; Linux theo studio-policy.json của plugin, thiếu/hỏng = tắt', (t) => {

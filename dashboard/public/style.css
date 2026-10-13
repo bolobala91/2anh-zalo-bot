@@ -1321,3 +1321,13 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .gen-video-row .field { flex: 1 1 200px; margin: 0; }
 .media-engines + h3, .gen-video + p { margin-top: 18px; }
 .media-key + h3 { margin-top: 6px; }
+
+/* Chọn nhiều cùng lúc (người vào thư mục, danh sách nhắn riêng, hạn mức xưởng; nhóm vào thư mục). */
+.multi-pick { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.multi-pick-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.multi-pick-bar input { flex: 1 1 220px; min-width: 0; }
+.multi-pick-list { list-style: none; margin: 0; padding: 4px 8px; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+.multi-pick-list li { padding: 2px 0; }
+.multi-pick-item { display: flex; align-items: center; gap: 8px; min-height: 36px; cursor: pointer; }
+.multi-pick-item input { width: 18px; height: 18px; flex: none; }
+.multi-pick > .btn { align-self: flex-start; }

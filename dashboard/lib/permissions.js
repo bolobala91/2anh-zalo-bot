@@ -36,6 +36,8 @@ export const STUDIO_FEATURES = [
   { key: 'studioDocs', label: 'Văn bản và giáo án', hint: 'Giáo án 5512, văn bản hành chính Nghị định 30, văn bản Đoàn, văn bản Đảng — tệp Word' },
   { key: 'studioExams', label: 'Đề thi, SKKN, trò chơi, thí nghiệm ảo', hint: 'Đề kiểm tra, đề KHTN tiếng Anh, sáng kiến kinh nghiệm, trò chơi (trắc nghiệm, ghép đôi, ô chữ, vòng quay, thẻ lật, đếm ngược), thí nghiệm ảo' },
   { key: 'studioVideo', label: 'Video', hint: 'Video giải thích (viết tay, cắt dán, Vox có ảnh AI) và video bài giảng từ slide, tối đa 3 phút, 720p. Máy chủ chạy nặng vài phút mỗi video' },
+  { key: 'studioImage', label: 'Vẽ ảnh AI', hint: 'Nhờ bot vẽ hoặc sửa ảnh theo mô tả — dùng nguồn ở Khoá API & Model › Tạo ảnh & video, tốn tiền mỗi ảnh' },
+  { key: 'studioAIVideo', label: 'Tạo video AI', hint: 'Nhờ bot tạo video ngắn từ mô tả hoặc ảnh (Stali, vài nghìn đồng mỗi video); xong bot tự gửi vào cuộc trò chuyện' },
 ];
 /**
  * Chính sách cài đặt (spec §17.6): máy Windows không có hộp cát của hệ điều hành nên video luôn tắt (plugin ép tắt;
@@ -56,6 +58,12 @@ export function studioPolicy(platform = process.platform, policyFile = '') {
   return { videoBlocked: true, note: UNKNOWN_NOTE };
 }
 export const DEFAULT_STUDIO_QUOTA = 3;
+// Vẽ ảnh AI / tạo video AI: số ảnh, số video mỗi người mỗi ngày (theo lớp như số lượt xưởng).
+export const DEFAULT_IMAGE_QUOTA = 5;
+export const DEFAULT_VIDEO_QUOTA = 1;
+const QUOTA_KEYS = ['studioQuota', 'imageQuota', 'videoQuota'];
+const noQuotas = () => ({ studioQuota: null, imageQuota: null, videoQuota: null });
+const quotasOf = (raw) => Object.fromEntries(QUOTA_KEYS.map((k) => [k, raw?.[k] ?? null]));
 export const MAX_STUDIO_QUOTA = 50;
 const MAX_STUDIO_PEOPLE = 500;
 const SWITCHES = ['active', 'replyOnlyTagged'];
@@ -167,7 +175,7 @@ function layer(raw) {
   for (const k of SWITCHES) if (typeof raw[k] === 'boolean') out[k] = raw[k];
   const features = pickBools(raw.features, [...FEATURE_KEYS, ...STUDIO_KEYS]);
   if (Object.keys(features).length) out.features = features;
-  if (isQuota(raw.studioQuota)) out.studioQuota = raw.studioQuota;
+  for (const k of QUOTA_KEYS) if (isQuota(raw[k])) out[k] = raw[k];
   return out;
 }
 
@@ -175,11 +183,12 @@ function layer(raw) {
 function normalizeStudio(raw) {
   if (!isObj(raw)) return null;
   const out = { people: {} };
-  if (isQuota(raw.quota)) out.quota = raw.quota;
+  for (const k of ['quota', 'image', 'video']) if (isQuota(raw[k])) out[k] = raw[k];
   for (const [uid, entry] of Object.entries(isObj(raw.people) ? raw.people : {})) {
     if (!GROUP_ID.test(uid) || !isObj(entry) || !isQuota(entry.quota)) continue;
     const name = tidy(entry.name, MAX_PERSON_NAME);
-    out.people[uid] = name ? { name, quota: entry.quota } : { quota: entry.quota };
+    out.people[uid] = { ...(name ? { name } : {}), quota: entry.quota,
+      ...(isQuota(entry.image) ? { image: entry.image } : {}), ...(isQuota(entry.video) ? { video: entry.video } : {}) };
   }
   return out;
 }
@@ -250,9 +259,18 @@ function parseStudioSwitches(raw, what) {
   return Object.fromEntries(STUDIO_KEYS.map((k) => [k, raw[k]]));
 }
 
-/** Thân PUT /api/permissions/studio: `{ quota, people: [{ uid, name?, quota }] }`. */
+/** Ô hạn mức tuỳ chọn: thiếu → giá trị `fallback`; null → theo lớp trên; còn lại phải là số 0–50. */
+const optQuota = (v, what, fallback) => {
+  if (v === undefined) return fallback;
+  if (v === null || isQuota(v)) return v;
+  throw new InvalidPermissions(`${what} là số nguyên từ 0 đến ${MAX_STUDIO_QUOTA}, hoặc để trống — sửa rồi lưu lại.`);
+};
+
+/** Thân PUT /api/permissions/studio: `{ quota, image?, video?, people: [{ uid, name?, quota, image?, video? }] }`. */
 export function parseStudio(body) {
   if (!isObj(body) || !isQuota(body.quota)) throw new InvalidPermissions(`Số lượt mặc định là số nguyên từ 0 đến ${MAX_STUDIO_QUOTA} — sửa rồi lưu lại.`);
+  const image = optQuota(body.image, 'Số ảnh AI mặc định', DEFAULT_IMAGE_QUOTA) ?? DEFAULT_IMAGE_QUOTA;
+  const video = optQuota(body.video, 'Số video AI mặc định', DEFAULT_VIDEO_QUOTA) ?? DEFAULT_VIDEO_QUOTA;
   if (!Array.isArray(body.people)) throw new InvalidPermissions('Danh sách người không hợp lệ — tải lại trang rồi thử lại.');
   if (body.people.length > MAX_STUDIO_PEOPLE) throw new InvalidPermissions(`Hạn mức riêng tối đa ${MAX_STUDIO_PEOPLE} người — bỏ bớt rồi lưu lại.`);
   const seen = new Set();
@@ -265,9 +283,10 @@ export function parseStudio(body) {
     if (!isQuota(p.quota)) throw new InvalidPermissions(`Số lượt của một người là số nguyên từ 0 đến ${MAX_STUDIO_QUOTA} — sửa rồi lưu lại.`);
     if (seen.has(uid)) continue;
     seen.add(uid);
-    people.push({ uid, name: tidy(p.name, MAX_PERSON_NAME), quota: p.quota });
+    people.push({ uid, name: tidy(p.name, MAX_PERSON_NAME), quota: p.quota,
+      image: optQuota(p.image, 'Số ảnh AI của một người', null), video: optQuota(p.video, 'Số video AI của một người', null) });
   }
-  return { quota: body.quota, people };
+  return { quota: body.quota, image, video, people };
 }
 
 /**
@@ -307,11 +326,13 @@ export function parseSettings(body) {
   const base = parseSettings9(body);
   const studio = parseStudioSwitches(body.studio, '');
   if (studio) base.studio = studio;
-  if (body.studioQuota !== undefined) {
-    if (body.studioQuota !== null && !isQuota(body.studioQuota)) {
-      throw new InvalidPermissions(`Số lượt xưởng là số nguyên từ 0 đến ${MAX_STUDIO_QUOTA}, hoặc để trống để theo mặc định — sửa rồi lưu lại.`);
+  const what = { studioQuota: 'Số lượt xưởng', imageQuota: 'Số ảnh AI mỗi ngày', videoQuota: 'Số video AI mỗi ngày' };
+  for (const k of QUOTA_KEYS) {
+    if (body[k] === undefined) continue;
+    if (body[k] !== null && !isQuota(body[k])) {
+      throw new InvalidPermissions(`${what[k]} là số nguyên từ 0 đến ${MAX_STUDIO_QUOTA}, hoặc để trống để theo mặc định — sửa rồi lưu lại.`);
     }
-    base.studioQuota = body.studioQuota;
+    base[k] = body[k];
   }
   return base;
 }
@@ -395,8 +416,8 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
 
   /** Hạn mức xưởng: mặc định mỗi người mỗi ngày + danh sách người có hạn mức riêng. */
   const studioView = (st) => ({
-    quota: st?.quota ?? DEFAULT_STUDIO_QUOTA,
-    people: Object.entries(st?.people || {}).map(([uid, p]) => ({ uid, name: p.name || '', quota: p.quota })),
+    quota: st?.quota ?? DEFAULT_STUDIO_QUOTA, image: st?.image ?? DEFAULT_IMAGE_QUOTA, video: st?.video ?? DEFAULT_VIDEO_QUOTA,
+    people: Object.entries(st?.people || {}).map(([uid, p]) => ({ uid, name: p.name || '', quota: p.quota, image: p.image ?? null, video: p.video ?? null })),
   });
 
   /** Thư mục chứa nhóm (id) hoặc null. */
@@ -405,17 +426,18 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
   const baseOf = (data, defaults, groupId) => {
     const fid = folderOf(data, groupId);
     const f = fid ? data.folders[fid] : null;
-    return f ? { ...merge(defaults, f), studioQuota: f.studioQuota ?? null, folder: fid } : { ...defaults, studioQuota: null, folder: null };
+    return f ? { ...merge(defaults, f), ...quotasOf(f), folder: fid } : { ...defaults, ...noQuotas(), folder: null };
   };
 
   const view = ({ data, exists, corrupt }) => {
     const defaults = merge(builtin(), data.defaults);
     const groups = Object.fromEntries(Object.entries(data.groups).map(([id, g]) => {
       const base = baseOf(data, defaults, id);
-      return [id, { name: g.name || '', custom: true, folder: base.folder, ...merge(base, g), studioQuota: g.studioQuota ?? base.studioQuota }];
+      return [id, { name: g.name || '', custom: true, folder: base.folder, ...merge(base, g),
+        ...Object.fromEntries(QUOTA_KEYS.map((k) => [k, g[k] ?? base[k]])) }];
     }));
     const folders = Object.entries(data.folders || {}).map(([id, f], i) => ({
-      id, name: f.name, color: f.color || FOLDER_COLORS[i % FOLDER_COLORS.length], groups: [...f.groups], people: (f.people || []).map((p) => ({ uid: p.uid, name: p.name || '' })), ...merge(defaults, f), studioQuota: f.studioQuota ?? null,
+      id, name: f.name, color: f.color || FOLDER_COLORS[i % FOLDER_COLORS.length], groups: [...f.groups], people: (f.people || []).map((p) => ({ uid: p.uid, name: p.name || '' })), ...merge(defaults, f), ...quotasOf(f),
     }));
     return { exists, corrupt, defaults, groups, folders, dm: dmView(data.dm), studio: studioView(data.studio), toolsOff: data.tools?.off || [] };
   };
@@ -428,9 +450,11 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
     const studio = settings.studio ?? { ...base.studio, ...pickBools(prev.features, STUDIO_KEYS) };
     for (const k of STUDIO_KEYS) if (studio[k] !== base.studio[k]) features[k] = studio[k];
     if (Object.keys(features).length) entry.features = features;
-    const quota = settings.studioQuota === undefined ? prev.studioQuota ?? null : settings.studioQuota;
-    if (quota !== null && quota !== base.studioQuota) entry.studioQuota = quota;
-    const changed = [...SWITCHES.filter((k) => settings[k] !== base[k]), ...Object.keys(features), ...('studioQuota' in entry ? ['studioQuota'] : [])];
+    for (const k of QUOTA_KEYS) {
+      const quota = settings[k] === undefined ? prev[k] ?? null : settings[k];
+      if (quota !== null && quota !== base[k]) entry[k] = quota;
+    }
+    const changed = [...SWITCHES.filter((k) => settings[k] !== base[k]), ...Object.keys(features), ...QUOTA_KEYS.filter((k) => k in entry)];
     return { entry, changed };
   };
 
@@ -561,7 +585,7 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       const { data } = read();
       const folder = folderOrThrow(data, fid);
       seedReplyOnlyTagged(data);
-      const defaults = { ...merge(builtin(), data.defaults), studioQuota: null };
+      const defaults = { ...merge(builtin(), data.defaults), ...noQuotas() };
       const { entry, changed } = diffLayer(settings, defaults, folder);
       data.folders[fid] = { name: folder.name, ...(folder.color ? { color: folder.color } : {}), groups: folder.groups, ...(folder.people?.length ? { people: folder.people } : {}), ...entry };
       write(data);
@@ -619,8 +643,9 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
     setStudio(settings) {
       const { data } = read();
       data.studio = {
-        quota: settings.quota,
-        people: Object.fromEntries(settings.people.map((p) => [p.uid, p.name ? { name: p.name, quota: p.quota } : { quota: p.quota }])),
+        quota: settings.quota, image: settings.image ?? DEFAULT_IMAGE_QUOTA, video: settings.video ?? DEFAULT_VIDEO_QUOTA,
+        people: Object.fromEntries(settings.people.map((p) => [p.uid, { ...(p.name ? { name: p.name } : {}), quota: p.quota,
+          ...(isQuota(p.image) ? { image: p.image } : {}), ...(isQuota(p.video) ? { video: p.video } : {}) }])),
       };
       write(data);
       return view({ data, exists: true, corrupt: false });

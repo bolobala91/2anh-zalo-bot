@@ -33,6 +33,9 @@ class RecipesTest(unittest.TestCase):
             self.assertTrue(recipe.outputs, kind)
             self.assertTrue(all(o.startswith(".") for o in recipe.outputs), kind)
         for switch in gp.STUDIO_FEATURES:
+            if switch in gp.MEDIA_FEATURES:   # vẽ ảnh / video AI đi qua zalo_media, không qua công thức xưởng
+                self.assertFalse(recipes.kinds_for(switch), switch)
+                continue
             self.assertTrue(recipes.kinds_for(switch), f"nút {switch} chưa có loại nào")
 
     def test_cli_arguments_are_fixed_and_only_reference_the_project_folder(self):

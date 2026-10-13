@@ -4,6 +4,7 @@ import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon } from '../ui.js';
 import { knownNames } from './dm-permissions.js';
+import { MultiPick } from './multi-pick.js';
 
 const UID = /^[1-9]\d{14,21}$/;
 
@@ -18,7 +19,6 @@ export function FolderPeople({ folder, folders, admin, busy, run, base }) {
   const [people, setPeople] = useState(folder.people || []);
   const [known, setKnown] = useState([]);
   const [users, setUsers] = useState([]);
-  const [pick, setPick] = useState('');
   const [uid, setUid] = useState('');
   const [error, setError] = useState('');
   useEffect(() => { setPeople(folder.people || []); }, [folder.id, JSON.stringify(folder.people || [])]);
@@ -31,7 +31,8 @@ export function FolderPeople({ folder, folders, admin, busy, run, base }) {
   const names = knownNames(known, users);
   const elsewhere = peopleElsewhere(folders, folder.id);
   const have = new Set(people.map((p) => p.uid));
-  const options = [...names].filter(([id]) => !have.has(id)).map(([id, name]) => ({ uid: id, name }));
+  const options = [...names].filter(([id]) => !have.has(id))
+    .map(([id, name]) => ({ uid: id, name, note: elsewhere.has(id) ? `đang ở "${elsewhere.get(id)}"` : '' }));
   const saved = folder.people || [];
   const dirty = people.length !== saved.length || people.some((p, i) => p.uid !== saved[i]?.uid);
   const nameOf = (p) => p.name || names.get(p.uid) || 'Chưa rõ tên';
@@ -40,7 +41,7 @@ export function FolderPeople({ folder, folders, admin, busy, run, base }) {
     if (!UID.test(clean)) { setError('UID Zalo là dãy 15–22 chữ số, không bắt đầu bằng 0.'); return; }
     if (have.has(clean)) { setError('Người này đã có trong thư mục.'); return; }
     setPeople([...people, { uid: clean, name: name || names.get(clean) || '' }]);
-    setPick(''); setUid(''); setError('');
+    setUid(''); setError('');
   }
   return html`<details class="perm-box" open=${!saved.length && !folder.groups.length}>
     <summary><span>Người trong thư mục</span><span class="muted perm-box-sum">· ${people.length} người${dirty ? ' (chưa lưu)' : ''}</span></summary>
@@ -49,14 +50,8 @@ export function FolderPeople({ folder, folders, admin, busy, run, base }) {
       <span>${nameOf(p)}${elsewhere.has(p.uid) ? html`<small class="muted"> · sẽ chuyển từ "${elsewhere.get(p.uid)}"</small>` : null}</span>
       <button type="button" class="tag-x" aria-label=${`Bỏ ${nameOf(p)} khỏi thư mục`} onClick=${() => setPeople(people.filter((x) => x.uid !== p.uid))}><${Icon} name="close" size=${14} /></button>
     </li>`)}</ul>` : html`<p class="muted small">Chưa có ai.</p>`}
-    ${options.length ? html`<div class="dm-add">
-      <label for="fp-pick" class="sr-only">Chọn người đã nhắn riêng cho bot</label>
-      <select id="fp-pick" value=${pick} onChange=${(e) => setPick(e.currentTarget.value)}>
-        <option value="">Chọn nhanh người đã biết…</option>
-        ${options.map((o) => html`<option key=${o.uid} value=${o.uid}>${o.name || 'Chưa rõ tên'}${elsewhere.has(o.uid) ? ` (đang ở "${elsewhere.get(o.uid)}")` : ''}</option>`)}
-      </select>
-      <button type="button" class="btn btn-secondary btn-sm" disabled=${!pick} onClick=${() => add(pick)}>Thêm</button>
-    </div>` : null}
+    <${MultiPick} id="fp-pick" options=${options} label="Chọn người đã biết"
+      onAdd=${(list) => { setPeople([...people, ...list.map((o) => ({ uid: o.uid, name: o.name || '' }))]); setError(''); }} />
     <div class="dm-add">
       <label for="fp-uid" class="sr-only">UID Zalo</label>
       <input id="fp-uid" inputmode="numeric" maxlength="22" placeholder="Hoặc nhập UID Zalo (15–22 chữ số)" value=${uid}

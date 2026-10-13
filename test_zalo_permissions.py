@@ -839,6 +839,24 @@ class StudioPermissionsTest(PermissionsFile, unittest.TestCase):
         self.enterContext(patch.object(gp, "VIDEO_BLOCKED", False))
         self.enterContext(patch.object(gp, "sandbox_mode", lambda: "systemd"))
 
+    def test_ai_image_video_switches_and_daily_quotas_follow_the_layers(self):
+        self.assertEqual(gp.media_quotas(MEMBER, GROUP_A, True), {"image": 5, "video": 1}, "chưa có tệp → 5 ảnh, 1 video")
+        self.write({"version": 1, "defaults": {"features": {"studioImage": True}},
+                    "groups": {GROUP_A: {"imageQuota": 2}},
+                    "studio": {"quota": 3, "image": 7, "video": 0, "people": {MEMBER: {"quota": 3, "video": 4}}}})
+        self.assertEqual(gp.media_quotas(MEMBER, GROUP_A, True), {"image": 2, "video": 4}, "nhóm thắng mặc định, người thắng nhóm")
+        self.assertEqual(gp.media_quotas(STRANGER, GROUP_B, True), {"image": 7, "video": 0})
+        self.assertEqual(gp.media_quotas(STRANGER, STRANGER, False), {"image": 7, "video": 0})
+        rules = gp.studio_settings(MEMBER, GROUP_A, True)["features"]
+        self.assertTrue(rules["studioImage"])
+        self.assertFalse(rules["studioAIVideo"], "thiếu khoá = tắt")
+        with patch.object(gp, "VIDEO_BLOCKED", True):
+            self.write({"version": 1, "defaults": {"features": {"studioAIVideo": True, "studioVideo": True}}})
+            rules = gp.studio_settings(MEMBER, GROUP_A, True)["features"]
+            self.assertTrue(rules["studioAIVideo"], "video AI chạy ở Stali, không cần hộp cát")
+            self.assertFalse(rules["studioVideo"])
+        self.assertIn("zalo_media", gp.STUDIO_TOOLS)
+
     def test_linux_without_systemd_sandbox_forces_video_off_with_its_own_note(self):
         self.write({"version": 1, "defaults": {"features": {"studioVideo": True, "studioSlides": True}},
                     "dm": {"features": {"studioVideo": True}}})
@@ -897,7 +915,7 @@ class StudioPermissionsTest(PermissionsFile, unittest.TestCase):
                     "defaults": {"features": {"studioSlides": True, "studioDocs": True}},
                     "groups": {GROUP_A: {"features": {"studioDocs": False, "studioVideo": True}, "studioQuota": 5}}})
         a = gp.studio_settings(MEMBER, GROUP_A, True)
-        self.assertEqual(a["features"], {"studioSlides": True, "studioDocs": False, "studioExams": False, "studioVideo": True})
+        self.assertEqual(a["features"], {"studioSlides": True, "studioDocs": False, "studioExams": False, "studioVideo": True, "studioImage": False, "studioAIVideo": False})
         self.assertEqual(a["quota"], 5)
         b = gp.studio_settings(MEMBER, GROUP_B, True)
         self.assertEqual(b["features"]["studioDocs"], True)
@@ -911,7 +929,7 @@ class StudioPermissionsTest(PermissionsFile, unittest.TestCase):
                     "dm": {"who": "everyone", "features": {"studioSlides": True},
                            "people": {MEMBER: {"features": {"studioSlides": False, "studioExams": True}}}}})
         mine = gp.studio_settings(MEMBER, MEMBER, False)["features"]
-        self.assertEqual(mine, {"studioSlides": False, "studioDocs": False, "studioExams": True, "studioVideo": False})
+        self.assertEqual(mine, {"studioSlides": False, "studioDocs": False, "studioExams": True, "studioVideo": False, "studioImage": False, "studioAIVideo": False})
         other = gp.studio_settings(OWNER, OWNER, False)["features"]
         self.assertTrue(other["studioSlides"])
         self.assertFalse(other["studioVideo"], "nút mặc định của nhóm không áp cho nhắn riêng")

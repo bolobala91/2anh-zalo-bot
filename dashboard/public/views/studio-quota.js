@@ -3,6 +3,7 @@
 // Mỗi người hiện số lượt đã dùng hôm nay và số còn, đọc từ sổ lượt xưởng (Sức khoẻ máy chủ dùng chung sổ này).
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
+import { MultiPick } from './multi-pick.js';
 import { html, Notice, SaveBar } from '../ui.js';
 import { PAGE, knownNames, suggestions } from './dm-permissions.js';
 import { MAX_QUOTA, parseQuota, vnToday } from './studio-box.js';
@@ -14,27 +15,36 @@ export const quotaBadge = (studio) => `${studio?.quota ?? 3} lượt/ngày`;
 
 /** Bản nháp: số lượt giữ dạng chữ để gõ dở không bị nhảy; lỗi kiểm lúc lưu. */
 export function quotaDraft(studio) {
-  return { quota: String(studio?.quota ?? 3), people: (studio?.people || []).map((p) => ({ uid: p.uid, name: p.name || '', quota: String(p.quota) })) };
+  const opt = (v) => (v === null || v === undefined ? '' : String(v));
+  return { quota: String(studio?.quota ?? 3), image: String(studio?.image ?? 5), video: String(studio?.video ?? 1),
+    people: (studio?.people || []).map((p) => ({ uid: p.uid, name: p.name || '', quota: String(p.quota), image: opt(p.image), video: opt(p.video) })) };
 }
 
 /** `{ body }` để gửi PUT /api/permissions/studio, hoặc `{ error }` kèm cách sửa. */
 export function quotaPayload(d) {
   const q = parseQuota(d.quota, { allowEmpty: false });
   if (q.error) return { error: `Số lượt mặc định: ${q.error}` };
+  const img = parseQuota(d.image ?? '5', { allowEmpty: false });
+  if (img.error) return { error: `Số ảnh AI mặc định: ${img.error}` };
+  const vid = parseQuota(d.video ?? '1', { allowEmpty: false });
+  if (vid.error) return { error: `Số video AI mặc định: ${vid.error}` };
   const people = [];
   for (const p of d.people) {
     const v = parseQuota(p.quota, { allowEmpty: false });
     if (v.error) return { error: `${p.name || p.uid}: ${v.error}` };
-    people.push({ uid: p.uid, name: p.name, quota: v.value });
+    const pi = parseQuota(p.image ?? '');
+    const pv = parseQuota(p.video ?? '');
+    if (pi.error || pv.error) return { error: `${p.name || p.uid} (ảnh/video AI): ${pi.error || pv.error}` };
+    people.push({ uid: p.uid, name: p.name, quota: v.value, image: pi.value, video: pv.value });
   }
-  return { body: { quota: q.value, people } };
+  return { body: { quota: q.value, image: img.value, video: vid.value, people } };
 }
 
 export const sameQuota = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Số thay đổi: số lượt mặc định + từng người thêm/bỏ/sửa. */
 export function quotaChangeCount(d, saved) {
-  let n = d.quota === saved.quota ? 0 : 1;
+  let n = ['quota', 'image', 'video'].filter((k) => d[k] !== saved[k]).length;
   const before = new Map(saved.people.map((p) => [p.uid, JSON.stringify(p)]));
   const after = new Map(d.people.map((p) => [p.uid, JSON.stringify(p)]));
   for (const [uid, s] of after) if (before.get(uid) !== s) n += 1;
@@ -49,7 +59,7 @@ export function addQuotaPerson(d, uid, name = '', quota = '') {
   if (d.people.length >= MAX_QUOTA_PEOPLE) return { error: `Tối đa ${MAX_QUOTA_PEOPLE} người — bỏ bớt rồi thêm.` };
   const q = parseQuota(quota || d.quota, { allowEmpty: false });
   if (q.error) return { error: `${q.error} Sửa số lượt mặc định ở trên rồi thêm lại.` };
-  return { draft: { ...d, people: [...d.people, { uid: id, name: String(name || '').trim().slice(0, 80), quota: String(q.value) }] } };
+  return { draft: { ...d, people: [...d.people, { uid: id, name: String(name || '').trim().slice(0, 80), quota: String(q.value), image: '', video: '' }] } };
 }
 
 /** Lượt đã tính hôm nay của một người (việc được trả lượt không tính); null khi chưa đọc được sổ. */
@@ -77,7 +87,6 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
   const [known, setKnown] = useState([]);
   const [users, setUsers] = useState([]);
   const [usage, setUsage] = useState(null);
-  const [pick, setPick] = useState('');
   const [uid, setUid] = useState('');
   const [name, setName] = useState('');
   const [addError, setAddError] = useState('');
@@ -101,8 +110,16 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
   const add = (id, nm) => {
     const r = addQuotaPerson(draft, id, String(nm || '').trim() || names.get(String(id || '').trim()));
     if (r.error) { setAddError(r.error); return; }
-    setAddError(''); setDraft(r.draft); setMsg({}); setPick(''); setUid(''); setName('');
+    setAddError(''); setDraft(r.draft); setMsg({}); setUid(''); setName('');
     setLimit(Math.max(limit, r.draft.people.length));
+  };
+
+  // Thêm nhiều người một lượt, cùng số lượt mặc định của addQuotaPerson.
+  const addMany = (list) => {
+    let next = draft;
+    for (const o of list) { const r = addQuotaPerson(next, o.uid, o.name || names.get(o.uid)); if (!r.error) next = r.draft; }
+    if (next === draft) return;
+    setAddError(''); setDraft(next); setMsg({}); setLimit(Math.max(limit, next.people.length));
   };
 
   async function save(e) {
@@ -137,6 +154,16 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
           ? `${defaultError} Sửa ô này rồi lưu.`
           : `Từ 0 đến ${MAX_QUOTA}; 0 = không ai được nhờ, trừ người có hạn mức riêng. Nhóm đặt số khác trong hộp Xưởng tạo sản phẩm của nhóm đó; hạn mức riêng từng người thắng cả số của nhóm lẫn số mặc định.`}</small>
       </div>
+      ${[['image', 'Số ảnh AI mỗi người mỗi ngày', 'Khi nút "Vẽ ảnh AI" đang bật. Mỗi ảnh tốn tiền theo nguồn vẽ (Stali 1.000đ/ảnh).'],
+        ['video', 'Số video AI mỗi người mỗi ngày', 'Khi nút "Tạo video AI" đang bật. Mỗi video Stali từ 2.200đ.']].map(([key, label, hint]) => {
+        const err = parseQuota(draft[key], { allowEmpty: false }).error;
+        return html`<div class="studio-quota" key=${key}>
+          <label for=${`sq-${key}`}>${label}</label>
+          <input id=${`sq-${key}`} inputmode="numeric" maxlength="2" value=${draft[key]} aria-invalid=${err ? 'true' : undefined}
+            aria-describedby=${`sq-${key}-hint`} onInput=${(e) => update({ [key]: e.currentTarget.value })} />
+          <small id=${`sq-${key}-hint`} class=${err ? 'studio-quota-error' : 'muted'}>${err ? `${err} Sửa ô này rồi lưu.` : `${hint} Nhóm/thư mục đặt số khác trong hộp Xưởng; số riêng từng người thắng tất cả.`}</small>
+        </div>`;
+      })}
       ${todayRow ? html`<p class="small studio-today">Hôm nay: ${todayRow.people.length} người đã nhờ xưởng ${todayRow.jobs} việc (${todayRow.refunded} việc được trả lượt).</p>`
         : usage && !usage.error ? html`<p class="muted small studio-today">Hôm nay chưa ai nhờ xưởng.</p>` : null}
     </fieldset>
@@ -145,15 +172,7 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
       <p class="muted small">Thắng số của nhóm và số mặc định, áp cả trong nhóm lẫn khi nhắn riêng. Đặt 0 để chặn riêng người đó.</p>
       <details class="dm-add-box">
         <summary>+ Thêm người</summary>
-        ${options.length ? html`<div class="dm-add">
-          <label for="sq-pick" class="sr-only">Chọn người đã nhắn riêng cho bot hoặc người dùng dashboard</label>
-          <select id="sq-pick" value=${pick} onChange=${(e) => setPick(e.currentTarget.value)}>
-            <option value="">Chọn nhanh người đã biết…</option>
-            ${options.map((o) => html`<option key=${o.uid} value=${o.uid}>${o.name || 'Chưa rõ tên'} · ${o.uid}</option>`)}
-          </select>
-          <button type="button" class="btn btn-secondary btn-sm" disabled=${!pick}
-            onClick=${() => add(pick, options.find((o) => o.uid === pick)?.name)}>Thêm</button>
-        </div>` : null}
+        <${MultiPick} id="sq-pick" options=${options} label="Chọn người đã biết" onAdd=${addMany} />
         <div class="dm-add">
           <label for="sq-uid" class="sr-only">UID Zalo</label>
           <input id="sq-uid" inputmode="numeric" maxlength="22" placeholder="UID Zalo (15–22 chữ số)" value=${uid}
@@ -177,6 +196,11 @@ export function QuotaEditor({ studio, admin, onSaved, onBack, onDirty }) {
                 aria-invalid=${bad ? 'true' : undefined} aria-describedby=${`sq-p-${p.uid}-hint`}
                 onInput=${(e) => update({ people: draft.people.map((x, j) => (j === i ? { ...x, quota: e.currentTarget.value } : x)) })} />
               <span class="muted small">lượt/ngày</span>
+              ${['image', 'video'].map((k) => html`<label for=${`sq-p-${p.uid}-${k}`} class="sr-only">Số ${k === 'image' ? 'ảnh' : 'video'} AI mỗi ngày của ${shown}</label>
+                <input id=${`sq-p-${p.uid}-${k}`} class="quota-input" inputmode="numeric" maxlength="2" value=${p[k] ?? ''}
+                  placeholder=${k === 'image' ? draft.image : draft.video}
+                  onInput=${(e) => update({ people: draft.people.map((x, j) => (j === i ? { ...x, [k]: e.currentTarget.value } : x)) })} />
+                <span class="muted small">${k === 'image' ? 'ảnh' : 'video'}</span>`)}
             </span>
             <button type="button" class="btn btn-danger-outline btn-sm" aria-label=${`Bỏ hạn mức riêng: ${shown}`}
               onClick=${() => update({ people: draft.people.filter((x) => x.uid !== p.uid) })}>Bỏ</button>

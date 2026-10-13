@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FEATURE_KEYS } from '../lib/permissions.js';
+import { FEATURE_KEYS, STUDIO_FEATURES } from '../lib/permissions.js';
 import { fakeSidecar, loginAs, makeDeps, startApp } from '../test-helpers.js';
 
 const G = '2054797107487294899';
@@ -70,7 +70,7 @@ test('Chủ bot xem và sửa được phân quyền (spec §6), có hiệu lự
   const saved = await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: owner, body: body({ active: false }, { web: false }) });
   assert.equal(saved.status, 200);
   assert.deepEqual(saved.json.groups[G], { name: 'Tổ Hoá', custom: true, folder: null, active: false, replyOnlyTagged: true, features: { ...allOn(), web: false },
-    studio: { studioSlides: false, studioDocs: false, studioExams: false, studioVideo: false }, studioQuota: null });
+    studio: Object.fromEntries(STUDIO_FEATURES.map((f) => [f.key, false])), studioQuota: null, imageQuota: null, videoQuota: null });
   assert.deepEqual(disk().groups[G], { name: 'Tổ Hoá', active: false, features: { web: false } });
   // Lần lưu đầu ghi cờ tag thật của bot vào mặc định một lần, không ghi vào nhóm.
   assert.equal(disk().defaults.replyOnlyTagged, true);
@@ -177,10 +177,10 @@ test('nhắn riêng: Chủ bot lưu được, tệp có mục dm, Nhật ký ghi
 
 test('xưởng: lưu nút xưởng + hạn mức nhóm, hạn mức theo người; Nhật ký ghi rõ; 400 kèm bước tiếp theo', async (t) => {
   const { call, owner, disk, deps } = await ready(t);
-  const off = { studioSlides: false, studioDocs: false, studioExams: false, studioVideo: false };
+  const off = Object.fromEntries(STUDIO_FEATURES.map((f) => [f.key, false]));
   const first = await call('/api/permissions', { cookie: owner });
   assert.deepEqual(first.json.studioFeatures.map((f) => f.key), Object.keys(off));
-  assert.deepEqual(first.json.studio, { quota: 3, people: [] });
+  assert.deepEqual(first.json.studio, { quota: 3, image: 5, video: 1, people: [] });
   const g = await call(`/api/permissions/groups/${G}`, { method: 'PUT', cookie: owner,
     body: { ...body(), studio: { ...off, studioSlides: true }, studioQuota: 5 } });
   assert.equal(g.status, 200);
@@ -188,8 +188,8 @@ test('xưởng: lưu nút xưởng + hạn mức nhóm, hạn mức theo ngườ
   assert.match(deps.activity.list()[0].detail, /xưởng: Slide PowerPoint · 5 lượt\/người\/ngày$/);
   const q = await call('/api/permissions/studio', { method: 'PUT', cookie: owner, body: { quota: 2, people: [{ uid: '1234567890123456', name: 'Cô Lan', quota: 10 }] } });
   assert.equal(q.status, 200);
-  assert.deepEqual(q.json.studio, { quota: 2, people: [{ uid: '1234567890123456', name: 'Cô Lan', quota: 10 }] });
-  assert.deepEqual(disk().studio, { quota: 2, people: { '1234567890123456': { name: 'Cô Lan', quota: 10 } } });
+  assert.deepEqual(q.json.studio, { quota: 2, image: 5, video: 1, people: [{ uid: '1234567890123456', name: 'Cô Lan', quota: 10, image: null, video: null }] });
+  assert.deepEqual(disk().studio, { quota: 2, image: 5, video: 1, people: { '1234567890123456': { name: 'Cô Lan', quota: 10 } } });
   assert.equal(deps.activity.list()[0].detail, 'Mặc định 2 lượt/người/ngày · 1 người có hạn mức riêng');
   assert.equal(disk().groups[G].studioQuota, 5, 'lưu hạn mức không đụng nhóm');
   for (const bad of [{ quota: 99, people: [] }, { quota: 2, people: [{ uid: '0912345678', quota: 1 }] }]) {

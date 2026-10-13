@@ -41,7 +41,10 @@ export function quotaSummary(quotaText, defaultQuota) {
   return q.value === null ? `${defaultQuota} lượt/người/ngày (mặc định)` : `${q.value} lượt/người/ngày`;
 }
 
-export function StudioBox({ id, studio, features, onChange, disabled = false, quota, onQuota, defaultQuota, quotaError, quotaHint, note, policy }) {
+const MEDIA_FIELDS = [['imageQuota', 'image', 'Số ảnh AI mỗi người mỗi ngày'], ['videoQuota', 'video', 'Số video AI mỗi người mỗi ngày']];
+
+export function StudioBox({ id, studio, features, onChange, disabled = false, quota, onQuota, defaultQuota, quotaError, quotaHint, note, policy,
+  media = null, onMedia = null, mediaDefaults = { image: 5, video: 1 }, mediaErrors = {} }) {
   if (!features?.length || !studioComplete(studio, features)) return null;
   // Gập sẵn để khung sửa gọn; dòng tóm tắt đã đủ "a/b đang bật" (và số lượt ở nhóm).
   return html`<details class="perm-box studio-box">
@@ -62,6 +65,13 @@ export function StudioBox({ id, studio, features, onChange, disabled = false, qu
         aria-describedby=${`${id}-quota-hint`} onInput=${(e) => onQuota(e.currentTarget.value)} />
       <small id=${`${id}-quota-hint`} class=${quotaError ? 'studio-quota-error' : 'muted'}>${quotaError ? `${quotaError} Sửa ô này rồi lưu, hoặc để trống để theo mặc định.` : quotaHint || ''}</small>
     </div>` : null}
+    ${onMedia ? MEDIA_FIELDS.map(([key, def, label]) => html`<div class="studio-quota" key=${key}>
+      <label for=${`${id}-${key}`}>${label}</label>
+      <input id=${`${id}-${key}`} inputmode="numeric" maxlength="2" disabled=${disabled}
+        placeholder=${`Theo mặc định (${mediaDefaults?.[def] ?? ''})`} value=${media?.[key] ?? ''} aria-invalid=${mediaErrors[key] ? 'true' : undefined}
+        aria-describedby=${`${id}-${key}-hint`} onInput=${(e) => onMedia(key, e.currentTarget.value)} />
+      <small id=${`${id}-${key}-hint`} class=${mediaErrors[key] ? 'studio-quota-error' : 'muted'}>${mediaErrors[key] ? `${mediaErrors[key]} Sửa ô này rồi lưu, hoặc để trống để theo mặc định.` : 'Để trống để theo mặc định; chỉ tính khi nút tương ứng ở trên đang bật.'}</small>
+    </div>`) : null}
     ${note ? html`<p class="muted small studio-foot">${note}</p>` : null}
   </details>`;
 }

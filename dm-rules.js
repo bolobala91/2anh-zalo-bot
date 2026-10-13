@@ -21,7 +21,7 @@ export const DM_WHO = ['owners', 'list', 'everyone'];
 export const DM_FEATURE_KEYS = ['web', 'files', 'voice', 'reminders', 'kb', 'people', 'academic', 'video', 'history'];
 // Xưởng tạo sản phẩm (spec §17): nằm cùng `features` trong tệp nhưng thiếu khoá = TẮT. Kết nối Zalo không dùng tới;
 // chỉ giữ lại để dashboard lưu nhắn riêng không làm rơi chúng.
-export const STUDIO_KEYS = ['studioSlides', 'studioDocs', 'studioExams', 'studioVideo'];
+export const STUDIO_KEYS = ['studioSlides', 'studioDocs', 'studioExams', 'studioVideo', 'studioImage', 'studioAIVideo'];
 const UID_KEY = /^\d{1,32}$/;
 const MAX_NAME = 80;
 

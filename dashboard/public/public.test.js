@@ -485,7 +485,7 @@ test('xưởng: ô số lượt, gửi nút xưởng chỉ khi đủ khoá, đ�
   const base = { active: true, replyOnlyTagged: true, features: { web: true }, studio: S_OFF, studioQuota: null };
   const d = { ...base, studio: { ...S_OFF, studioVideo: true }, studioQuota: 5 };
   assert.deepEqual(settingsPayload(d, { isGroup: true, studioFeatures: SF }),
-    { active: true, replyOnlyTagged: true, features: { web: true }, studio: { ...S_OFF, studioVideo: true }, studioQuota: 5 });
+    { active: true, replyOnlyTagged: true, features: { web: true }, studio: { ...S_OFF, studioVideo: true }, studioQuota: 5, imageQuota: null, videoQuota: null });
   assert.deepEqual(settingsPayload({ ...d, studio: {} }, { isGroup: false, studioFeatures: SF }),
     { active: true, replyOnlyTagged: true, features: { web: true } }, 'mặc định không gửi số lượt; dữ liệu cũ không gửi nút xưởng');
   assert.equal(changeCount(d, base), 2);
@@ -529,12 +529,12 @@ test('xưởng: nút video bị khoá thì bản nháp gửi studioVideo: false 
 test('xưởng: hạn mức theo người — bản nháp, kiểm số, thêm người (UID, trùng), đếm thay đổi', async () => {
   const { quotaDraft, quotaPayload, quotaChangeCount, addQuotaPerson, quotaBadge } = await import('./views/studio-quota.js');
   const saved = quotaDraft({ quota: 3, people: [{ uid: '1234567890123456', name: 'Cô Lan', quota: 10 }] });
-  assert.deepEqual(saved, { quota: '3', people: [{ uid: '1234567890123456', name: 'Cô Lan', quota: '10' }] });
-  assert.deepEqual(quotaPayload(saved), { body: { quota: 3, people: [{ uid: '1234567890123456', name: 'Cô Lan', quota: 10 }] } });
+  assert.deepEqual(saved, { quota: '3', image: '5', video: '1', people: [{ uid: '1234567890123456', name: 'Cô Lan', quota: '10', image: '', video: '' }] });
+  assert.deepEqual(quotaPayload(saved), { body: { quota: 3, image: 5, video: 1, people: [{ uid: '1234567890123456', name: 'Cô Lan', quota: 10, image: null, video: null }] } });
   assert.match(quotaPayload({ ...saved, quota: '' }).error, /Số lượt mặc định: Nhập số lượt/);
   assert.match(quotaPayload({ ...saved, people: [{ ...saved.people[0], quota: '99' }] }).error, /^Cô Lan: /);
   const added = addQuotaPerson(saved, ' 2234567890123456 ', 'Thầy Nam');
-  assert.deepEqual(added.draft.people[1], { uid: '2234567890123456', name: 'Thầy Nam', quota: '3' }, 'mặc định lấy số lượt chung');
+  assert.deepEqual(added.draft.people[1], { uid: '2234567890123456', name: 'Thầy Nam', quota: '3', image: '', video: '' }, 'mặc định lấy số lượt chung');
   assert.match(addQuotaPerson(saved, '0912345678').error, /không phải số điện thoại — .*\/sethome/);
   assert.match(addQuotaPerson(saved, '1234567890123456').error, /đã có hạn mức riêng/);
   assert.equal(quotaChangeCount(saved, saved), 0);

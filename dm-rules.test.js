@@ -70,13 +70,13 @@ test('createDmRules: đọc lại khi tệp đổi; không có tệp, tệp hỏ
   assert.equal(createDmRules({ file: null })(), null);
 });
 
-test('xưởng (spec §17): normalizeDm giữ 4 nút xưởng để dashboard không làm rơi; dmVerdict vẫn đúng 8 nút', () => {
+test('xưởng (spec §17): normalizeDm giữ 6 nút xưởng để dashboard không làm rơi; dmVerdict vẫn đúng 8 nút', () => {
   const dm = normalizeDm({ who: 'everyone', features: { studioSlides: true, studioVideo: 'yes' },
     people: { [A]: { features: { studioDocs: true, web: false } } } });
   assert.deepEqual(dm.features, { studioSlides: true });
   assert.deepEqual(dm.people[A].features, { web: false, studioDocs: true });
   assert.deepEqual(Object.keys(dmVerdict(dm, A).features), DM_FEATURE_KEYS);
-  assert.deepEqual(STUDIO_KEYS, ['studioSlides', 'studioDocs', 'studioExams', 'studioVideo']);
+  assert.deepEqual(STUDIO_KEYS, ['studioSlides', 'studioDocs', 'studioExams', 'studioVideo', 'studioImage', 'studioAIVideo']);
 });
 
 test('thư mục chứa người: vào thư mục = được nhắn riêng, nút = mặc định nhóm ← thư mục; chỉnh riêng của người thắng', (t) => {

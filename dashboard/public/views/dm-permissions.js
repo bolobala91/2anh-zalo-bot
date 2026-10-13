@@ -4,6 +4,7 @@
 // hàng gập (tóm tắt cả nút xưởng), chỉ mở một người một lúc; thanh Lưu dính đáy.
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
+import { MultiPick } from './multi-pick.js';
 import { html, Notice, SaveBar, Toggle, onText } from '../ui.js';
 import { fold } from '../fold.js';
 import { StudioBox, applyPolicy, effectiveStudio, lockedByPolicy } from './studio-box.js';
@@ -209,7 +210,6 @@ export function DmEditor({ dm, folders = [], features, studioFeatures = [], stud
   const [msg, setMsg] = useState({});
   const [known, setKnown] = useState([]);
   const [users, setUsers] = useState([]);
-  const [pick, setPick] = useState('');
   const [uid, setUid] = useState('');
   const [name, setName] = useState('');
   const [addError, setAddError] = useState('');
@@ -237,9 +237,16 @@ export function DmEditor({ dm, folders = [], features, studioFeatures = [], stud
   const add = (id, nm) => {
     const r = addPerson(draft, id, String(nm || '').trim() || names.get(String(id || '').trim()));
     if (r.error) { setAddError(r.error); return; }
-    setAddError(''); setDraft(r.draft); setMsg({}); setPick(''); setUid(''); setName('');
+    setAddError(''); setDraft(r.draft); setMsg({}); setUid(''); setName('');
     // Người vừa thêm tự mở, bỏ lọc để thấy ngay.
     setOpenUid(r.draft.people.at(-1).uid); setQ(''); setCustomOnly(false); setRemoved(null);
+  };
+  // Thêm nhiều người đã tích chọn một lượt (bỏ qua người đã có).
+  const addMany = (list) => {
+    let next = draft;
+    for (const o of list) { const r = addPerson(next, o.uid, o.name || names.get(o.uid)); if (!r.error) next = r.draft; }
+    if (next === draft) return;
+    setAddError(''); setDraft(next); setMsg({}); setQ(''); setCustomOnly(false); setRemoved(null);
   };
   const remove = (p) => {
     const index = draft.people.findIndex((x) => x.uid === p.uid);
@@ -321,15 +328,7 @@ export function DmEditor({ dm, folders = [], features, studioFeatures = [], stud
       <legend>Danh sách người (${draft.people.length})</legend>
       <details class="dm-add-box">
         <summary>+ Thêm người</summary>
-        ${options.length ? html`<div class="dm-add">
-          <label for="dm-pick" class="sr-only">Chọn người đã nhắn riêng cho bot hoặc người dùng dashboard</label>
-          <select id="dm-pick" value=${pick} onChange=${(e) => setPick(e.currentTarget.value)}>
-            <option value="">Chọn nhanh người đã biết…</option>
-            ${options.map((o) => html`<option key=${o.uid} value=${o.uid}>${o.name || 'Chưa rõ tên'}</option>`)}
-          </select>
-          <button type="button" class="btn btn-secondary btn-sm" disabled=${!pick}
-            onClick=${() => add(pick, options.find((o) => o.uid === pick)?.name)}>Thêm</button>
-        </div>` : null}
+        <${MultiPick} id="dm-pick" options=${options} label="Chọn người đã biết" onAdd=${addMany} />
         <div class="dm-add">
           <label for="dm-uid" class="sr-only">UID Zalo</label>
           <input id="dm-uid" inputmode="numeric" maxlength="22" placeholder="UID Zalo (15–22 chữ số)" value=${uid}

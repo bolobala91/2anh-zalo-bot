@@ -6,6 +6,8 @@ import { ThreadType } from 'zca-js';
 import { createStickerDirectory, enrichSticker } from './zalo-stickers.js';
 import { createWelcomer } from './zalo-welcome.js';
 import { createFriendManager, friendToolsEnabled, setActiveFriendManager } from './zalo-friends.js';
+import { createOwnerMentionNotifier, envFlag } from './owner-mention.js';
+import { join } from 'node:path';
 
 /**
  * Định tuyến tin nhắn Zalo sang Hermes Agent.
@@ -28,6 +30,7 @@ import { createFriendManager, friendToolsEnabled, setActiveFriendManager } from 
  */
 
 let selfUid = '';
+let mentionNotifier = null;
 
 /** Ai được nghe câu báo lỗi khi Hermes chưa sẵn sàng (UID Zalo, phân tách bởi dấu phẩy). */
 function ownerUids() {
@@ -103,6 +106,18 @@ export function setupBotListener(api, profile = null, {
     notify: (threadId, threadType, text) => sendSystemNotice({ api, threadId, threadType, text }),
   }) : null;
   setActiveFriendManager(friends);
+
+  // Có người tag chủ nhân trong nhóm → nhắn riêng chủ nhân (bật/tắt ở dashboard › Cấu hình, có hiệu lực ngay).
+  mentionNotifier = createOwnerMentionNotifier({
+    ownerUids,
+    selfUid: () => selfUid,
+    enabled: envFlag(process.env.HERMES_HOME ? join(process.env.HERMES_HOME, '.env') : ''),
+    groupName: async (id) => {
+      const info = await api.getGroupInfo(id);
+      return info?.gridInfoMap?.[id]?.name || '';
+    },
+    notify: (uid, text) => sendSystemNotice({ api, threadId: uid, threadType: ThreadType.User, text }),
+  });
   // Ai đồng ý trong lúc sidecar tắt thì bắt ngay, không đợi 10 phút.
   friends?.poll().catch((err) => console.error('[bot] lỗi khi kiểm tra kế hoạch kết bạn:', err?.message || err));
   const onFriendEvent = (event) => {
@@ -204,6 +219,7 @@ export function setupBotListener(api, profile = null, {
     restartTimer = null;
     welcomer.stop();
     friends?.stop();
+    mentionNotifier = null;
     setActiveFriendManager(null);
     for (const [event, handler] of handlers) api.listener.off?.(event, handler);
     health?.setListenerState(null);
@@ -246,6 +262,12 @@ async function handleIncomingMessage(api, msg, stickers = null) {
   if (!threadId) {
     console.warn('[bot] bỏ qua: không xác định được threadId');
     return;
+  }
+
+  if (isGroup && mentionNotifier) {
+    mentionNotifier.onGroupMessage({ msg, threadId, senderUid, content }).catch((err) => {
+      console.error('[bot] lỗi khi báo tag chủ nhân:', err?.message || err);
+    });
   }
 
   const where = isGroup ? `Nhóm ${threadId}` : `DM ${threadId}`;

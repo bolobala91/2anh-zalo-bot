@@ -26,6 +26,7 @@ import threading
 import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import group_permissions
@@ -397,6 +398,137 @@ async def _invoke(method: str, args: List[Any]) -> str:
 
 
 # =====================================================================
+#  Vẽ ảnh AI / tạo video AI cho mọi người (Phân quyền › Xưởng: "Vẽ ảnh AI", "Tạo video AI")
+# =====================================================================
+
+_MEDIA_LOCK = threading.Lock()
+
+
+def _media_usage_path() -> Path:
+    return group_permissions.permissions_path().parent / "media-usage.json"
+
+
+def _vn_today() -> str:
+    return datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
+
+
+def _media_used(uid: str, kind: str) -> int:
+    try:
+        data = json.loads(_media_usage_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    if not isinstance(data, dict) or data.get("day") != _vn_today():
+        return 0
+    return int(((data.get("people") or {}).get(uid) or {}).get(kind) or 0)
+
+
+def _media_take(uid: str, kind: str, limit: int) -> bool:
+    """Trừ một lượt nếu còn (dưới khoá). Ngày mới (giờ Việt Nam) thì đếm lại từ 0."""
+    path = _media_usage_path()
+    with _MEDIA_LOCK:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        if not isinstance(data, dict) or data.get("day") != _vn_today():
+            data = {"day": _vn_today(), "people": {}}
+        person = data.setdefault("people", {}).setdefault(uid, {})
+        if int(person.get(kind) or 0) >= limit:
+            return False
+        person[kind] = int(person.get(kind) or 0) + 1
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
+        return True
+
+
+def _media_give_back(uid: str, kind: str) -> None:
+    path = _media_usage_path()
+    with _MEDIA_LOCK:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            person = data["people"][uid]
+            person[kind] = max(0, int(person.get(kind) or 0) - 1)
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+
+
+def _media_ref_ok(ref: str, is_owner: bool) -> bool:
+    """Ảnh mẫu người ngoài được dùng: link https, hoặc ảnh trong bộ nhớ đệm ảnh của Hermes (ảnh họ vừa gửi) —
+    không cho trỏ tới tệp bất kỳ trên máy chủ."""
+    ref = str(ref or "").strip()
+    if is_owner or ref.lower().startswith("https://"):
+        return True
+    try:
+        from hermes_constants import get_hermes_home
+        home = Path(get_hermes_home()).resolve()
+        target = Path(ref).resolve()
+    except Exception:
+        return False
+    return any(target.is_relative_to(home / sub) for sub in ("image_cache", "cache/images", "cache"))
+
+
+async def zalo_media(args: Dict[str, Any], **_kw) -> str:
+    """Vẽ ảnh AI (gửi ngay vào cuộc trò chuyện) hoặc tạo video AI (chạy nền, xong tự gửi)."""
+    from . import media_engines
+
+    turn = _turn() or {}
+    kind = str(args.get("kind") or "").strip()
+    prompt = " ".join(str(args.get("prompt") or "").split())[:2000]
+    if kind not in ("image", "video"):
+        return _err("kind phải là image hoặc video")
+    if not prompt:
+        return _err("cần mô tả (prompt)")
+    thread_id, thread_kind, err = _scoped_thread({})
+    if err:
+        return err
+    is_owner = bool(turn.get("is_owner"))
+    uid = str(turn.get("sender_uid") or "")
+    refs = [r for r in (args.get("images") or []) if isinstance(r, str) and r.strip()][:4]
+    if any(not _media_ref_ok(r, is_owner) for r in refs):
+        return _err("ảnh mẫu phải là link https hoặc ảnh vừa gửi trong cuộc trò chuyện")
+    if not is_owner:
+        limit = group_permissions.media_quotas(uid, str(turn.get("thread_id") or ""), bool(turn.get("is_group")))[kind]
+        if not _media_take(uid, kind, limit):
+            what = "ảnh" if kind == "image" else "video"
+            return _err(f"hôm nay người này đã dùng hết {limit} {what} AI — mai thử lại, hoặc nhờ chủ bot nâng hạn mức")
+    if kind == "image":
+        try:
+            got = await asyncio.to_thread(media_engines.draw, prompt, aspect=str(args.get("aspect") or "square"), refs=refs)
+        except media_engines.EngineError as exc:
+            if not is_owner:
+                _media_give_back(uid, kind)
+            return _err(f"chưa vẽ được ảnh: {exc}")
+        from agent.image_gen_provider import save_b64_image
+        import base64 as _b64
+        path = save_b64_image(_b64.b64encode(got["data"]).decode("ascii"), prefix=f"2anh_{got['engine']}",
+                              extension=media_engines.sniff(got["data"]) or "png")
+        sent = json.loads(await _invoke("sendMessage", [{"msg": "", "attachments": [str(path)]}, thread_id,
+                                                         _thread_type(thread_kind)]))
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        if not sent.get("success"):
+            return _err(f"vẽ xong nhưng chưa gửi được ảnh: {sent.get('error')}")
+        note = f" (nguồn ưu tiên lỗi nên đã dùng {media_engines.ENGINE_LABELS[got['engine']]})" if got["fallbacks"] else ""
+        return _ok(f"Đã vẽ và gửi ảnh vào cuộc trò chuyện{note}. Đừng gửi lại ảnh; chỉ nói một câu ngắn nếu cần.")
+    try:
+        job = await asyncio.to_thread(media_engines.submit_video, prompt, seconds=args.get("seconds"),
+                                      aspect=str(args.get("aspect") or "9:16"), refs=refs)
+    except media_engines.EngineError as exc:
+        if not is_owner:
+            _media_give_back(uid, kind)
+        return _err(f"chưa tạo được video: {exc}")
+    from agent.video_gen_provider import save_bytes_video
+    media_engines.start_background(dict(turn), job, prompt, save_bytes_video)
+    return _ok(f"Đã gửi yêu cầu tạo video {job['seconds']} giây. Video thường mất 2–20 phút; xong hệ thống TỰ GỬI vào "
+               "cuộc trò chuyện này. Báo người hỏi chờ; đừng gọi lại công cụ này.")
+
+
+# =====================================================================
 #  Nhóm 1 — Gửi nội dung phong phú
 # =====================================================================
 
@@ -694,10 +826,17 @@ def studio_turn_note(sender_uid: str, thread_id: str, is_group: bool) -> Optiona
     on = [f for f in group_permissions.STUDIO_FEATURES if rules["features"].get(f)]
     if not on:
         return None
+    notes = []
     kinds = ", ".join(f"{kind} ({recipes.RECIPES[kind].label})" for f in on for kind in recipes.kinds_for(f))
-    left = max(0, rules["quota"] - _studio_ledger().used_today(sender_uid))
-    return (f"[Xưởng tạo sản phẩm: người này nhờ được bằng công cụ zalo_studio — {kinds}. Hôm nay còn {left} "
-            f"lượt. Gom đủ yêu cầu vào `brief` rồi gọi một lần; không tự làm bằng cách khác.]")
+    if kinds:
+        left = max(0, rules["quota"] - _studio_ledger().used_today(sender_uid))
+        notes.append(f"[Xưởng tạo sản phẩm: người này nhờ được bằng công cụ zalo_studio — {kinds}. Hôm nay còn {left} "
+                     f"lượt. Gom đủ yêu cầu vào `brief` rồi gọi một lần; không tự làm bằng cách khác.]")
+    media = [label for f, label in (("studioImage", "vẽ ảnh AI (kind=image)"), ("studioAIVideo", "tạo video AI (kind=video)"))
+             if rules["features"].get(f)]
+    if media:
+        notes.append(f"[Người này nhờ được {', '.join(media)} bằng công cụ zalo_media — có hạn mức mỗi ngày.]")
+    return " ".join(notes)
 
 
 async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
@@ -3088,6 +3227,23 @@ TOOLS = [
         ["kind", "brief"],
     ), zalo_studio, TOOLSET_PUBLIC),
 
+    ("zalo_media", "🎨", _schema(
+        "zalo_media",
+        "Vẽ ảnh AI hoặc tạo video AI ngắn theo mô tả, rồi gửi vào cuộc trò chuyện này. kind=image: vẽ (hoặc sửa theo "
+        "ảnh mẫu trong `images`) và gửi ngay. kind=video: chạy nền 2–20 phút, xong tự gửi — báo người hỏi chờ, đừng gọi "
+        "lại. Gọi MỘT lần cho một yêu cầu. Bị từ chối (chưa bật, hết lượt trong ngày) thì nói đúng lý do, không tự làm "
+        "bằng cách khác.",
+        {
+            "kind": {"type": "string", "enum": ["image", "video"]},
+            "prompt": {"type": "string", "description": "Mô tả chi tiết ảnh/video cần tạo (tiếng Việt hoặc tiếng Anh)."},
+            "aspect": {"type": "string", "description": "Ảnh: square | landscape | portrait. Video: 9:16 (dọc) | 16:9 | 1:1."},
+            "seconds": {"type": "integer", "description": "Chỉ video: độ dài giây (bỏ trống = theo cài đặt)."},
+            "images": {"type": "array", "items": {"type": "string"}, "maxItems": 4,
+                       "description": "Ảnh mẫu (đường dẫn ảnh người dùng vừa gửi, hoặc link https): ảnh sửa theo mẫu; video lấy làm khung đầu."},
+        },
+        ["kind", "prompt"],
+    ), zalo_media, TOOLSET_PUBLIC),
+
 
     ("zalo_send_voice", "🎙️", _schema(
         "zalo_send_voice",
@@ -4063,7 +4219,7 @@ def _feature_block(turn: Dict[str, Any], name: str, args: Any) -> Optional[Dict[
         if not isinstance(real_args, dict):
             real_args = {}
     if real in group_permissions.STUDIO_TOOLS:
-        return _studio_block(turn, real_args)
+        return _studio_block(turn, real_args, real)
     feature = group_permissions.feature_of(real)
     if feature is None:
         return None
@@ -4102,18 +4258,23 @@ def _feature_block(turn: Dict[str, Any], name: str, args: Any) -> Optional[Dict[
     }
 
 
-def _studio_block(turn: Dict[str, Any], args: Dict[str, Any]) -> Optional[Dict[str, str]]:
-    """``zalo_studio``: nút áp tuỳ ``kind``. Khác các nút cũ, đọc quyền lỗi thì CHẶN (xem _studio_rules)."""
+def _studio_block(turn: Dict[str, Any], args: Dict[str, Any], tool: str = "zalo_studio") -> Optional[Dict[str, str]]:
+    """``zalo_studio`` / ``zalo_media``: nút áp tuỳ ``kind``. Khác các nút cũ, đọc quyền lỗi thì CHẶN (xem _studio_rules)."""
     from .studio import recipes
 
-    recipe = recipes.RECIPES.get(str((args or {}).get("kind") or ""))
-    if recipe is None:
+    kind = str((args or {}).get("kind") or "")
+    if tool == "zalo_media":
+        switch = {"image": "studioImage", "video": "studioAIVideo"}.get(kind)
+    else:
+        recipe = recipes.RECIPES.get(kind)
+        switch = recipe.switch if recipe else None
+    if switch is None:
         return None  # công cụ tự báo kind sai
-    if _studio_rules(turn)["features"].get(recipe.switch):
+    if _studio_rules(turn)["features"].get(switch):
         return None
-    label = group_permissions.STUDIO_LABELS[recipe.switch]
+    label = group_permissions.STUDIO_LABELS[switch]
     where = "trong nhóm này" if turn.get("is_group") else "khi nhắn riêng với người này"
-    logger.info("[zalo] chặn zalo_studio(%s) — %s đang tắt %s", recipe.kind, turn.get("sender_uid"), recipe.switch)
+    logger.info("[zalo] chặn %s(%s) — %s đang tắt %s", tool, kind, turn.get("sender_uid"), switch)
     return {
         "action": "block",
         "message": (f"Chủ bot chưa bật tính năng {label} {where}. Hãy nói ngắn gọn với người hỏi rằng tính năng "

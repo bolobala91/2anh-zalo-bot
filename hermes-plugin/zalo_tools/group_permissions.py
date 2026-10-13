@@ -66,15 +66,19 @@ DM_WHO = ("owners", "list", "everyone")
 # Xưởng tạo sản phẩm (spec §17): 4 nút, nằm cùng ``features`` của mặc định/nhóm/
 # nhắn riêng/từng người. KHÁC 9 nút cũ: thiếu khoá = TẮT, đọc tệp lỗi = TẮT —
 # xưởng dùng tài nguyên AI của chủ bot nên không bao giờ mở vì lỗi.
-STUDIO_FEATURES = ("studioSlides", "studioDocs", "studioExams", "studioVideo")
+STUDIO_FEATURES = ("studioSlides", "studioDocs", "studioExams", "studioVideo", "studioImage", "studioAIVideo")
 STUDIO_LABELS: Dict[str, str] = {
     "studioSlides": "làm slide PowerPoint",
     "studioDocs": "soạn văn bản và giáo án",
     "studioExams": "làm đề thi, SKKN, trò chơi, thí nghiệm ảo",
     "studioVideo": "làm video",
+    "studioImage": "vẽ ảnh AI",
+    "studioAIVideo": "tạo video AI",
 }
 # Công cụ của xưởng: một công cụ, nút nào áp tuỳ ``kind`` (xem studio/recipes.py).
-STUDIO_TOOLS = frozenset({"zalo_studio"})
+# ``zalo_media`` (vẽ ảnh AI / tạo video AI): nút ``studioImage`` / ``studioAIVideo`` tuỳ ``kind``, hạn mức riêng.
+STUDIO_TOOLS = frozenset({"zalo_studio", "zalo_media"})
+MEDIA_FEATURES = frozenset({"studioImage", "studioAIVideo"})
 # Chính sách cài đặt (spec §17.6): máy Windows không có hộp cát của hệ điều hành → video (bộ dựng nặng nhất, có
 # mạng) luôn tắt ở đây, bất kể tệp quyền nói gì. Linux chạy không hộp cát cũng vậy — xem video_policy().
 # Dashboard cùng máy hiện ghi chú và khoá nút.
@@ -83,6 +87,10 @@ WINDOWS_VIDEO_NOTE = "Máy chủ Windows không có hộp cát — video tắt"
 PLAIN_VIDEO_NOTE = ("Máy chủ chưa dùng được hộp cát systemd (cần Linux, gateway chạy bằng root, có systemd-run, "
                     "không đặt ZALO_STUDIO_SANDBOX=none) — video tắt")
 DEFAULT_STUDIO_QUOTA = 3
+# Vẽ ảnh AI / tạo video AI: số ảnh, số video mỗi người mỗi ngày — cùng chuỗi lớp với số lượt xưởng.
+DEFAULT_IMAGE_QUOTA = 5
+DEFAULT_VIDEO_QUOTA = 1
+QUOTA_KEYS = ("studioQuota", "imageQuota", "videoQuota")
 MAX_STUDIO_QUOTA = 50
 
 _lock = threading.Lock()
@@ -131,9 +139,10 @@ def _layer(raw: Any) -> Dict[str, Any]:
     studio = _bools(raw.get("features"), STUDIO_FEATURES)
     if studio:
         out["studio"] = studio
-    quota = _quota(raw.get("studioQuota"))
-    if quota is not None:
-        out["studioQuota"] = quota
+    for key in QUOTA_KEYS:
+        quota = _quota(raw.get(key))
+        if quota is not None:
+            out[key] = quota
     return out
 
 
@@ -141,17 +150,23 @@ def _studio_section(raw: Any) -> Dict[str, Any]:
     """Mục ``studio`` gốc: ``quota`` mặc định mỗi người mỗi ngày, ``people[uid].quota`` riêng từng người."""
     if not isinstance(raw, dict):
         return {}
-    out: Dict[str, Any] = {"people": {}}
-    quota = _quota(raw.get("quota"))
-    if quota is not None:
-        out["quota"] = quota
+    out: Dict[str, Any] = {"people": {}, "imagePeople": {}, "videoPeople": {}}
+    for key in ("quota", "image", "video"):
+        quota = _quota(raw.get(key))
+        if quota is not None:
+            out[key] = quota
     people = raw.get("people") if isinstance(raw.get("people"), dict) else {}
     for uid, entry in people.items():
-        if not (str(uid).isascii() and str(uid).isdigit()) or len(str(uid)) > 32:
+        if not (str(uid).isascii() and str(uid).isdigit()) or len(str(uid)) > 32 or not isinstance(entry, dict):
             continue
-        quota = _quota(entry.get("quota")) if isinstance(entry, dict) else None
-        if quota is not None:
-            out["people"][str(uid)] = quota
+        quota = _quota(entry.get("quota"))
+        if quota is None:
+            continue
+        out["people"][str(uid)] = quota
+        for key, book in (("image", "imagePeople"), ("video", "videoPeople")):
+            own = _quota(entry.get(key))
+            if own is not None:
+                out[book][str(uid)] = own
     return out
 
 
@@ -378,6 +393,31 @@ def publish_video_policy(path: Optional[Path] = None) -> Optional[Dict[str, Any]
         logger.warning("[zalo] không ghi được %s: %s", target, exc)
         return None
     return data
+
+
+def _quota_chain(data: Dict[str, Any], uid: str, thread_id: str, is_group: bool, layer_key: str,
+                 default_key: str, people_key: str, default: int) -> int:
+    """Hạn mức theo lớp: người (mục ``studio``) ← (trong nhóm) nhóm ← thư mục ← mặc định của mục ``studio`` ← ``default``."""
+    quota: Optional[int] = None
+    if is_group:
+        entry = (data.get("groups") or {}).get(str(thread_id or "")) or {}
+        quota = entry.get(layer_key, _folder_layer(data, thread_id).get(layer_key))
+    else:
+        folder = _person_folder_layer(data, uid)
+        if folder is not None:
+            quota = folder.get(layer_key)
+    studio = data.get("studio") or {}
+    own = (studio.get(people_key) or {}).get(str(uid or ""))
+    if own is not None:
+        return own
+    return quota if quota is not None else studio.get(default_key, default)
+
+
+def media_quotas(uid: str, thread_id: str, is_group: bool) -> Dict[str, int]:
+    """Số ảnh AI / video AI mỗi ngày của một người không phải chủ nhân trong hội thoại này."""
+    data = _load()
+    return {"image": _quota_chain(data, uid, thread_id, is_group, "imageQuota", "image", "imagePeople", DEFAULT_IMAGE_QUOTA),
+            "video": _quota_chain(data, uid, thread_id, is_group, "videoQuota", "video", "videoPeople", DEFAULT_VIDEO_QUOTA)}
 
 
 def studio_settings(uid: str, thread_id: str, is_group: bool) -> Dict[str, Any]:

@@ -290,3 +290,60 @@ class ProviderTest(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MediaToolTest(Base):
+    """Công cụ công khai zalo_media: nút Vẽ ảnh AI / Tạo video AI + hạn mức mỗi ngày cho người không phải chủ nhân."""
+
+    def setUp(self):
+        super().setUp()
+        from plugins.zalo_tools import tools
+        self.tools = tools
+        self.sent = []
+
+        async def invoke(method, args):
+            self.sent.append((method, args))
+            return json.dumps({"success": True})
+
+        for p in (mock.patch.object(tools, "_invoke", invoke),
+                  mock.patch.object(tools, "_media_usage_path", lambda: __import__("pathlib").Path(self.home.name) / "usage.json"),
+                  mock.patch.object(tools.group_permissions, "media_quotas", lambda uid, tid, g: {"image": 2, "video": 1})):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def call(self, turn, args):
+        token = self.tools._TURN.set(turn)
+        try:
+            return json.loads(asyncio.run(self.tools.zalo_media(args)))
+        finally:
+            self.tools._TURN.reset(token)
+
+    def test_member_image_quota_and_delivery(self):
+        member = {"sender_uid": "u5", "thread_id": "g1", "is_group": True, "is_owner": False}
+        with mock.patch("requests.post", lambda *a, **k: Resp(200, {"data": [{"b64_json": B64}]})), \
+                mock.patch.dict(os.environ, {"HERMES_HOME": self.home.name}):
+            self.assertTrue(self.call(member, {"kind": "image", "prompt": "con mèo"})["success"])
+            self.assertTrue(self.call(member, {"kind": "image", "prompt": "con chó"})["success"])
+            out = self.call(member, {"kind": "image", "prompt": "con gà"})
+        self.assertFalse(out["success"])
+        self.assertIn("đã dùng hết 2 ảnh", out["error"])
+        self.assertEqual([m for m, _ in self.sent], ["sendMessage", "sendMessage"])
+        self.assertEqual(self.sent[0][1][1], "g1", "gửi vào đúng nhóm đang hỏi")
+
+    def test_failed_draw_gives_the_turn_back_and_refs_are_fenced(self):
+        member = {"sender_uid": "u6", "thread_id": "g1", "is_group": True, "is_owner": False}
+        with mock.patch("requests.post", lambda *a, **k: Resp(402, {"error": "het tien"})):
+            out = self.call(member, {"kind": "image", "prompt": "x"})
+        self.assertFalse(out["success"])
+        self.assertEqual(self.tools._media_used("u6", "image"), 0, "lỗi thì trả lại lượt")
+        out = self.call(member, {"kind": "image", "prompt": "x", "images": [str(self.home.name) + "/../secret.env"]})
+        self.assertIn("ảnh mẫu", out["error"])
+
+    def test_switch_gate_by_kind(self):
+        turn = {"sender_uid": "u7", "thread_id": "g1", "is_group": True, "is_owner": False}
+        rules = {"features": {"studioImage": True, "studioAIVideo": False}}
+        with mock.patch.object(self.tools, "_studio_rules", lambda t: rules):
+            self.assertIsNone(self.tools._studio_block(turn, {"kind": "image"}, "zalo_media"))
+            blocked = self.tools._studio_block(turn, {"kind": "video"}, "zalo_media")
+        self.assertEqual(blocked["action"], "block")
+        self.assertIn("tạo video AI", blocked["message"])
