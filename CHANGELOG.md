@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.30.2] — 2026-10-13
+
+### Sửa
+
+- **Tạo video Stali báo lỗi 400 "Yêu cầu chưa phù hợp với model":** khung hình giờ gửi theo kích thước (`720x1280` dọc, `1280x720` ngang…) đúng cách Stali nhận; Veo/Omni không có khung vuông thì tự dùng khung dọc/ngang gần nhất.
+
 ## [2.30.1] — 2026-10-13
 
 ### Sửa

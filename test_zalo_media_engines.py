@@ -175,8 +175,13 @@ class VideoTest(Base):
         with mock.patch("requests.request", request):
             got = me.make_video("phố đêm", seconds=12, aspect="16:9", sleep=lambda s: None)
         self.assertEqual(got["data"], b"MP4DATA")
-        self.assertEqual(log[0][2], {"model": "seedance-2.0-fast", "prompt": "phố đêm", "seconds": 10, "aspect_ratio": "16:9"})
+        self.assertEqual(log[0][2], {"model": "seedance-2.0-fast", "prompt": "phố đêm", "seconds": 10, "size": "1280x720"},
+                         "khung hình gửi qua size — Stali từ chối aspect_ratio")
+        self.assertEqual(got["aspect"], "16:9")
         self.assertEqual([m for m, *_ in log], ["POST", "GET", "GET", "GET"])
+        self.assertEqual(me.video_size("veo-3.1", "1:1"), ("9:16", "720x1280"), "Veo không có khung vuông")
+        self.assertEqual(me.video_size("seedance-2.5", "21:9"), ("21:9", "1680x720"))
+        self.assertEqual(me.video_size("google-omni-flash", "lạ"), ("9:16", "720x1280"))
 
     def test_failures(self):
         with mock.patch("requests.request", lambda m, u, **k: Resp(402, {"error": {"message": "Số dư đã hết."}})):

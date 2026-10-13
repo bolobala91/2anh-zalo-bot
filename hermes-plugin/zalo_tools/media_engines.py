@@ -42,6 +42,19 @@ VIDEO_MODELS: Dict[str, Tuple[int, ...]] = {
     "google-omni-flash": (5, 10),
 }
 VIDEO_ASPECTS = ("9:16", "16:9", "1:1", "3:4", "4:3", "21:9")
+# Stali nhận khung hình qua ``size`` (gửi ``aspect_ratio`` bị từ chối 400 "chưa phù hợp với model"). Veo/Omni chỉ có
+# khung dọc/ngang; Seedance có thêm vuông, 3:4, 4:3, 21:9.
+VIDEO_SIZES = {"9:16": "720x1280", "16:9": "1280x720", "1:1": "1024x1024", "3:4": "768x1024", "4:3": "1024x768",
+               "21:9": "1680x720"}
+SEEDANCE_ONLY_SIZES = {"1:1", "3:4", "4:3", "21:9"}
+
+
+def video_size(model: str, aspect: str) -> Tuple[str, str]:
+    """(tỉ lệ thực dùng, size gửi Stali). Tỉ lệ lạ → dọc 9:16; model không có tỉ lệ đó → dọc/ngang gần nhất."""
+    aspect = aspect if aspect in VIDEO_SIZES else "9:16"
+    if aspect in SEEDANCE_ONLY_SIZES and not model.startswith("seedance"):
+        aspect = "16:9" if aspect in ("4:3", "21:9") else "9:16"
+    return aspect, VIDEO_SIZES[aspect]
 VIDEO_REFS = {"seedance-2.0-fast": 10, "seedance-2.5": 10, "veo-3.1": 3, "google-omni-flash": 3}
 DEFAULT_VIDEO = {"enabled": True, "model": "seedance-2.0-fast", "seconds": 5}
 SIZES = {"landscape": "1536x1024", "square": "1024x1024", "portrait": "1024x1536"}
@@ -362,8 +375,8 @@ def make_video(prompt: str, *, model: Optional[str] = None, seconds: Optional[in
         raise EngineError("chưa đặt khoá Stali")
     model = model if model in VIDEO_MODELS else conf["model"]
     seconds = fit_seconds(model, int(seconds or conf["seconds"]))
-    body: Dict[str, Any] = {"model": model, "prompt": " ".join(str(prompt or "").split()), "seconds": seconds,
-                            "aspect_ratio": aspect if aspect in VIDEO_ASPECTS else "9:16"}
+    aspect, size = video_size(model, aspect)
+    body: Dict[str, Any] = {"model": model, "prompt": " ".join(str(prompt or "").split()), "seconds": seconds, "size": size}
     if not body["prompt"]:
         raise EngineError("cần mô tả video")
     refs = [r for r in (refs or []) if isinstance(r, str) and r.strip()][:VIDEO_REFS.get(model, 3)]
@@ -408,7 +421,7 @@ def make_video(prompt: str, *, model: Optional[str] = None, seconds: Optional[in
     resp = call("GET", f"/videos/{vid}/content")
     if resp.status_code != 200 or not resp.content:
         raise EngineError(http_error(resp.status_code, as_json(resp)) if resp.status_code != 200 else "video rỗng")
-    return {"data": resp.content, "model": model, "seconds": seconds, "id": vid, "aspect": body["aspect_ratio"]}
+    return {"data": resp.content, "model": model, "seconds": seconds, "id": vid, "aspect": aspect}
 
 
 # -- provider cho Hermes ----------------------------------------------------------------------------------------------
