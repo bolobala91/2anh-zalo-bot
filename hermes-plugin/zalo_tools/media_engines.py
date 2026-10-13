@@ -362,16 +362,31 @@ def draw(prompt: str, *, size: Optional[str] = None, aspect: str = "square",
 
 # -- video ----------------------------------------------------------------------------------------------------------
 
-def make_video(prompt: str, *, model: Optional[str] = None, seconds: Optional[int] = None, aspect: str = "",
-               refs: Optional[List[str]] = None, sleep=time.sleep, clock=time.monotonic) -> Dict[str, Any]:
-    """Tạo video qua Stali: POST → chờ completed → tải MP4. Trả {data, model, seconds, id}."""
+def _stali_call(method: str, path: str, **kw):
     import requests
 
+    base, key = stali_target()
+    try:
+        return requests.request(method, base + path, timeout=120,
+                                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, **kw)
+    except Exception as exc:
+        raise EngineError(f"không gọi được Stali ({type(exc).__name__})") from None
+
+
+def _json(resp) -> Any:
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+
+def submit_video(prompt: str, *, model: Optional[str] = None, seconds: Optional[int] = None, aspect: str = "",
+                 refs: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Gửi yêu cầu tạo video (Stali trừ tiền ở bước này) → {id, model, seconds, aspect, status, payload}."""
     conf = settings()["video"]
     if not conf["enabled"]:
         raise EngineError("tạo video đang tắt trong dashboard")
-    base, key = stali_target()
-    if not key:
+    if not stali_target()[1]:
         raise EngineError("chưa đặt khoá Stali")
     model = model if model in VIDEO_MODELS else conf["model"]
     seconds = fit_seconds(model, int(seconds or conf["seconds"]))
@@ -384,45 +399,107 @@ def make_video(prompt: str, *, model: Optional[str] = None, seconds: Optional[in
     if refs:
         images = [image_field(r) for r in refs]
         body["input_reference"] = images[0] if len(images) == 1 else images
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-
-    def call(method: str, path: str, **kw):
-        try:
-            return requests.request(method, base + path, headers=headers, timeout=120, **kw)
-        except Exception as exc:
-            raise EngineError(f"không gọi được Stali ({type(exc).__name__})") from None
-
-    def as_json(resp):
-        try:
-            return resp.json()
-        except ValueError:
-            return None
-
-    resp = call("POST", "/videos", json=body)
-    payload = as_json(resp)
+    resp = _stali_call("POST", "/videos", json=body)
+    payload = _json(resp)
     if resp.status_code != 200 or not isinstance(payload, dict) or not payload.get("id"):
         raise EngineError(http_error(resp.status_code, payload, (resp.text or "")[:200]) if resp.status_code != 200
                           else "Stali không trả mã việc")
-    vid = str(payload["id"])
-    deadline = clock() + VIDEO_TIMEOUT
-    status = str(payload.get("status") or "")
+    return {"id": str(payload["id"]), "model": model, "seconds": seconds, "aspect": aspect,
+            "status": str(payload.get("status") or ""), "payload": payload}
+
+
+def wait_video(job: Dict[str, Any], *, timeout: int = VIDEO_TIMEOUT, sleep=time.sleep, clock=time.monotonic) -> bytes:
+    """Chờ việc video xong rồi tải MP4 (không trừ thêm tiền)."""
+    vid = job["id"]
+    payload = job.get("payload") or {}
+    status = job.get("status") or ""
+    deadline = clock() + timeout
     while status != "completed":
         if status in ("failed", "cancelled", "canceled", "expired"):
             err = payload.get("error") if isinstance(payload, dict) else None
             msg = (err.get("message") if isinstance(err, dict) else err) or status
             raise EngineError(f"Stali không tạo được video: {str(msg)[:200]}")
         if clock() > deadline:
-            raise EngineError(f"chờ video quá {VIDEO_TIMEOUT // 60} phút (mã việc {vid})")
+            raise EngineError(f"chờ video quá {timeout // 60} phút (mã việc {vid})")
         sleep(VIDEO_POLL)
-        resp = call("GET", f"/videos/{vid}")
-        payload = as_json(resp) or {}
+        resp = _stali_call("GET", f"/videos/{vid}")
+        payload = _json(resp) or {}
         if resp.status_code != 200:
             raise EngineError(http_error(resp.status_code, payload))
         status = str(payload.get("status") or "")
-    resp = call("GET", f"/videos/{vid}/content")
+    resp = _stali_call("GET", f"/videos/{vid}/content")
     if resp.status_code != 200 or not resp.content:
-        raise EngineError(http_error(resp.status_code, as_json(resp)) if resp.status_code != 200 else "video rỗng")
-    return {"data": resp.content, "model": model, "seconds": seconds, "id": vid, "aspect": aspect}
+        raise EngineError(http_error(resp.status_code, _json(resp)) if resp.status_code != 200 else "video rỗng")
+    return resp.content
+
+
+def make_video(prompt: str, *, model: Optional[str] = None, seconds: Optional[int] = None, aspect: str = "",
+               refs: Optional[List[str]] = None, sleep=time.sleep, clock=time.monotonic) -> Dict[str, Any]:
+    """Tạo video và chờ tới khi xong (ngoài Zalo: CLI, cron). Trả {data, model, seconds, id, aspect}."""
+    job = submit_video(prompt, model=model, seconds=seconds, aspect=aspect, refs=refs)
+    data = wait_video(job, sleep=sleep, clock=clock)
+    return {"data": data, "model": job["model"], "seconds": job["seconds"], "id": job["id"], "aspect": job["aspect"]}
+
+
+# -- video chạy nền trong Zalo: trả lời ngay, xong thì tự gửi vào đúng cuộc trò chuyện ----------------------------------
+
+BACKGROUND_TIMEOUT = 60 * 60
+MAX_BACKGROUND = 3
+_background: Dict[str, Dict[str, Any]] = {}
+
+
+def _zalo_turn() -> Dict[str, Any]:
+    try:
+        from .tools import _turn
+        turn = _turn()
+    except Exception:
+        return {}
+    return dict(turn) if turn and turn.get("thread_id") else {}
+
+
+def _send_to_turn(turn: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+    """Gửi bằng danh tính của lượt đã nhờ (như xưởng Studio) — kết nối Zalo vẫn kiểm đúng hội thoại."""
+    import asyncio
+
+    from .tools import THREAD_GROUP, THREAD_USER, _TURN, _invoke
+
+    async def run() -> str:
+        token = _TURN.set(dict(turn))
+        try:
+            return await _invoke("sendMessage", [payload, str(turn.get("thread_id") or ""),
+                                                 THREAD_GROUP if turn.get("is_group") else THREAD_USER])
+        finally:
+            _TURN.reset(token)
+
+    try:
+        return bool(json.loads(asyncio.run(run())).get("success"))
+    except Exception:
+        logger.warning("[zalo] gửi kết quả video vào Zalo lỗi", exc_info=True)
+        return False
+
+
+def _finish_in_background(turn: Dict[str, Any], job: Dict[str, Any], prompt: str, save, wait=wait_video, send=_send_to_turn) -> None:
+    try:
+        data = wait(job, timeout=BACKGROUND_TIMEOUT)
+        path = save(data, prefix=f"stali_{job['model']}")
+        caption = f"🎬 Video {job['seconds']} giây: {prompt[:150]}"
+        if not send(turn, {"msg": caption, "attachments": [str(path)]}):
+            send(turn, {"msg": "Video đã tạo xong nhưng chưa gửi được vào đây — chủ nhân xem lại kết nối Zalo giúp em nhé."})
+        logger.info("[zalo] video %s đã xong và gửi vào %s", job["id"], turn.get("thread_id"))
+    except EngineError as exc:
+        logger.warning("[zalo] video %s lỗi — %s", job["id"], exc)
+        send(turn, {"msg": f"Chưa tạo được video ({exc})."})
+    except Exception:
+        logger.warning("[zalo] video %s lỗi", job["id"], exc_info=True)
+        send(turn, {"msg": "Chưa tạo được video do lỗi trong lúc chờ kết quả."})
+    finally:
+        _background.pop(job["id"], None)
+
+
+def start_background(turn: Dict[str, Any], job: Dict[str, Any], prompt: str, save) -> None:
+    _background[job["id"]] = {"thread_id": turn.get("thread_id"), "since": time.time()}
+    threading.Thread(target=_finish_in_background, args=(turn, job, prompt, save), daemon=True,
+                     name=f"zalo-video-{job['id'][-6:]}").start()
 
 
 # -- provider cho Hermes ----------------------------------------------------------------------------------------------
@@ -507,11 +584,28 @@ def make_video_provider():
                      aspect_ratio: str = "", **kwargs: Any) -> Dict[str, Any]:
             refs = ([image_url] if isinstance(image_url, str) and image_url.strip() else [])
             refs += [r for r in (reference_image_urls or []) if isinstance(r, str)]
+            fail = lambda exc: error_response(error=f"Chưa tạo được video: {exc}", error_type="api_error",  # noqa: E731
+                                              provider="stali", model=str(model or ""), prompt=prompt or "",
+                                              aspect_ratio=aspect_ratio or "")
+            turn = _zalo_turn()
+            if turn:
+                # Trên Zalo: gửi yêu cầu rồi trả lời ngay; video xong (thường 2–20 phút) luồng nền tự gửi vào đây.
+                if len(_background) >= MAX_BACKGROUND:
+                    return fail(f"đang có {len(_background)} video chờ — đợi xong rồi nhờ tiếp")
+                try:
+                    job = submit_video(prompt, model=model, seconds=duration, aspect=aspect_ratio, refs=refs)
+                except EngineError as exc:
+                    return fail(exc)
+                start_background(turn, job, " ".join(str(prompt).split()), save_bytes_video)
+                return {"success": True, "video": None, "status": "dang_tao", "provider": "stali", "model": job["model"],
+                        "duration": job["seconds"], "aspect_ratio": job["aspect"], "prompt": prompt,
+                        "message": (f"Đã gửi yêu cầu tạo video {job['seconds']} giây ({job['model']}). Video thường mất "
+                                    "2–20 phút; khi xong hệ thống TỰ GỬI video vào cuộc trò chuyện này. Hãy báo người "
+                                    "dùng như vậy. KHÔNG gọi lại video_generate, KHÔNG tự gửi tệp.")}
             try:
                 got = make_video(prompt, model=model, seconds=duration, aspect=aspect_ratio, refs=refs)
             except EngineError as exc:
-                return error_response(error=f"Chưa tạo được video: {exc}", error_type="api_error", provider="stali",
-                                      model=str(model or ""), prompt=prompt or "", aspect_ratio=aspect_ratio or "")
+                return fail(exc)
             path = save_bytes_video(got["data"], prefix=f"stali_{got['model']}")
             return success_response(video=str(path), model=got["model"], prompt=prompt,
                                     modality="image" if refs else "text", aspect_ratio=got["aspect"],

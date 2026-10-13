@@ -209,6 +209,59 @@ class VideoTest(Base):
         self.assertIn("đang tắt", str(ctx.exception))
 
 
+class BackgroundVideoTest(Base):
+    TURN = {"thread_id": "g1", "is_group": True, "is_owner": True, "sender_uid": "u1"}
+
+    def test_zalo_turn_answers_now_and_delivers_later(self):
+        provider = me.make_video_provider()
+        started = []
+
+        def request(method, url, headers=None, timeout=None, json=None):
+            return Resp(200, {"id": "vid_9", "status": "queued"})
+
+        with mock.patch.object(me, "_zalo_turn", lambda: dict(self.TURN)), \
+                mock.patch.object(me, "start_background", lambda turn, job, prompt, save: started.append((turn, job, prompt))), \
+                mock.patch("requests.request", request):
+            r = provider.generate("phố đêm  Hà Nội", duration=5, aspect_ratio="9:16")
+        self.assertTrue(r["success"])
+        self.assertEqual(r["status"], "dang_tao")
+        self.assertIsNone(r["video"])
+        self.assertIn("TỰ GỬI", r["message"])
+        self.assertEqual(started[0][0]["thread_id"], "g1")
+        self.assertEqual(started[0][1]["id"], "vid_9")
+        self.assertEqual(started[0][2], "phố đêm Hà Nội")
+
+    def test_submit_error_is_reported_immediately(self):
+        provider = me.make_video_provider()
+        with mock.patch.object(me, "_zalo_turn", lambda: dict(self.TURN)), \
+                mock.patch("requests.request", lambda *a, **k: Resp(402, {"error": {"message": "Số dư đã hết."}})):
+            r = provider.generate("x")
+        self.assertFalse(r["success"])
+        self.assertIn("402", r["error"])
+        me._background.update({f"v{i}": {} for i in range(me.MAX_BACKGROUND)})
+        self.addCleanup(me._background.clear)
+        with mock.patch.object(me, "_zalo_turn", lambda: dict(self.TURN)):
+            self.assertIn("đang có 3 video chờ", provider.generate("x")["error"])
+
+    def test_background_sends_video_or_error_to_the_same_chat(self):
+        sent = []
+        send = lambda turn, payload: sent.append((turn["thread_id"], payload)) or True  # noqa: E731
+        job = {"id": "vid_1", "model": "seedance-2.0-fast", "seconds": 5}
+        me._background["vid_1"] = {}
+        me._finish_in_background(dict(self.TURN), job, "phố đêm", save=lambda data, prefix: f"/cache/{prefix}.mp4",
+                                 wait=lambda job, timeout: b"MP4", send=send)
+        self.assertEqual(sent, [("g1", {"msg": "🎬 Video 5 giây: phố đêm", "attachments": ["/cache/stali_seedance-2.0-fast.mp4"]})])
+        self.assertNotIn("vid_1", me._background, "xong thì bỏ khỏi danh sách chờ")
+
+        sent.clear()
+
+        def boom(job, timeout):
+            raise me.EngineError("Stali không tạo được video: nội dung bị chặn")
+
+        me._finish_in_background(dict(self.TURN), job, "x", save=None, wait=boom, send=send)
+        self.assertEqual(sent, [("g1", {"msg": "Chưa tạo được video (Stali không tạo được video: nội dung bị chặn)."})])
+
+
 class ProviderTest(Base):
     def test_image_provider_saves_and_notes_fallback(self):
         provider = me.make_image_provider()

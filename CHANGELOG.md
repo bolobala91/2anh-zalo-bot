@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.31.0] — 2026-10-13
+
+### Đổi
+
+- **Tạo video chạy nền trên Zalo:** nhờ bot tạo video thì bot gửi yêu cầu cho Stali rồi **trả lời ngay** ("đang tạo, xong em gửi vào đây") — không còn treo cuộc trò chuyện. Video xong (thường 2–20 phút, chờ tối đa 1 giờ) bot **tự gửi vào đúng nhóm/người đã nhờ**; lỗi thì nhắn lý do vào đó. Lỗi ngay lúc gửi yêu cầu (khoá sai, hết số dư) vẫn báo tức thì. Tối đa 3 video chờ cùng lúc.
+
 ## [2.30.3] — 2026-10-13
 
 ### Sửa

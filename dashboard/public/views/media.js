@@ -124,7 +124,7 @@ export function Media({ onRestart }) {
     <h3>Tạo video (Stali)</h3>
     <div class="gen-video">
       <label class="rs-toggle"><input type="checkbox" checked=${video.enabled} disabled=${disabled} onChange=${(ev) => setVideo({ enabled: ev.currentTarget.checked }, ev.currentTarget.checked ? 'Đã bật tạo video.' : 'Đã tắt tạo video.')} />
-        <span>Cho bot tạo video khi chủ nhân nhờ <small class="muted">— từ mô tả, hoặc lấy ảnh gửi kèm làm khung hình đầu. Mỗi video mất khoảng 1–5 phút.</small></span></label>
+        <span>Cho bot tạo video khi chủ nhân nhờ <small class="muted">— từ mô tả, hoặc lấy ảnh gửi kèm làm khung hình đầu. Video thường mất 2–20 phút — bot trả lời ngay, xong thì tự gửi video vào đúng cuộc trò chuyện.</small></span></label>
       <div class="gen-video-row">
         <label class="field"><span>Model</span>
           <select value=${video.model} disabled=${disabled || !video.enabled} onChange=${(ev) => setVideo({ model: ev.currentTarget.value }, 'Đã đổi model video.')}>
