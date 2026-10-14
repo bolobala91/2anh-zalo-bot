@@ -465,6 +465,32 @@ export function createStoreReader({
       const acc = account();
       return acc ? groupTranscriptQuery(open(), acc, threadId, { ...opts, secretLike: SECRET }) : '';
     },
+    /** UID người gửi theo rowid (gắn ảnh đại diện vào tin ở máy chủ — UID không ra trình duyệt). */
+    senderUidsOf(threadId, threadType, rowids) {
+      const acc = account();
+      const ids = [...new Set((rowids || []).map(Number))].filter(Number.isSafeInteger).slice(0, 500);
+      const out = new Map();
+      if (!acc || !ids.length) return out;
+      const rows = open().prepare(`
+        SELECT rowid AS id, sender_uid AS uid FROM messages
+        WHERE account_id = ? AND thread_id = ? AND thread_type = ? AND is_self = 0 AND sender_uid <> ''
+          AND rowid IN (${ids.map(() => '?').join(',')})
+      `).all(acc, String(threadId), Number(threadType), ...ids);
+      for (const r of rows) out.set(Number(r.id), String(r.uid));
+      return out;
+    },
+    /** Tin theo mã Zalo (tin ghim của bảng tin) → `{ id, ts }` để nhảy tới; không có trong lịch sử → null. */
+    findByMsgId(threadId, threadType, msgId, cliMsgId = '') {
+      const acc = account();
+      const ok = (v) => typeof v === 'string' && v.length > 0 && v.length <= 64;
+      if (!acc || !(ok(msgId) || ok(cliMsgId))) return null;
+      const r = open().prepare(`
+        SELECT rowid AS id, timestamp_ms AS ts FROM messages
+        WHERE account_id = ? AND thread_id = ? AND thread_type = ? AND (msg_id = ? OR (? <> '' AND cli_msg_id = ?)) AND text NOT LIKE ?
+        LIMIT 1
+      `).get(acc, String(threadId), Number(threadType), String(msgId || '-'), String(cliMsgId || ''), String(cliMsgId || ''), SECRET);
+      return r ? { id: Number(r.id), ts: Number(r.ts) } : null;
+    },
     /** Gửi tay thành công → danh sách hội thoại phải hiện tin vừa gửi ngay, không chờ hết hạn đệm. */
     invalidateConversations() { convCache = null; },
     close: drop,

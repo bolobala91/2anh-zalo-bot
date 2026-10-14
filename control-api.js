@@ -134,6 +134,21 @@ export function createControlRouter({ token, health, qr, logout, send, loginCode
     router.get('/reminders', wrap(async (req) => ({
       reminders: await directory.reminders({ threadId: String(req.query.threadId ?? ''), threadType: Number(req.query.threadType) }),
     })));
+    // Phiên chat kiểu Zalo: đầu khung + bảng Thông tin, ảnh đại diện người gửi, bảng tin nhóm (chỉ đọc).
+    router.get('/chat-info', wrap(async (req) => ({
+      info: await directory.chatInfo({ threadId: String(req.query.threadId ?? ''), threadType: Number(req.query.threadType) }),
+    })));
+    router.post('/avatars', wrap(async (req) => {
+      const { uids } = req.body || {};
+      if (!Array.isArray(uids) || uids.length > 200) throw bad('uids phải là danh sách tối đa 200 UID');
+      return { avatars: await directory.avatars(uids.map(String)) };
+    }));
+    router.post('/group-avatars', wrap(async (req) => {
+      const { ids } = req.body || {};
+      if (!Array.isArray(ids) || ids.length > 200) throw bad('ids phải là danh sách tối đa 200 nhóm');
+      return { avatars: await directory.groupAvatars(ids.map(String)) };
+    }));
+    router.get('/board', wrap(async (req) => ({ board: await directory.board({ groupId: String(req.query.groupId ?? '') }) })));
     router.post('/reminders/remove', wrap(async (req) => {
       const { reminderId, threadId, threadType, actor } = req.body || {};
       return directory.removeReminder({ reminderId: String(reminderId ?? ''), threadId: String(threadId ?? ''), threadType, actor: checkActor(actor) });

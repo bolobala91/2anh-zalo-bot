@@ -47,6 +47,11 @@ export function createSidecarClient({ baseUrl = 'http://127.0.0.1:3872', token, 
       return { total, members };
     },
     // Liên hệ và Lịch hẹn (spec §18.4). Danh sách bạn có thể dài — hạn chờ như lệnh gửi.
+    // Phiên chat kiểu Zalo. Ảnh đại diện không bắt buộc: chờ ngắn, lỗi thì trang vẫn hiện chữ cái đầu.
+    chatInfo: async ({ threadId, threadType }) => (await call(`/chat-info?threadId=${encodeURIComponent(threadId)}&threadType=${Number(threadType)}`, { limitMs: sendTimeoutMs })).info,
+    avatars: async (uids, { limitMs = 2500 } = {}) => (await call('/avatars', { method: 'POST', body: { uids }, limitMs })).avatars,
+    groupAvatars: async (ids, { limitMs = 2500 } = {}) => (await call('/group-avatars', { method: 'POST', body: { ids }, limitMs })).avatars,
+    board: async (groupId) => (await call(`/board?groupId=${encodeURIComponent(groupId)}`, { limitMs: sendTimeoutMs })).board,
     friends: async ({ fresh = false } = {}) => (await call(`/friends${fresh ? '?fresh=1' : ''}`, { limitMs: sendTimeoutMs })).friends,
     friendRequests: async () => (await call('/friend-requests', { limitMs: sendTimeoutMs })).requests,
     answerFriendRequest: (m) => call('/friend-requests/answer', { method: 'POST', body: m, limitMs: sendTimeoutMs }),

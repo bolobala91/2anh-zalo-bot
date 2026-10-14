@@ -207,3 +207,41 @@ test('kết nối Zalo tắt vẫn xem được hội thoại, nhóm dùng tên 
   assert.equal(res.status, 200);
   assert.equal(res.json.conversations[0].name, 'Nhóm chưa rõ tên');
 });
+
+test('Phiên chat kiểu Zalo: ảnh đại diện gắn vào hội thoại và tin (không lộ UID), sidecar lỗi thì vẫn trả tin', async (t) => {
+  const sidecar = fakeSidecar({
+    groupAvatars: async (ids) => { sidecar.calls.push(['gava', ids]); return { 200: 'https://s1-ava.zadn.vn/g.jpg' }; },
+    avatars: async (uids) => { sidecar.calls.push(['ava', uids]); return { 100: 'https://s1-ava.zadn.vn/lan.jpg', 300: 'https://s1-ava.zadn.vn/minh.jpg' }; },
+  });
+  const { call, cookie } = await ready(t, { sidecar });
+  const list = (await call('/api/chats', { cookie })).json.conversations;
+  assert.equal(list.find((c) => c.threadId === '200').avatar, 'https://s1-ava.zadn.vn/g.jpg');
+  assert.equal(list.find((c) => c.threadId === '100').avatar, 'https://s1-ava.zadn.vn/lan.jpg');
+  assert.equal('avatar' in list.find((c) => c.threadId === '987654'), false);
+  const msgs = (await call('/api/chats/200/messages?type=1', { cookie })).json.messages;
+  assert.equal(msgs[0].avatar, 'https://s1-ava.zadn.vn/minh.jpg');
+  assert.equal(JSON.stringify(msgs).includes('"300"'), false, 'UID người gửi không ra trình duyệt');
+  sidecar.avatars = async () => { throw new Error('sidecar chậm'); };
+  sidecar.groupAvatars = async () => { throw new Error('sidecar chậm'); };
+  assert.equal((await call('/api/chats/200/messages?type=1', { cookie })).json.messages[0].text, 'Họp tổ chiều nay');
+  assert.equal((await call('/api/chats', { cookie })).status, 200);
+});
+
+test('Phiên chat kiểu Zalo: thông tin hội thoại và bảng tin (tin ghim có vị trí trong lịch sử để nhảy tới)', async (t) => {
+  const sidecar = fakeSidecar({
+    chatInfo: async (m) => { sidecar.calls.push(['info', m]); return { name: 'Tổ Hoá', avatar: '', members: 12, desc: '' }; },
+    board: async (g) => { sidecar.calls.push(['board', g]); return {
+      pins: [{ id: 'p1', text: 'Họp tổ', sender: 'Minh', msgId: 'g1', cliMsgId: '', at: 5 }, { id: 'p2', text: 'Cũ', sender: '', msgId: '123', cliMsgId: '', at: 1 }],
+      notes: [{ id: 'n1', text: 'Nội quy', at: 2 }], polls: [] }; },
+  });
+  const { call, cookie } = await ready(t, { sidecar });
+  const info = await call('/api/chats/200/info?type=1', { cookie });
+  assert.equal(info.json.info.members, 12);
+  assert.deepEqual(sidecar.calls.at(-1), ['info', { threadId: '200', threadType: 1 }]);
+  assert.equal((await call('/api/chats/abc/info?type=1', { cookie })).status, 400);
+  const b = (await call('/api/chats/200/board', { cookie })).json.board;
+  assert.equal(b.pins[0].ref.ts, 2000, 'tin ghim có trong lịch sử → nhảy tới được');
+  assert.equal(b.pins[1].ref, null);
+  assert.equal('msgId' in b.pins[0], false);
+  assert.equal(b.notes[0].text, 'Nội quy');
+});

@@ -181,3 +181,18 @@ test('kiểm trích dẫn và tag trước khi gửi qua Zalo', async () => {
   assert.throws(() => checkMentions([{ uid: '1', pos: 0, len: 4 }], '@Lan ơi', 0, bad), /tag/);
   assert.throws(() => checkMentions([{ uid: '1', pos: 1, len: 3 }], '@Lan ơi', 1, bad), /tag/);
 });
+
+test('thông tin hội thoại, ảnh đại diện theo lô, bảng tin: chuyển đúng tham số xuống directory', async (t) => {
+  const directory = fakeDirectory();
+  directory.chatInfo = async (m) => { directory.calls.push(['info', m]); return { name: 'Lớp', avatar: '', members: 3, desc: '' }; };
+  directory.avatars = async (uids) => { directory.calls.push(['avatars', uids]); return {}; };
+  directory.board = async (m) => { directory.calls.push(['board', m]); return { pins: [], notes: [], polls: [] }; };
+  const { call } = await serve(t, { directory });
+  assert.equal((await (await call('/chat-info?threadId=55&threadType=1')).json()).info.members, 3);
+  assert.deepEqual(directory.calls.at(-1), ['info', { threadId: '55', threadType: 1 }]);
+  assert.equal((await call('/avatars', { method: 'POST', body: { uids: ['1', '2'] } })).status, 200);
+  assert.deepEqual(directory.calls.at(-1), ['avatars', ['1', '2']]);
+  assert.equal((await call('/avatars', { method: 'POST', body: { uids: 'x' } })).status, 400);
+  assert.deepEqual((await (await call('/board?groupId=55')).json()).board, { pins: [], notes: [], polls: [] });
+  assert.deepEqual(directory.calls.at(-1), ['board', { groupId: '55' }]);
+});

@@ -81,3 +81,73 @@ test('lời nhắc: liệt kê theo hội thoại, bỏ mã lạ; xoá kiểm m�
   await assert.rejects(dir.reminders({ threadId: '1', threadType: 2 }), (e) => e.validation);
   await assert.rejects(createZaloDirectory({ getApi: () => null }).friends(), /Zalo chưa đăng nhập/);
 });
+
+const G = '5555555555555555555';
+
+test('thông tin hội thoại: nhóm lấy ảnh + số thành viên, nhắn riêng lấy ảnh người; đệm 10 phút', async () => {
+  let t = 0;
+  const api = fakeApi({
+    getGroupInfo: async (id) => { api.calls.push(['group', id]); return { gridInfoMap: { [G]: { name: 'Lớp 12A', fullAvt: 'https://s1-ava.zadn.vn/g.jpg', avt: 'x', totalMember: 42, desc: ' Mô  tả ' } } }; },
+    getUserInfo: async (ids) => { api.calls.push(['user', ids]); return { changed_profiles: { [`${A}_0`]: { userId: A, displayName: 'Lan', avatar: 'https://s1-ava.zadn.vn/a.jpg' } } }; },
+  });
+  const dir = createZaloDirectory({ getApi: () => api, now: () => t });
+  assert.deepEqual(await dir.chatInfo({ threadId: G, threadType: 1 }), { name: 'Lớp 12A', avatar: 'https://s1-ava.zadn.vn/g.jpg', members: 42, desc: 'Mô tả' });
+  await dir.chatInfo({ threadId: G, threadType: 1 });
+  assert.equal(api.calls.filter((c) => c[0] === 'group').length, 1, 'lần hai lấy từ đệm');
+  t = 11 * 60_000;
+  await dir.chatInfo({ threadId: G, threadType: 1 });
+  assert.equal(api.calls.filter((c) => c[0] === 'group').length, 2, 'hết 10 phút thì đọc lại');
+  assert.deepEqual(await dir.chatInfo({ threadId: A, threadType: 0 }), { name: 'Lan', avatar: 'https://s1-ava.zadn.vn/a.jpg', members: 0, desc: '' });
+  await assert.rejects(dir.chatInfo({ threadId: 'x', threadType: 1 }), /threadId/);
+});
+
+test('ảnh đại diện theo lô: chỉ UID hợp lệ, chỉ link https, đệm từng người; Zalo lỗi thì trả phần đã có', async () => {
+  const seen = [];
+  const api = fakeApi({
+    getUserInfo: async (ids) => { seen.push(ids); return { changed_profiles: {
+      [`${A}_0`]: { userId: A, avatar: 'https://s1-ava.zadn.vn/a.jpg' },
+      [`${B}_0`]: { userId: B, avatar: 'javascript:alert(1)' },
+    } }; },
+  });
+  const dir = createZaloDirectory({ getApi: () => api, now: () => 0 });
+  assert.deepEqual(await dir.avatars([A, B, 'abc', A]), { [A]: 'https://s1-ava.zadn.vn/a.jpg' });
+  assert.deepEqual(seen, [[A, B]], 'bỏ UID lạ và trùng');
+  assert.deepEqual(await dir.avatars([A]), { [A]: 'https://s1-ava.zadn.vn/a.jpg' });
+  assert.equal(seen.length, 1, 'đã đệm thì không hỏi lại (kể cả người không có ảnh)');
+  const broken = createZaloDirectory({ getApi: () => fakeApi({ getUserInfo: async () => { throw new Error('mạng'); } }), now: () => 0 });
+  assert.deepEqual(await broken.avatars([A]), {});
+});
+
+test('bảng tin nhóm: tin ghim, ghi chú, bình chọn chuẩn hoá; đệm 1 phút; nhắn riêng thì rỗng', async () => {
+  let t = 0;
+  const api = fakeApi({
+    getListBoard: async (opts, gid) => { api.calls.push(['board', opts, gid]); return { count: 4, items: [
+      { boardType: 2, data: { id: 'p1', creatorId: A, createTime: 10, params: { title: 'Nhớ nộp bài', senderName: 'Cô Lan', client_msg_id: '777', global_msg_id: '888', msg_type: 'chat' } } },
+      { boardType: 1, data: { id: 'n1', creatorId: B, createTime: 20, params: { title: 'Nội quy nhóm' } } },
+      { boardType: 3, data: { poll_id: 9, creator: A, question: 'Đi đâu?', closed: false, num_vote: 3, created_time: 30,
+        options: [{ content: 'Biển', votes: 2 }, { content: 'Núi', votes: 1 }] } },
+      { boardType: 7, data: {} },
+    ] }; },
+  });
+  const dir = createZaloDirectory({ getApi: () => api, now: () => t });
+  const b = await dir.board({ groupId: G });
+  assert.deepEqual(b.pins, [{ id: 'p1', text: 'Nhớ nộp bài', sender: 'Cô Lan', msgId: '888', cliMsgId: '777', at: 10 }]);
+  assert.deepEqual(b.notes, [{ id: 'n1', text: 'Nội quy nhóm', at: 20 }]);
+  assert.deepEqual(b.polls, [{ id: '9', question: 'Đi đâu?', closed: false, votes: 3, at: 30, options: [{ text: 'Biển', votes: 2 }, { text: 'Núi', votes: 1 }] }]);
+  await dir.board({ groupId: G });
+  assert.equal(api.calls.filter((c) => c[0] === 'board').length, 1);
+  t = 61_000;
+  await dir.board({ groupId: G });
+  assert.equal(api.calls.filter((c) => c[0] === 'board').length, 2);
+  await assert.rejects(dir.board({ groupId: '1 OR 1' }), /groupId/);
+});
+
+test('ảnh nhóm theo lô cho danh sách hội thoại: một lần gọi cho nhiều nhóm, đệm', async () => {
+  const seen = [];
+  const api = fakeApi({ getGroupInfo: async (ids) => { seen.push(ids); return { gridInfoMap: { [G]: { avt: 'https://s1-ava.zadn.vn/g.jpg' }, 66: { avt: '' } } }; } });
+  const dir = createZaloDirectory({ getApi: () => api, now: () => 0 });
+  assert.deepEqual(await dir.groupAvatars([G, '66', 'x']), { [G]: 'https://s1-ava.zadn.vn/g.jpg' });
+  assert.deepEqual(seen, [[G, '66']]);
+  await dir.groupAvatars([G, '66']);
+  assert.equal(seen.length, 1);
+});

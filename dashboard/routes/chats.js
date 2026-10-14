@@ -42,6 +42,16 @@ export function chatRoutes({ store, sidecar, threadNames, agentTrace = null, out
   const r = express.Router();
   const bad = (res, error) => res.status(400).json({ ok: false, error });
   const nameOf = (groups, id, type, peerName = '') => (type === 1 ? groups.get(id) : peerName) || fallbackName(id, type);
+  // Ảnh đại diện (Phiên chat kiểu Zalo) là phần phụ: sidecar chậm/lỗi thì trả {} — trang vẫn hiện chữ cái đầu.
+  const softly = async (fn) => { try { return (await fn()) || {}; } catch { return {}; } };
+  async function attachAvatars(threadId, type, page) {
+    if (type !== 1 || !page.messages?.length || !sidecar.avatars) return page;
+    let uids = new Map();
+    try { uids = store.senderUidsOf(threadId, type, page.messages.map((m) => m.id)); } catch { return page; }
+    if (!uids.size) return page;
+    const urls = await softly(() => sidecar.avatars([...new Set(uids.values())]));
+    return { ...page, messages: page.messages.map((m) => (urls[uids.get(m.id)] ? { ...m, avatar: urls[uids.get(m.id)] } : m)) };
+  }
 
   r.get('/chats', requireAuth, async (req, res) => {
     try {
@@ -51,8 +61,15 @@ export function chatRoutes({ store, sidecar, threadNames, agentTrace = null, out
       let today = new Map();
       try { today = store.todayCounts ? store.todayCounts(startOfDayVN(now())) : today; } catch { /* số hôm nay là phụ */ }
       const ai = aiStats();
-      res.json({ ok: true, conversations: list.map(({ peerName, ...c }) => ({ ...c, name: nameOf(groups, c.threadId, c.threadType, peerName),
-        today: today.get(`${c.threadType}:${c.threadId}`) || 0, ai: ai.get(String(c.threadId)) || null })) });
+      const [gAva, uAva] = sidecar.groupAvatars ? await Promise.all([
+        softly(() => sidecar.groupAvatars(list.filter((c) => c.threadType === 1).map((c) => c.threadId).slice(0, 200))),
+        softly(() => sidecar.avatars(list.filter((c) => c.threadType === 0).map((c) => c.threadId).slice(0, 200))),
+      ]) : [{}, {}];
+      res.json({ ok: true, conversations: list.map(({ peerName, ...c }) => {
+        const avatar = (c.threadType === 1 ? gAva : uAva)[c.threadId];
+        return { ...c, name: nameOf(groups, c.threadId, c.threadType, peerName),
+          today: today.get(`${c.threadType}:${c.threadId}`) || 0, ai: ai.get(String(c.threadId)) || null, ...(avatar ? { avatar } : {}) };
+      }) });
     } catch (err) { failStore(res, err, READ_FAIL); }
   });
 
@@ -71,18 +88,40 @@ export function chatRoutes({ store, sidecar, threadNames, agentTrace = null, out
     } catch (err) { failStore(res, err, READ_FAIL); }
   });
 
-  r.get('/chats/:threadId/messages', requireAuth, (req, res) => {
+  r.get('/chats/:threadId/messages', requireAuth, async (req, res) => {
     const type = parseType(req.query.type);
     if (!THREAD_ID.test(req.params.threadId) || type === null) return bad(res, BAD_THREAD);
     const { before, around, after } = req.query;
     if (![before, around, after].every(cursorOk)) return bad(res, BAD_CURSOR);
     if ([before, around, after].filter(Boolean).length > 1) return bad(res, BAD_CURSOR);
     const id = req.params.threadId;
+    let page;
     try {
-      if (around) return res.json({ ok: true, ...store.getMessagesAround(id, type, around) });
-      if (after) return res.json({ ok: true, ...store.getMessagesAfter(id, type, after) });
-      res.json({ ok: true, ...store.getMessages(id, type, { before: before || null }) });
-    } catch (err) { failStore(res, err, READ_FAIL); }
+      page = around ? store.getMessagesAround(id, type, around)
+        : after ? store.getMessagesAfter(id, type, after)
+          : store.getMessages(id, type, { before: before || null });
+    } catch (err) { return failStore(res, err, READ_FAIL); }
+    res.json({ ok: true, ...(await attachAvatars(id, type, page)) });
+  });
+
+  // Đầu khung chat + bảng Thông tin: tên, ảnh, số thành viên, mô tả (sidecar đệm 10 phút).
+  r.get('/chats/:threadId/info', requireAuth, async (req, res) => {
+    const type = parseType(req.query.type);
+    if (!THREAD_ID.test(req.params.threadId) || type === null) return bad(res, BAD_THREAD);
+    try { res.json({ ok: true, info: await sidecar.chatInfo({ threadId: req.params.threadId, threadType: type }) }); } catch (err) { failSidecar(res, err); }
+  });
+
+  // Bảng tin nhóm (chỉ đọc): tin ghim kèm vị trí trong lịch sử để bấm là nhảy tới, ghi chú, bình chọn.
+  r.get('/chats/:threadId/board', requireAuth, async (req, res) => {
+    if (!THREAD_ID.test(req.params.threadId)) return bad(res, BAD_THREAD);
+    let board;
+    try { board = await sidecar.board(req.params.threadId); } catch (err) { return failSidecar(res, err); }
+    const pins = board.pins.map(({ msgId, cliMsgId, ...p }) => {
+      let ref = null;
+      try { ref = store.findByMsgId(req.params.threadId, 1, msgId, cliMsgId); } catch { /* không nhảy được thì thôi */ }
+      return { ...p, ref };
+    });
+    res.json({ ok: true, board: { ...board, pins } });
   });
 
   r.get('/chats/:threadId/search', requireAuth, (req, res) => {

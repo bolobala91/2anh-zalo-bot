@@ -56,7 +56,7 @@ export function releaseSlot() {
  * Ảnh qua dashboard: chờ chỗ trong hàng (trừ khi queued=false), hỏng thì hỏi mã lỗi,
  * bận thì tự thử lại một lần, sau đó để người dùng bấm thử lại.
  */
-function useProxiedImage(url, { queued = true } = {}) {
+export function useProxiedImage(url, { queued = true } = {}) {
   const [st, setSt] = useState({ phase: 'ok', attempt: 0, retried: false });
   const [ready, setReady] = useState(!queued);
   const alive = useRef(true);

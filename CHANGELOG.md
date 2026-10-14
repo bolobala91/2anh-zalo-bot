@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.42.0] — 2026-10-14
+
+### Thêm — Phiên chat kiểu Zalo (bước 2)
+
+- **Ảnh đại diện thật** của nhóm và người (danh sách hội thoại, đầu khung chat, từng cụm tin, bảng Thông tin) — lấy từ Zalo, đệm 6 giờ, tải qua bộ lọc ảnh của dashboard; chưa tải được thì vẫn hiện chữ cái đầu. UID không ra trình duyệt.
+- **Số thành viên** và mô tả nhóm ở đầu khung chat và bảng Thông tin.
+- **Thanh tin ghim** trên đầu khung chat như Zalo: tin ghim mới nhất, nút "+N ghim" mở danh sách, bấm là nhảy tới tin (nếu có trong lịch sử của bot).
+- **Bảng tin nhóm** trong bảng Thông tin: tin ghim, ghi chú, bình chọn (kèm số phiếu từng lựa chọn) — chỉ xem.
+
 ## [2.41.0] — 2026-10-14
 
 ### Đổi — Phiên chat bố cục giống Zalo (bước 1)

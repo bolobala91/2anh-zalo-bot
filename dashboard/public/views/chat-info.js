@@ -3,7 +3,7 @@
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, fmtTime } from '../ui.js';
-import { FileBadge, Thumb } from './chat-media.js';
+import { FileBadge, Thumb, useProxiedImage } from './chat-media.js';
 
 const AVATAR_TINTS = 10; // .av-0 … .av-9 trong style.css (CSP: không dùng style nội tuyến)
 
@@ -21,13 +21,51 @@ export function tintOf(name) {
   return h % AVATAR_TINTS;
 }
 
-/** size: 'sm' (36px, trong khung tin) | 'md' (44px, danh sách + đầu khung) | 'lg' (64px, bảng Thông tin). */
-export function Avatar({ name, size = 'md', group = false }) {
+/** Ảnh thật qua bộ tải ảnh của dashboard (chung hàng chờ với ảnh thu nhỏ); chưa tải xong hoặc lỗi → chữ cái đầu. */
+function AvatarImg({ url, fallback }) {
+  const img = useProxiedImage(url);
+  if (img.phase !== 'ok' || !img.ready) return fallback;
+  return html`<img key=${img.src} src=${img.src} alt="" decoding="async" onLoad=${img.onLoad} onError=${img.onError} />`;
+}
+
+/** size: 'sm' (36px, trong khung tin) | 'md' (44px, danh sách + đầu khung) | 'lg' (64px, bảng Thông tin). url: ảnh Zalo (nếu có). */
+export function Avatar({ name, size = 'md', group = false, url = '' }) {
+  const fallback = group && size !== 'sm' ? html`<${Icon} name="users" size=${size === 'lg' ? 28 : 20} />` : initialOf(name);
   return html`<span class=${`avatar av-${size} av-${tintOf(name)}`} aria-hidden="true">
-    ${group && size !== 'sm' ? html`<${Icon} name="users" size=${size === 'lg' ? 28 : 20} />` : initialOf(name)}</span>`;
+    ${url ? html`<${AvatarImg} key=${url} url=${url} fallback=${fallback} />` : fallback}</span>`;
 }
 
 const RECENT = { photo: 8, file: 3, link: 3 };
+const num = (n) => new Intl.NumberFormat('vi-VN').format(n);
+
+/** Mục "Bảng tin" của nhóm (chỉ đọc): tin ghim (bấm để nhảy tới), ghi chú, bình chọn. */
+function Bulletin({ board, onJump }) {
+  const [open, setOpen] = useState(true);
+  const state = !board ? null : board.error ? { error: board.error } : { items: [...board.pins, ...board.notes, ...board.polls] };
+  return html`<section class="info-sec">
+    <button type="button" class="info-sec-head" aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
+      <span>Bảng tin nhóm</span><span class=${`info-caret${open ? ' open' : ''}`} aria-hidden="true"><${Icon} name="next" size=${16} /></span></button>
+    ${open ? html`<div class="info-sec-body">
+      ${!state ? html`<p class="muted small">Đang tải…</p>`
+        : state.error ? html`<p class="muted small">${state.error}</p>`
+          : !state.items.length ? html`<p class="muted small">Nhóm chưa có tin ghim, ghi chú hay bình chọn.</p>`
+            : html`<ul class="board-list">
+              ${board.pins.map((p) => html`<li key=${`p${p.id}`}>
+                <button type="button" class="board-item" disabled=${!p.ref} onClick=${() => onJump(p.ref)} title=${p.ref ? 'Xem tin này trong khung chat' : 'Tin này không có trong lịch sử của bot'}>
+                  <span class="board-ico" aria-hidden="true"><${Icon} name="pin" size=${16} /></span>
+                  <span class="board-main"><small class="muted">Tin ghim${p.sender ? ` · ${p.sender}` : ''}</small><span class="board-text">${p.text || '[Tin không có chữ]'}</span></span>
+                </button></li>`)}
+              ${board.notes.map((n) => html`<li key=${`n${n.id}`}><div class="board-item">
+                  <span class="board-ico" aria-hidden="true"><${Icon} name="file" size=${16} /></span>
+                  <span class="board-main"><small class="muted">Ghi chú</small><span class="board-text">${n.text}</span></span></div></li>`)}
+              ${board.polls.map((v) => html`<li key=${`v${v.id}`}><div class="board-item">
+                  <span class="board-ico" aria-hidden="true"><${Icon} name="chart" size=${16} /></span>
+                  <span class="board-main"><small class="muted">Bình chọn${v.closed ? ' · đã khoá' : ''} · ${num(v.votes)} lượt</small><span class="board-text">${v.question}</span>
+                    <ul class="poll-opts">${v.options.map((o, i) => html`<li key=${i}><span>${o.text}</span><b>${num(o.votes)}</b></li>`)}</ul></span></div></li>`)}
+            </ul>`}
+    </div>` : null}
+  </section>`;
+}
 
 function useRecent(conv, kind) {
   const [state, setState] = useState(null); // { items } | { error }
@@ -59,7 +97,7 @@ function Section({ title, state, onAll, empty, children }) {
  * Bảng "Thông tin hội thoại" (giống cột phải của Zalo). onOpen(tab) mở bảng Ảnh/Video · Tệp · Link ở đúng tab;
  * onTool('perms' | 'search') mở Phân quyền / Tìm tin nhắn ngay trong cột này.
  */
-export function InfoPanel({ conv, statsText, onClose, onOpen, onTool, onOpenPhoto }) {
+export function InfoPanel({ conv, info, board, statsText, onClose, onOpen, onTool, onOpenPhoto, onJump }) {
   const group = conv.threadType === 1;
   const photos = useRecent(conv, 'photo');
   const files = useRecent(conv, 'file');
@@ -72,9 +110,10 @@ export function InfoPanel({ conv, statsText, onClose, onOpen, onTool, onOpenPhot
     </header>
     <div class="side-body">
       <div class="info-id">
-        <${Avatar} name=${conv.name} size="lg" group=${group} />
+        <${Avatar} name=${conv.name} size="lg" group=${group} url=${info?.avatar || ''} />
         <strong class="info-name">${conv.name}</strong>
-        <span class="muted small">${group ? 'Nhóm' : 'Nhắn riêng'}</span>
+        <span class="muted small">${group ? `Nhóm${info?.members ? ` · ${num(info.members)} thành viên` : ''}` : 'Nhắn riêng'}</span>
+        ${info?.desc ? html`<span class="small info-desc">${info.desc}</span>` : null}
         ${statsText ? html`<span class="muted small info-stats">${statsText}</span>` : null}
       </div>
       <div class="info-actions">
@@ -82,6 +121,7 @@ export function InfoPanel({ conv, statsText, onClose, onOpen, onTool, onOpenPhot
         <button type="button" class="info-act" onClick=${() => onTool('search')}><span class="info-act-ico"><${Icon} name="search" size=${18} /></span>Tìm tin nhắn</button>
         <button type="button" class="info-act" onClick=${() => onOpen('photo')}><span class="info-act-ico"><${Icon} name="image" size=${18} /></span>Ảnh, tệp, link</button>
       </div>
+      ${group ? html`<${Bulletin} board=${board} onJump=${onJump} />` : null}
       <${Section} title="Ảnh/Video" state=${photos} onAll=${() => onOpen('photo')} empty="Chưa có ảnh hay video nào.">
         <ul class="media-grid info-grid">${(photos?.items || []).map((x) => html`<li key=${x.id}>
           ${x.video

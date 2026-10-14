@@ -83,7 +83,7 @@ export function preview(c) {
 
 function ConvItem({ c, active, folder, onSelect }) {
   return html`<li><button type="button" class=${`conv conv-ava${active ? ' active' : ''}`} aria-current=${active ? 'true' : undefined} onClick=${() => onSelect(c)}>
-    <${Avatar} name=${c.name} group=${c.threadType === 1} />
+    <${Avatar} name=${c.name} group=${c.threadType === 1} url=${c.avatar || ''} />
     <span class="conv-main">
     <span class="conv-top"><span class="conv-name">${c.name}</span>${c.today ? html`<span class="conv-count" title=${`${c.today} tin hôm nay`}>${c.today}</span>` : null}<time class="conv-time">${fmtTime(c.lastAtMs)}</time></span>
     <span class="conv-sub">${folder ? html`<${FolderChip} folder=${folder} />` : c.threadType === 1 ? html`<span class="tag">Nhóm</span>` : null}<span class="conv-preview">${preview(c)}</span></span>
@@ -178,7 +178,7 @@ function Bubble({ m, group, lead = true, focus, onOpenPhoto, active, onActive, o
   useEffect(() => { if (active) li.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); }, [active]);
   const ava = group && !m.isSelf;
   return html`<li ref=${li} id=${`msg-${m.id}`} class=${`msg${m.isSelf ? ' msg-self' : ''}${ava ? ' msg-ava' : ''}${lead ? ' msg-lead' : ''}${focus ? ' msg-focus' : ''}${active ? ' msg-active' : ''}`}>
-    ${ava ? html`<span class="msg-ava-slot">${lead ? html`<${Avatar} name=${m.senderName || 'Thành viên'} size="sm" />` : null}</span>` : null}
+    ${ava ? html`<span class="msg-ava-slot">${lead ? html`<${Avatar} name=${m.senderName || 'Thành viên'} size="sm" url=${m.avatar || ''} />` : null}</span>` : null}
     <div class="msg-body">
     <div class="msg-row">
     <div class=${`msg-bubble${md ? ' msg-media' : ''}`} onTouchStart=${press} onTouchMove=${move} onTouchEnd=${release} onTouchCancel=${release}
@@ -500,6 +500,19 @@ function Thread({ conv, onBack }) {
   const [keepInfo, setKeepInfo] = useState(infoPreferred);
   const [side, setSide] = useState(() => (infoPreferred() ? 'info' : null));
   const [mediaTab, setMediaTab] = useState('photo');
+  const [info, setInfo] = useState(null);   // { name, avatar, members, desc } — từ Zalo qua sidecar
+  const [board, setBoard] = useState(null); // { pins, notes, polls } | { error }
+  const [pinsOpen, setPinsOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const id = encodeURIComponent(conv.threadId);
+    api(`/api/chats/${id}/info?type=${conv.threadType}`).then((r) => { if (alive) setInfo(r.info); }, () => {});
+    if (conv.threadType !== 1) return () => { alive = false; };
+    const load = () => api(`/api/chats/${id}/board`).then((r) => { if (alive) setBoard(r.board); }, (e) => { if (alive) setBoard((b) => b || { error: e.message }); });
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, [conv.threadId, conv.threadType]);
   const [flash, setFlash] = useState(null);
   const [lightbox, setLightbox] = useState(null); // { items, index }
   const box = useRef(null);
@@ -642,10 +655,11 @@ function Thread({ conv, onBack }) {
   return html`
     <header class="chat-head">
       <button type="button" class="btn btn-ghost btn-sm only-mobile chat-back" onClick=${onBack} aria-label="Về danh sách hội thoại">←</button>
-      <${Avatar} name=${conv.name} group=${group} />
+      <${Avatar} name=${conv.name} group=${group} url=${info?.avatar || ''} />
       <div class="chat-head-main">
         <h2 title=${conv.name}>${conv.name}</h2>
-        <p class="muted small chat-head-sub">${group ? 'Nhóm' : 'Nhắn riêng'}${stats ? html` · <span>${stats}</span>` : null}</p>
+        <p class="muted small chat-head-sub" title=${stats || undefined}>${group ? 'Nhóm' : 'Nhắn riêng'}${group && info?.members
+          ? html` · <${Icon} name="users" size=${14} /> ${new Intl.NumberFormat('vi-VN').format(info.members)} thành viên` : stats ? html` · <span>${stats}</span>` : null}</p>
       </div>
       <div class="chat-head-tools">
       <button type="button" ref=${toggles.search} class=${`btn btn-ghost btn-sm head-tool${side === 'search' ? ' active' : ''}`} aria-pressed=${side === 'search' ? 'true' : 'false'}
@@ -656,6 +670,17 @@ function Thread({ conv, onBack }) {
         onClick=${toggleInfo} aria-label="Thông tin hội thoại" title="Thông tin hội thoại"><${Icon} name="sidebar" /></button>
       </div>
     </header>
+    ${(board?.pins || []).length ? html`<div class="pin-bar">
+      <button type="button" class="pin-main" disabled=${!board.pins[0].ref} onClick=${() => board.pins[0].ref && jumpTo(board.pins[0].ref)}>
+        <span class="pin-ico" aria-hidden="true"><${Icon} name="chat" size=${18} /></span>
+        <span class="pin-text"><strong>Tin nhắn</strong><span class="muted">${board.pins[0].sender ? `${board.pins[0].sender}: ` : ''}${board.pins[0].text || '[Tin không có chữ]'}</span></span>
+      </button>
+      ${board.pins.length > 1 ? html`<button type="button" class="btn btn-secondary btn-sm pin-more" aria-expanded=${pinsOpen ? 'true' : 'false'} onClick=${() => setPinsOpen(!pinsOpen)}>
+        +${board.pins.length - 1} ghim <${Icon} name=${pinsOpen ? 'prev' : 'next'} size=${14} /></button>` : null}
+      ${pinsOpen ? html`<ul class="pin-list">${board.pins.map((p) => html`<li key=${p.id}>
+        <button type="button" class="pin-row" disabled=${!p.ref} onClick=${() => { setPinsOpen(false); jumpTo(p.ref); }}>
+          <span class="muted small">${p.sender || 'Tin ghim'}</span><span>${p.text || '[Tin không có chữ]'}</span></button></li>`)}</ul>` : null}
+    </div>` : null}
     <${Live} error=${error || recallMsg.error} ok=${recallMsg.ok} />
     ${newer ? html`<div class="jump-bar"><span class="muted small">Đang xem tin cũ.</span>
       <button type="button" class="btn btn-secondary btn-sm" onClick=${() => kick.current()}>Về tin mới nhất ↓</button></div>` : null}
@@ -679,7 +704,7 @@ function Thread({ conv, onBack }) {
     ${side === 'search' ? html`<${ThreadSearch} conv=${conv} onJump=${jumpTo} onClose=${() => closeSide('search')} />` : null}
     ${side === 'perms' ? html`<${PermsPanel} conv=${conv} onClose=${() => closeSide('perms')} />` : null}
     ${side === 'media' ? html`<${MediaPanel} key=${mediaTab} conv=${conv} initialTab=${mediaTab} onClose=${() => closeSide('media')} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
-    ${side === 'info' ? html`<${InfoPanel} conv=${conv} statsText=${stats} onClose=${toggleInfo} onTool=${(name) => setSide(name)}
+    ${side === 'info' ? html`<${InfoPanel} conv=${conv} info=${info} board=${board} onJump=${(ref) => ref && jumpTo(ref)} statsText=${stats} onClose=${toggleInfo} onTool=${(name) => setSide(name)}
       onOpen=${(tab) => { setMediaTab(tab); setSide('media'); }} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
     ${lightbox ? html`<${Lightbox} items=${lightbox.items} index=${lightbox.index}
       onIndex=${(index) => setLightbox((cur) => ({ ...cur, index }))} onClose=${() => setLightbox(null)} />` : null}`;

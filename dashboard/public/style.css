@@ -1463,3 +1463,30 @@ a.metric:hover { color: inherit; background: #eeeef1; }
   .msg-ava-slot { width: 30px; }
   .msg-ava-slot .av-sm { width: 30px; height: 30px; font-size: 13px; }
 }
+/* Bước 2: tin ghim, bảng tin, mô tả nhóm. */
+.chat-head-sub .icon { vertical-align: -2px; }
+.pin-bar { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.pin-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 2px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.pin-main:disabled { cursor: default; }
+.pin-main:focus-visible, .pin-row:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 8px; }
+.pin-ico { flex: none; display: inline-flex; color: var(--brand-dark); }
+.pin-text { min-width: 0; display: flex; flex-direction: column; }
+.pin-text > strong { font-size: 13px; }
+.pin-text > span { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pin-more { flex: none; }
+.pin-list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 6; list-style: none; margin: 0; padding: 4px; max-height: 300px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--card); box-shadow: 0 10px 28px rgba(15, 23, 42, .14); }
+.pin-row { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.pin-row:hover:not(:disabled) { background: var(--brand-soft); }
+.pin-row:disabled { cursor: default; opacity: .75; }
+.info-desc { max-width: 100%; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.board-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.board-item { display: flex; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; text-align: left; }
+button.board-item { cursor: pointer; }
+button.board-item:hover:not(:disabled) { background: var(--brand-soft); }
+button.board-item:disabled { cursor: default; }
+.board-ico { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--bg); color: var(--brand-dark); }
+.board-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.board-text { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.poll-opts { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.poll-opts li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 6px; border-radius: 6px; background: var(--bg); }
