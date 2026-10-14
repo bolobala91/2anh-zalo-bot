@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.42.1] — 2026-10-15
+
+### Đổi
+
+- Bảng tin nhóm gọn như Zalo: ba dòng Tin ghim · Ghi chú · Bình chọn kèm số lượng, bấm dòng nào mở danh sách dòng đó — không còn đẩy Ảnh/Video xuống quá sâu.
+- Ảnh đại diện bị bộ tải ảnh từ chối lúc bận thì tự thử lại vài lần thay vì giữ chữ cái đầu.
+
 ## [2.42.0] — 2026-10-14
 
 ### Thêm — Phiên chat kiểu Zalo (bước 2)

@@ -1490,3 +1490,11 @@ button.board-item:disabled { cursor: default; }
 .board-text { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .poll-opts { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .poll-opts li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 6px; border-radius: 6px; background: var(--bg); }
+.board-rows { list-style: none; margin: 0; padding: 0; }
+.board-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 4px 6px; border: 0; border-radius: 8px; background: none;
+  color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.board-row:hover:not(:disabled) { background: var(--brand-soft); }
+.board-row:disabled { cursor: default; }
+.board-row:focus-visible, .board-item:focus-visible { outline: none; box-shadow: var(--focus); }
+.board-label { flex: 1; min-width: 0; }
+.board-rows .board-list { margin: 2px 0 8px 40px; }

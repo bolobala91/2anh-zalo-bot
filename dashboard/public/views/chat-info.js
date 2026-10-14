@@ -1,6 +1,6 @@
 // Phiên chat kiểu Zalo: ảnh đại diện và bảng "Thông tin hội thoại" bên phải (ảnh/video, tệp, link gần đây, lối vào
 // Phân quyền và Tìm tin nhắn). Danh sách đầy đủ vẫn ở MediaPanel (chat-media.js).
-import { useEffect, useState } from '../vendor/hooks.mjs';
+import { useEffect, useRef, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, fmtTime } from '../ui.js';
 import { FileBadge, Thumb, useProxiedImage } from './chat-media.js';
@@ -24,6 +24,13 @@ export function tintOf(name) {
 /** Ảnh thật qua bộ tải ảnh của dashboard (chung hàng chờ với ảnh thu nhỏ); chưa tải xong hoặc lỗi → chữ cái đầu. */
 function AvatarImg({ url, fallback }) {
   const img = useProxiedImage(url);
+  const tries = useRef(0);
+  // Bộ tải ảnh giới hạn số ảnh mỗi người — ảnh đại diện bị từ chối lúc bận thì tự thử lại vài lần, cách nhau một chút.
+  useEffect(() => {
+    if (img.phase !== 'busy' || tries.current >= 3) return undefined;
+    const t = setTimeout(() => { tries.current += 1; img.retry(); }, 2000 + Math.random() * 3000);
+    return () => clearTimeout(t);
+  }, [img.phase]);
   if (img.phase !== 'ok' || !img.ready) return fallback;
   return html`<img key=${img.src} src=${img.src} alt="" decoding="async" onLoad=${img.onLoad} onError=${img.onError} />`;
 }
@@ -38,31 +45,36 @@ export function Avatar({ name, size = 'md', group = false, url = '' }) {
 const RECENT = { photo: 8, file: 3, link: 3 };
 const num = (n) => new Intl.NumberFormat('vi-VN').format(n);
 
-/** Mục "Bảng tin" của nhóm (chỉ đọc): tin ghim (bấm để nhảy tới), ghi chú, bình chọn. */
+/** Mục "Bảng tin" của nhóm (chỉ đọc) kiểu Zalo: 3 dòng gọn Tin ghim · Ghi chú · Bình chọn, bấm dòng nào mở danh sách dòng đó. */
 function Bulletin({ board, onJump }) {
   const [open, setOpen] = useState(true);
-  const state = !board ? null : board.error ? { error: board.error } : { items: [...board.pins, ...board.notes, ...board.polls] };
+  const [kind, setKind] = useState(null); // 'pins' | 'notes' | 'polls'
+  const rows = [['pins', 'pin', 'Tin ghim'], ['notes', 'file', 'Ghi chú'], ['polls', 'chart', 'Bình chọn']];
+  const list = (k) => {
+    if (k === 'pins') {
+      return board.pins.map((p) => html`<li key=${p.id}>
+        <button type="button" class="board-item" disabled=${!p.ref} onClick=${() => onJump(p.ref)} title=${p.ref ? 'Xem tin này trong khung chat' : 'Tin này không có trong lịch sử của bot'}>
+          <span class="board-main"><small class="muted">${p.sender || 'Tin ghim'}</small><span class="board-text">${p.text || '[Tin không có chữ]'}</span></span>
+        </button></li>`);
+    }
+    if (k === 'notes') return board.notes.map((n) => html`<li key=${n.id}><div class="board-item"><span class="board-main"><span class="board-text">${n.text}</span></span></div></li>`);
+    return board.polls.map((v) => html`<li key=${v.id}><div class="board-item">
+      <span class="board-main"><small class="muted">${v.closed ? 'Đã khoá · ' : ''}${num(v.votes)} lượt bình chọn</small><span class="board-text">${v.question}</span>
+        <ul class="poll-opts">${v.options.map((o, i) => html`<li key=${i}><span>${o.text}</span><b>${num(o.votes)}</b></li>`)}</ul></span></div></li>`);
+  };
   return html`<section class="info-sec">
     <button type="button" class="info-sec-head" aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
       <span>Bảng tin nhóm</span><span class=${`info-caret${open ? ' open' : ''}`} aria-hidden="true"><${Icon} name="next" size=${16} /></span></button>
     ${open ? html`<div class="info-sec-body">
-      ${!state ? html`<p class="muted small">Đang tải…</p>`
-        : state.error ? html`<p class="muted small">${state.error}</p>`
-          : !state.items.length ? html`<p class="muted small">Nhóm chưa có tin ghim, ghi chú hay bình chọn.</p>`
-            : html`<ul class="board-list">
-              ${board.pins.map((p) => html`<li key=${`p${p.id}`}>
-                <button type="button" class="board-item" disabled=${!p.ref} onClick=${() => onJump(p.ref)} title=${p.ref ? 'Xem tin này trong khung chat' : 'Tin này không có trong lịch sử của bot'}>
-                  <span class="board-ico" aria-hidden="true"><${Icon} name="pin" size=${16} /></span>
-                  <span class="board-main"><small class="muted">Tin ghim${p.sender ? ` · ${p.sender}` : ''}</small><span class="board-text">${p.text || '[Tin không có chữ]'}</span></span>
-                </button></li>`)}
-              ${board.notes.map((n) => html`<li key=${`n${n.id}`}><div class="board-item">
-                  <span class="board-ico" aria-hidden="true"><${Icon} name="file" size=${16} /></span>
-                  <span class="board-main"><small class="muted">Ghi chú</small><span class="board-text">${n.text}</span></span></div></li>`)}
-              ${board.polls.map((v) => html`<li key=${`v${v.id}`}><div class="board-item">
-                  <span class="board-ico" aria-hidden="true"><${Icon} name="chart" size=${16} /></span>
-                  <span class="board-main"><small class="muted">Bình chọn${v.closed ? ' · đã khoá' : ''} · ${num(v.votes)} lượt</small><span class="board-text">${v.question}</span>
-                    <ul class="poll-opts">${v.options.map((o, i) => html`<li key=${i}><span>${o.text}</span><b>${num(o.votes)}</b></li>`)}</ul></span></div></li>`)}
-            </ul>`}
+      ${!board ? html`<p class="muted small">Đang tải…</p>`
+        : board.error ? html`<p class="muted small">${board.error}</p>`
+          : html`<ul class="board-rows">${rows.map(([k, icon, label]) => html`<li key=${k}>
+            <button type="button" class="board-row" aria-expanded=${kind === k ? 'true' : 'false'} disabled=${!board[k].length} onClick=${() => setKind(kind === k ? null : k)}>
+              <span class="board-ico" aria-hidden="true"><${Icon} name=${icon} size=${16} /></span>
+              <span class="board-label">${label}</span><span class="muted small">${board[k].length ? num(board[k].length) : 'Chưa có'}</span>
+            </button>
+            ${kind === k ? html`<ul class="board-list">${list(k)}</ul>` : null}
+          </li>`)}</ul>`}
     </div>` : null}
   </section>`;
 }
