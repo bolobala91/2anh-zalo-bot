@@ -320,7 +320,7 @@ export function Kb({ me }) {
         <${Icon} name="folder" />
         <span class="row-main"><strong>${s.name || 'Thư mục gốc'}</strong><small class="muted">${sourceCount(s)}</small></span>
       </li>`)}</ul>` : html`<p class="muted">Nguồn chưa có tệp nào bot đọc được.</p>`}
-      ${data.truncated ? html`<p class="muted small">Kho lớn — chỉ đếm 3000 tệp mới sửa gần nhất.</p>` : null}
+      ${data.truncated ? html`<p class="muted small">Kho lớn hoặc nằm trên ổ mạng — chỉ đếm một phần (tối đa 3000 tệp mới sửa gần nhất).</p>` : null}
       <details class="kb-find">
         <summary>Tìm một tệp trong nguồn</summary>
         <label class="sr-only" for="kb-q">Tìm tệp</label>

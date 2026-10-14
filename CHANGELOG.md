@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.39.2] — 2026-10-14
+
+### Sửa
+
+- **Trang Kho tri thức quay mãi "Đang tải…"** khi kho nằm trên ổ mạng (Google Drive…): dashboard duyệt tới 100.000 tệp qua mạng, mất vài phút. Nay lượt duyệt dừng sau 8 giây, hiện phần đã thấy và ghi rõ chỉ đếm một phần.
+
 ## [2.39.1] — 2026-10-14
 
 ### Sửa

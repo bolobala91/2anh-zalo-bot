@@ -26,6 +26,8 @@ const MAX_STEM = 120;
 // Tên thiết bị của Windows: CON, NUL, COM1… (kể cả khi có đuôi, không phân biệt hoa thường) không tạo được thành tệp.
 const RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 const LIST_TTL_MS = 60_000;
+// Kho trên ổ mạng (Google Drive…) có thể duyệt mất vài phút: dừng sau ngần này, trả phần đã thấy, báo chưa đủ.
+const WALK_BUDGET_MS = 8_000;
 const TEXT_TYPES = ['.md', '.txt'];
 const MAX_TEXT_BYTES = 1024 * 1024;
 const MAX_SUBDIRS = 200;
@@ -124,7 +126,7 @@ function subdirsOf(dir) {
  * — không bao giờ nhận đường dẫn tự do: bot đọc được kho bằng công cụ công khai, nên một phiên Quản trị bị chiếm
  * không được biến thư mục khoá/phiên đăng nhập thành kho.
  */
-export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envFile = null, foldersFile = null, now = Date.now }) {
+export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envFile = null, foldersFile = null, now = Date.now, walkBudgetMs = WALK_BUDGET_MS }) {
   let cache = null;
   // Thư mục của tài liệu tự tạo: chỉ là siêu dữ liệu (kb-folders.js), tệp vẫn nằm phẳng trong thư mục tải lên.
   const folders = createKbFolders({ file: foldersFile });
@@ -167,8 +169,11 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
     const files = [];
     const counts = new Map();
     let seen = 0;
+    let outOfTime = false;
+    const deadline = now() + walkBudgetMs;
     const stack = [''];
     while (stack.length && seen < MAX_COUNT) {
+      if (now() > deadline) { outOfTime = true; break; }
       const relDir = stack.pop();
       let entries;
       try { entries = await readdir(join(r, relDir), { withFileTypes: true }); } catch { continue; }
@@ -192,7 +197,7 @@ export function createKbStore({ kbDir, publicDirs, allowedRoots = () => '', envF
         if (seen >= MAX_COUNT) break;
       }
     }
-    return { files: files.sort((a, b) => b.mtime - a.mtime), counts, capped: seen >= MAX_COUNT || files.length >= MAX_FILES };
+    return { files: files.sort((a, b) => b.mtime - a.mtime), counts, capped: outOfTime || seen >= MAX_COUNT || files.length >= MAX_FILES };
   }
   /** Tài liệu tự tạo: đọc thẳng thư mục tải lên hiện tại (không phụ thuộc trần 3000 của lượt duyệt). */
   async function ownFiles(r, dir) {

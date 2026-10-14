@@ -207,3 +207,18 @@ test('xoá nhiều tài liệu tự tạo: kiểm mọi đường dẫn trước
   assert.equal(existsSync(join(root, a)) || existsSync(join(root, b)), false);
   assert.equal(readFileSync(join(root, 'Luu tru', 'cu.pdf'), 'latin1').slice(0, 5), '%PDF-');
 });
+
+test('kho nằm trên ổ mạng chậm (Google Drive): lượt duyệt dừng khi hết thời gian, trả phần đã thấy và báo chưa đủ', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'zd-kb-slow-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (let i = 0; i < 5; i += 1) {
+    mkdirSync(join(root, `Thu muc ${i}`), { recursive: true });
+    writeFileSync(join(root, `Thu muc ${i}`, `tai lieu ${i}.md`), 'x');
+  }
+  let clock = 0;
+  // Mỗi lần hỏi giờ là 3 giây trôi qua: ổ mạng chậm.
+  const store = createKbStore({ kbDir: () => root, publicDirs: () => '', now: () => (clock += 3000), walkBudgetMs: 8000 });
+  const list = await store.list();
+  assert.equal(list.truncated, true, 'báo kho chưa duyệt hết');
+  assert.ok(list.files.length < 5, `dừng sớm, thấy ${list.files.length} tệp`);
+});
