@@ -2,6 +2,18 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.39.0] — 2026-10-14
+
+### Thêm — chọn model ngay trong chat bằng lời thường
+
+- Chủ nhân gõ **"model list"**, **"danh sách model"**, **"ds model"**, **"xem model"** (có thể kèm từ lọc, vd. "list model claude") để xem danh sách model — không cần nhớ lệnh `/model`.
+- Danh sách nay **đánh số**; gõ **"model 3"** / **"chọn model 3"** / **"đổi model 3"** (hoặc `/model 3`) để đổi sang model số 3, **"model mặc định"** để về mặc định.
+- Chỉ chủ nhân dùng được; người khác gõ các câu này vẫn được trợ lý trả lời như tin nhắn thường.
+
+### Sửa
+
+- Test Python chạy được trên Hermes mới (môi trường Python do Hermes quản lý, danh sách nền tảng dạng mới).
+
 ## [2.38.0] — 2026-10-14
 
 ### Đổi — chạy được trên Hermes mới có bộ quản lý gói (`hermes pm`)

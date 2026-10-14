@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path';
 import { platform, tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { resolveHermesLayout } from './hermes-install-lib.js';
+import { hermesRuntimePython, resolveHermesLayout } from './hermes-install-lib.js';
 import { loadRepoEnv } from './setup-env.js';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -25,16 +25,21 @@ function worksAsPython(command) {
   return result.status === 0;
 }
 
+function hermesLayout() {
+  try { return resolveHermesLayout(); } catch { return null; }
+}
+
+// Hermes mới: Python của môi trường do Hermes quản lý (ngoài mã Hermes); Hermes cũ: venv trong mã Hermes.
 function hermesVenvPython() {
-  try {
-    const { repoRoot } = resolveHermesLayout();
-    const candidates = platform() === 'win32'
-      ? [join(repoRoot, 'venv', 'Scripts', 'python.exe'), join(repoRoot, '.venv', 'Scripts', 'python.exe')]
-      : [join(repoRoot, 'venv', 'bin', 'python'), join(repoRoot, '.venv', 'bin', 'python')];
-    return candidates.find(existsSync) || null;
-  } catch {
-    return null;
-  }
+  const layout = hermesLayout();
+  if (!layout) return null;
+  const managed = hermesRuntimePython(layout, layout.home);
+  if (managed && existsSync(managed)) return managed;
+  const { repoRoot } = layout;
+  const candidates = platform() === 'win32'
+    ? [join(repoRoot, 'venv', 'Scripts', 'python.exe'), join(repoRoot, '.venv', 'Scripts', 'python.exe')]
+    : [join(repoRoot, 'venv', 'bin', 'python'), join(repoRoot, '.venv', 'bin', 'python')];
+  return candidates.find(existsSync) || null;
 }
 
 function findPython() {
@@ -99,12 +104,15 @@ let anyFailed = false;
 // permissions.json của bot đang chạy trên máy này: một nhóm bị tắt tính năng ở đó
 // sẽ làm đỏ test không liên quan. Trỏ plugin tới một tệp không tồn tại.
 const isolation = mkdtempSync(join(tmpdir(), 'zalo-py-tests-'));
-const testEnv = { ...process.env, ZALO_PERMISSIONS_FILE: join(isolation, 'permissions.json') };
+// Môi trường do Hermes quản lý không chứa mã Hermes: thêm gốc mã Hermes vào PYTHONPATH để import được gateway.
+const hermesRoot = hermesLayout()?.repoRoot;
+const pythonPath = [hermesRoot, process.env.PYTHONPATH].filter(Boolean).join(platform() === 'win32' ? ';' : ':');
+const testEnv = { ...process.env, ZALO_PERMISSIONS_FILE: join(isolation, 'permissions.json'), ...(pythonPath ? { PYTHONPATH: pythonPath } : {}) };
 process.on('exit', () => rmSync(isolation, { recursive: true, force: true }));
 
 for (const suite of suites) {
   console.log(`\n[test:py] === ${suite.label} ===`);
-  if (suite.requires && spawnSync(python, ['-c', suite.requires], { cwd: suite.cwd, encoding: 'utf8' }).status !== 0) {
+  if (suite.requires && spawnSync(python, ['-c', suite.requires], { cwd: suite.cwd, encoding: 'utf8', env: testEnv }).status !== 0) {
     console.warn(
       `[test:py] CẢNH BÁO: BỎ QUA ${suite.label} — Python này chưa import được lõi Hermes (gateway) hoặc jsonschema.\n`
       + '[test:py]   Đặt biến PYTHON trỏ tới Python trong venv của Hermes, hoặc HERMES_HOME, rồi chạy lại `npm run test:py`.',

@@ -13,7 +13,14 @@ def allow_zalo_platform() -> None:
         return
     current = getattr(gw_config, "_Platform__bundled_plugin_names", None)
     if current is None:
-        current = gw_config.Platform._scan_bundled_plugin_platforms()
+        scanned = gw_config.Platform._scan_bundled_plugin_platforms()
+        # Hermes mới trả (tên, bí danh); Hermes cũ chỉ trả tập tên.
+        if isinstance(scanned, tuple):
+            current, aliases = scanned
+            if getattr(gw_config, "_Platform__bundled_plugin_aliases", None) is None:
+                gw_config._Platform__bundled_plugin_aliases = aliases
+        else:
+            current = scanned
     gw_config._Platform__bundled_plugin_names = set(current) | {"zalo"}
 
 

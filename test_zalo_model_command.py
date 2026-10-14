@@ -89,8 +89,8 @@ class ModelCommandTest(unittest.TestCase):
 
     def test_list_uses_choices_and_marks_current_and_default(self):
         reply = self.run_cmd("list", choices=["hermes", "ag/claude-opus-4-6-thinking"])
-        self.assertIn("- hermes (đang dùng, mặc định)", reply)
-        self.assertIn("- ag/claude-opus-4-6-thinking", reply)
+        self.assertIn("1. hermes (đang dùng, mặc định)", reply)
+        self.assertIn("2. ag/claude-opus-4-6-thinking", reply)
         self.assertNotIn("cx/gpt-5.6-terra", reply)
 
     def test_list_all_and_filter(self):
@@ -98,6 +98,21 @@ class ModelCommandTest(unittest.TestCase):
         reply = self.run_cmd("list claude")
         self.assertIn("ag/claude-opus-4-6-thinking", reply)
         self.assertNotIn("cx/gpt-5.6-terra", reply)
+
+    def test_natural_phrases_for_owner(self):
+        cases = {"model list": "list", "Danh sách model": "list", "@Lăng Tiêu ds model": "list",
+                 "xem model claude": "list claude", "model 3": "3", "chọn model 3": "3", "Đổi model 12": "12",
+                 "model mặc định": "default"}
+        for text, args in cases.items():
+            self.assertEqual(model_command.parse_natural(text), args, text)
+        for text in ("model là gì", "danh sách học sinh", "giải thích model AI", "model"):
+            self.assertIsNone(model_command.parse_natural(text), text)
+
+    def test_pick_by_number_from_last_list(self):
+        self.run_cmd("list claude")   # hiện: 1. ag/claude-opus-4-6-thinking
+        self.assertIn("Đã đổi cả bot sang ag/claude-opus-4-6-thinking", self.run_cmd("1"))
+        self.assertEqual(model_command.current_model(self.config), "ag/claude-opus-4-6-thinking")
+        self.assertIn("Không có model số 9", self.run_cmd("9"))
 
     def test_fetch_models_reads_endpoint_from_config(self):
         seen = {}
@@ -163,7 +178,7 @@ class ZaloModelCommandAdapterTest(unittest.IsolatedAsyncioTestCase):
             await self.run_frame(self.OWNER, "@Lăng Tiêu /model list", home)
         self.assertEqual(self.forwarded, [])
         self.assertEqual(len(self.sent), 1)
-        self.assertIn("- ag/claude-opus-4-6-thinking", self.sent[0]["text"])
+        self.assertIn("ag/claude-opus-4-6-thinking", self.sent[0]["text"])
 
     async def test_stranger_model_command_is_dropped(self):
         with tempfile.TemporaryDirectory() as home:
@@ -173,6 +188,19 @@ class ZaloModelCommandAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.forwarded, [])
         self.assertEqual(self.sent, [])
 
+
+    async def test_owner_natural_list_and_stranger_natural_goes_to_assistant(self):
+        with tempfile.TemporaryDirectory() as home:
+            Path(home, "config.yaml").write_text(CONFIG, encoding="utf-8")
+            await self.run_frame(self.OWNER, "danh sách model", home)
+        self.assertEqual(self.forwarded, [])
+        self.assertIn("1. hermes", self.sent[-1]["text"])
+        sent_before = len(self.sent)
+        with tempfile.TemporaryDirectory() as home:
+            Path(home, "config.yaml").write_text(CONFIG, encoding="utf-8")
+            await self.run_frame("2222222222222222222", "danh sách model", home)
+        self.assertEqual(len(self.forwarded), 1, "người khác hỏi thì trợ lý trả lời như tin thường")
+        self.assertEqual(len([c for c in self.sent[sent_before:] if "1. hermes" in str(c.get("text"))]), 0)
 
 if __name__ == "__main__":
     unittest.main()

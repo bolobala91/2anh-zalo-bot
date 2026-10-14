@@ -1021,6 +1021,10 @@ class ZaloAdapter(BasePlatformAdapter):
         # lời và không chuyển tiếp, để lệnh /model gốc của Hermes (đổi theo phiên)
         # không bao giờ chạy từ Zalo — kể cả khi người lạ trong nhóm gõ.
         model_args = _model_command.parse(turn["text"])
+        # Chủ nhân gõ tự nhiên ("model list", "danh sách model", "model 3"…) cũng là lệnh. Người khác gõ câu
+        # tự nhiên thì để trợ lý trả lời bình thường — chỉ dạng "/model" mới bị bỏ qua với họ.
+        if model_args is None and turn["is_owner"]:
+            model_args = _model_command.parse_natural(turn["text"])
         if model_args is not None:
             if not turn["is_owner"]:
                 logger.info("[zalo] bỏ qua /model từ %s (%s) — không phải chủ nhân",

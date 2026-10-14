@@ -6,6 +6,10 @@
     /model list <chữ>      lọc danh sách đầy đủ theo chữ đó, vd ``/model list claude``
     /model default         về model mặc định (ZALO_MODEL_DEFAULT)
     /model <tên>           đổi sang model đó
+    /model <số>            đổi sang model số đó trong danh sách vừa xem
+
+Chủ nhân gõ tự nhiên cũng được (không cần dấu "/", có thể kèm @tên bot): "model list", "danh sách model",
+"ds model", "xem model", "list model claude" (lọc), "model 3" / "chọn model 3" / "đổi model 3", "model mặc định".
 
 Đổi model là đổi cho cả bot: ghi đúng một dòng ``model.default`` trong
 ``config.yaml`` của Hermes. Gateway đọc lại config theo mtime ở mỗi tin, chữ ký
@@ -28,6 +32,11 @@ from typing import Callable, List, Optional
 import yaml
 
 _COMMAND = re.compile(r"^/model(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
+# Câu tự nhiên (đã bỏ dấu, chữ thường), khớp ở CUỐI tin để bỏ qua "@Tên bot" phía trước.
+_NATURAL_LIST = re.compile(r"(?:^|\s)/?(?:model\s+list|list\s+models?|danh\s+sach\s+models?|ds\s+models?|cac\s+models?"
+                           r"|xem\s+models?)(?:\s+(?P<q>[\w./:@+-]+))?\s*[?.!]*$")
+_NATURAL_PICK = re.compile(r"(?:^|\s)/?(?:chon\s+|doi\s+)?models?\s+(?:so\s+)?(?P<arg>\d{1,3}|default|mac\s+dinh)\s*[.!]*$")
+_LAST_SHOWN: List[str] = []   # danh sách vừa hiện (đánh số) — "model 3" chọn theo đó
 _PLAIN_YAML = re.compile(r"^[A-Za-z0-9._/@:+-]+$")
 
 
@@ -37,6 +46,25 @@ def parse(text: str) -> Optional[str]:
     if not match:
         return None
     return (match.group(1) or "").strip()
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFD", str(text or "")).replace("đ", "d").replace("Đ", "D")
+    return "".join(c for c in t if unicodedata.category(c) != "Mn").lower()
+
+
+def parse_natural(text: str) -> Optional[str]:
+    """Câu tự nhiên của chủ nhân → tham số như sau ``/model``; None nếu không phải."""
+    folded = " ".join(_fold(text).split())
+    m = _NATURAL_LIST.search(folded)
+    if m:
+        return ("list " + (m.group("q") or "")).strip()
+    m = _NATURAL_PICK.search(folded)
+    if m:
+        arg = m.group("arg")
+        return "default" if arg in ("default", "mac dinh") else arg
+    return None
 
 
 def split_choices(raw: str) -> List[str]:
@@ -112,18 +140,20 @@ def set_default_model(config_path: Path, model: str) -> None:
 
 
 def _bullets(models: List[str], current: str, default: str) -> List[str]:
+    """Danh sách đánh số (nhớ lại để "model 3" chọn đúng model số 3)."""
+    _LAST_SHOWN[:] = list(models)
     rows = []
-    for model in models:
+    for i, model in enumerate(models, 1):
         marks = []
         if model == current:
             marks.append("đang dùng")
         if model == default:
             marks.append("mặc định")
-        rows.append(f"- {model}" + (f" ({', '.join(marks)})" if marks else ""))
+        rows.append(f"{i}. {model}" + (f" ({', '.join(marks)})" if marks else ""))
     return rows
 
 
-_USAGE = "Đổi: /model <tên> · Về mặc định: /model default · Xem hết: /model list all"
+_USAGE = "Chọn: gõ model <số> (vd. model 2) hoặc /model <tên> · Về mặc định: model mặc định · Xem hết: /model list all"
 
 
 def handle(
@@ -165,6 +195,17 @@ def handle(
         if not default:
             return "Chưa đặt model mặc định. Thêm ZALO_MODEL_DEFAULT=<tên model> vào .env của Hermes rồi khởi động lại gateway."
         target = default
+    elif len(words) == 1 and words[0].isdigit():
+        pool = list(_LAST_SHOWN) or list(choices)
+        if not pool:
+            try:
+                pool = fetch(config_path)
+            except Exception as exc:
+                return f"Không lấy được danh sách model từ endpoint: {exc}"
+        index = int(words[0])
+        if not 1 <= index <= len(pool):
+            return f"Không có model số {index} — danh sách có {len(pool)} model. Xem lại: model list"
+        target = pool[index - 1]
     elif len(words) == 1:
         target = words[0]
     else:
