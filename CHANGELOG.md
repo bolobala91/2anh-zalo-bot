@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.40.2] — 2026-10-14
+
+### Sửa
+
+- Bảng "Khách dùng bot" bỏ các lượt dựng lại từ lịch sử cũ chỉ có tên mà không tra ra được UID — tên nào hiện trên bảng cũng khớp một người có thật đã nhắn bot.
+
 ## [2.40.1] — 2026-10-14
 
 ### Sửa

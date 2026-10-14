@@ -92,7 +92,7 @@ test('khách dùng bot: UID không có trong lịch sử tin nhắn (dữ liệu
   const r = (uid, name, thread, group) => JSON.stringify({ t: NOW - H, uid, name, thread, group, owner: false });
   writeFileSync(join(dir, 'zalo', 'bot-uses.jsonl'), [
     r('111', 'Tên cũ', 'g1', true), r('9876543210987654321', 'Lan', 'g1', true), r('9876543210987654321', 'Lan', 'g1', true),
-    r('u1', 'Giả', 'g1', true), r('9876543210987654321', 'Lan', '9876543210987654321', false),
+    r('u1', 'Giả', 'g1', true), r('9876543210987654321', 'Lan', '9876543210987654321', false), r('', 'Chỉ có tên', 'g1', true),
   ].join('\n'));
   const uses = createBotUses({
     hermesHome: dir, now: () => NOW,

@@ -113,10 +113,12 @@ export function createBotUses({ hermesHome, stateDb = '', zaloDb = '', owners = 
       const firstLive = real.length ? Math.min(...real.map((r) => r.t)) : Infinity;
       const old = backfill().rows.filter((r) => r.t < firstLive);
       const approx = old.some((r) => r.t >= since);
-      // isKnown: UID có thật trong lịch sử tin nhắn của bot. UID lạ (người giả của test lọt vào sổ…) thì bỏ, để tên luôn khớp UID.
+      // isKnown: UID có thật trong lịch sử tin nhắn của bot. UID lạ (người giả của test lọt vào sổ…) và dòng dựng lại chỉ có
+      // tên, không ra được UID, thì bỏ — để tên luôn khớp UID.
       const known = new Map();
       const real_ = (uid) => {
-        if (!uid || !isKnown) return true;
+        if (!isKnown) return true;
+        if (!uid) return false;
         if (!known.has(uid)) { let ok = true; try { ok = Boolean(isKnown(uid)); } catch { /* không kiểm được: giữ */ } known.set(uid, ok); }
         return known.get(uid);
       };
