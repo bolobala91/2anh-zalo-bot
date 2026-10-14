@@ -252,7 +252,8 @@ input:focus-visible, select:focus-visible { outline: none; border-color: var(--b
 .strip-warn { background: #fbbf24; color: #422006; }
 .strip-ok { background: var(--ok); color: #fff; }
 .strip-idle { background: #e2e8f0; color: var(--muted); }
-.content { padding: 28px; max-width: 1180px; width: 100%; }
+/* Màn hình rộng: dùng hết bề ngang (chỉ chặn ở màn siêu rộng để dòng chữ không quá dài). */
+.content { padding: 28px; max-width: 2200px; width: 100%; }
 .page-head { margin-bottom: 20px; }
 .page-head p { margin-top: 4px; }
 
@@ -1306,6 +1307,19 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .ov-side { display: flex; flex-direction: column; gap: 16px; }
 .ov-side .card, .ov-grid > .card { margin: 0; }
 .ov-facts dd.ov-small { font-size: 15px; white-space: nowrap; }
+.ov-grid > .ov-uses-card { grid-column: 1 / -1; }
+/* Cấu hình trên PC rộng: các nhóm cài đặt chia 2 cột thay vì ô nhập kéo dài hết màn hình. */
+@media (min-width: 1400px) {
+  .settings-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+  .settings-form > .mem-block { min-width: 0; margin: 0; }
+  .settings-form > :not(.mem-block) { grid-column: 1 / -1; }
+}
+/* PC rộng: Hội thoại · (Lịch hẹn, AI, Lối tắt) · Khách dùng bot thành 3 cột. */
+@media (min-width: 1500px) {
+  .ov-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.15fr); }
+  .ov-grid > .ov-uses-card { grid-column: auto; }
+  .ov-uses-card .ov-boards { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 860px) { .ov-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Tạo ảnh & video (Khoá API & Model). */

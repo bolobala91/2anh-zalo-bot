@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.40.0] — 2026-10-14
+
+### Đổi — dashboard dùng hết bề ngang màn hình PC
+
+- Bỏ giới hạn 1180px: trên màn hình rộng mọi trang dàn hết chiều ngang thay vì dồn vào một cột bên trái.
+- **Tổng quan** trên màn từ 1500px chia 3 cột: Hội thoại hôm nay · Lịch hẹn, AI hôm nay, Lối tắt · Khách dùng bot.
+- **Cấu hình** trên màn từ 1400px chia các nhóm cài đặt thành 2 cột, ô nhập không còn kéo dài hết màn hình.
+- Điện thoại và laptop nhỏ giữ nguyên bố cục cũ.
+
 ## [2.39.2] — 2026-10-14
 
 ### Sửa

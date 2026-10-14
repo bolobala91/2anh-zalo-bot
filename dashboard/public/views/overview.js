@@ -142,8 +142,8 @@ const when = (ms) => {
   return `${label} ${hhmm(ms)}`;
 };
 
-function Card({ title, icon, tint, href, hrefText, children }) {
-  return html`<section class=${`card ov-card tint-${tint}`}>
+function Card({ title, icon, tint, href, hrefText, extra = '', children }) {
+  return html`<section class=${`card ov-card tint-${tint}${extra ? ` ${extra}` : ''}`}>
     <div class="ov-head"><span class=${`nav-ico tint-${tint}`} aria-hidden="true"><${Icon} name=${icon} size=${18} /></span>
       <h2>${title}</h2>${href ? html`<a class="ov-more" href=${href}>${hrefText || 'Xem tất cả'} <${Icon} name="next" size=${14} /></a>` : null}</div>
     ${children}
@@ -193,7 +193,7 @@ function BotUses() {
         <span class="conv-count" title=${`${p.count} lượt`}>${p.count.toLocaleString('vi-VN')}</span>
       </button></li>`)}</ol>` : html`<p class="muted small">Chưa có ai.</p>`}
   </div>`;
-  return html`<${Card} title="Khách dùng bot" icon="users" tint="teal">
+  return html`<${Card} title="Khách dùng bot" icon="users" tint="teal" extra="ov-uses-card">
     <div class="chips" role="group" aria-label="Khoảng thời gian">${USE_PERIODS.map(([d, label]) => html`<button key=${d} type="button"
       class="btn btn-secondary btn-sm chip" aria-pressed=${days === d ? 'true' : 'false'} onClick=${() => setDays(d)}>${label}</button>`)}</div>
     ${error ? html`<p class="muted small">${error}</p>` : !data || data.days !== days ? html`<${Spinner} />` : html`
@@ -288,6 +288,6 @@ export function Overview({ me, status: s }) {
         <div class="ov-quick">${QUICK.filter((q) => admin || !q[4]).map(([href, icon, text, tint]) => html`<a key=${href} class=${`ov-q tint-${tint}`} href=${href}><span class=${`nav-ico tint-${tint}`} aria-hidden="true"><${Icon} name=${icon} size=${18} /></span>${text}</a>`)}</div>
       <//>
       </div>
-    </div>
-    <${BotUses} />`;
+      <${BotUses} />
+    </div>`;
 }

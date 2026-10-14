@@ -128,7 +128,7 @@ export function Settings() {
   }
   const groups = [...new Set(list.map((s) => s.group))];
   return html`${head}<${RestartBanner} version=${version} />
-    <form class="card" onSubmit=${save} novalidate>
+    <form class="card settings-form" onSubmit=${save} novalidate>
       ${groups.map((g) => html`<fieldset key=${g} class="mem-block"><legend><h3>${g}</h3></legend>
         ${list.filter((s) => s.group === g).map((s) => html`<${Field} key=${s.id} s=${s} value=${draft[s.id]} onChange=${(v) => setDraft({ ...draft, [s.id]: v })} />`)}
       </fieldset>`)}
