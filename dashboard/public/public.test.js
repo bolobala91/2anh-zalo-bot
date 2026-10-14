@@ -1123,3 +1123,25 @@ test('tổng quan: cần chú ý gom đúng việc, kèm chỗ xử lý; hội t
     { id: '3', enabled: true, paused: false, nextRunAt: now + 5 * 86400_000 }, { id: '4', enabled: true, paused: false, nextRunAt: now + 600_000 }];
   assert.deepEqual(upcomingJobs(jobs, now).map((j) => j.id), ['4', '1']);
 });
+
+test('phiên chat kiểu Zalo: gộp cụm tin theo người gửi, dải ngày, chữ cái đầu và màu ảnh đại diện', async () => {
+  const { isLead, dayLabel, clock } = await import('./views/chats.js');
+  const { initialOf, tintOf } = await import('./views/chat-info.js');
+  const t0 = Date.UTC(2026, 9, 14, 13, 0); // 20:00 giờ Việt Nam
+  const a = { senderName: 'An', isSelf: false, ts: t0 };
+  assert.equal(isLead(null, a), true);
+  assert.equal(isLead(a, { ...a, ts: t0 + 60_000 }), false, 'cùng người, cách 1 phút → cùng cụm');
+  assert.equal(isLead(a, { ...a, ts: t0 + 6 * 60_000 }), true, 'cách hơn 5 phút → cụm mới');
+  assert.equal(isLead(a, { ...a, senderName: 'Bình', ts: t0 + 1000 }), true);
+  assert.equal(isLead(a, { ...a, isSelf: true, ts: t0 + 1000 }), true);
+  assert.equal(isLead({ ...a, ts: Date.UTC(2026, 9, 14, 16, 59) }, { ...a, ts: Date.UTC(2026, 9, 14, 17, 1) }), true, 'qua nửa đêm giờ VN → cụm mới');
+  assert.equal(dayLabel(t0, t0 + 3600_000), 'Hôm nay');
+  assert.equal(dayLabel(t0, t0 + 86_400_000), 'Hôm qua');
+  assert.match(dayLabel(t0, t0 + 5 * 86_400_000), /14\/10\/2026/);
+  assert.equal(clock(t0), '20:00');
+  assert.equal(initialOf('Lương Hải Anh'), 'A');
+  assert.equal(initialOf('VIBE WORKING CÙNG AI AGENT (1)'), 'V', 'từ cuối không phải chữ → lấy từ đầu');
+  assert.equal(initialOf('🌸 Hoa'), 'H');
+  assert.equal(initialOf(''), '?');
+  assert.equal(tintOf('An'), tintOf('An'), 'cùng tên cùng màu');
+});

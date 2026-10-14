@@ -19,7 +19,8 @@ function kb(t, { scope = '' } = {}) {
   writeFileSync(join(root, 'Luu tru', 'cu.pdf'), PDF);
   writeFileSync(join(root, 'goc.md'), '# gốc');
   writeFileSync(join(root, 'anh.png'), 'x');
-  return { root, store: createKbStore({ kbDir: () => root, publicDirs: () => scope }) };
+  // Giới hạn thời gian duyệt rộng: test không được phụ thuộc tốc độ máy (giới hạn 8 giây có test riêng ở cuối tệp).
+  return { root, store: createKbStore({ kbDir: () => root, publicDirs: () => scope, walkBudgetMs: 600_000 }) };
 }
 
 test('luật lọc giống plugin: phạm vi thư mục cấp 1, bỏ thư mục ẩn/mã nguồn, tên gợi ý dữ liệu riêng', () => {

@@ -1008,14 +1008,11 @@ a.update-pill:hover { background: rgba(255, 255, 255, .3); }
   .thread-head > h2, .thread-name > h2 { font-size: 16px; }
   .msgs { padding: 10px 0; }
   .msg { max-width: 88%; }
-  /* Ô soạn: ô chữ + nút Gửi trên một hàng như app nhắn tin. */
-  .compose { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: end; padding-top: 8px; }
-  .compose > textarea { grid-column: 2; grid-row: 1; min-height: 44px; max-height: 30vh; margin: 0; resize: none; }
-  .compose-foot { display: contents; }
-  .compose-foot > small { display: none; }
-  .compose-foot > .btn { grid-column: 3; grid-row: 1; min-height: 44px; }
-  .compose-foot > .attach-btn { grid-column: 1; margin-left: 0; min-width: 44px; }
-  .compose > .live { grid-column: 1 / -1; }
+  /* Ô soạn: hàng nút công cụ gọn, ô chữ + nút Gửi trên một hàng như app nhắn tin. */
+  .compose { padding-top: 4px; }
+  .compose-help { display: none; }
+  .compose-row textarea { max-height: 30vh; resize: none; }
+  .ctool { min-width: 44px; height: 44px; }
 }
 
 /* Hàng tab (chips) đứng đầu thẻ: cách khối nội dung bên dưới. */
@@ -1052,12 +1049,6 @@ a.update-pill:hover { background: rgba(255, 255, 255, .3); }
   .msg-act { min-height: 40px; padding: 6px 12px; }
   .msg-act > span:last-child:not([aria-hidden]) { display: inline; }
   .msg-bubble { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-  .compose > .reply-bar, .compose > .mention-list, .compose > .attach-list { grid-column: 1 / -1; margin-bottom: 0; }
-  .compose > .reply-bar { grid-row: 1; }
-  .compose > .mention-list { grid-row: 2; }
-  .compose > .attach-list { grid-row: 3; }
-  .compose > textarea, .compose-foot > .btn { grid-row: 4; }
-  .compose > .live { grid-row: 5; }
   .attach-name { max-width: 150px; }
 }
 .msg-act-danger:hover { color: var(--danger); border-color: var(--danger); }
@@ -1384,3 +1375,91 @@ a.metric:hover { color: inherit; background: #eeeef1; }
 .ov-rank-no { flex: none; width: 22px; text-align: center; font-weight: 700; color: var(--muted); }
 .ov-rank-who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .ov-rank-who strong, .ov-rank-who small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===================== Phiên chat kiểu Zalo (v2.41) ===================== */
+.avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; font-weight: 700;
+  line-height: 1; overflow: hidden; user-select: none; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.av-sm { width: 36px; height: 36px; font-size: 15px; }
+.av-md { width: 44px; height: 44px; font-size: 18px; }
+.av-lg { width: 64px; height: 64px; font-size: 26px; }
+.av-0 { background: #2563eb; }
+.av-1 { background: #0d9488; }
+.av-2 { background: #7c3aed; }
+.av-3 { background: #db2777; }
+.av-4 { background: #ea580c; }
+.av-5 { background: #16a34a; }
+.av-6 { background: #0891b2; }
+.av-7 { background: #9333ea; }
+.av-8 { background: #dc2626; }
+.av-9 { background: #ca8a04; }
+/* Danh sách hội thoại: ảnh đại diện + 2 dòng. */
+.conv.conv-ava { flex-direction: row; align-items: center; gap: 10px; }
+.conv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Đầu khung chat: ảnh, tên, dòng phụ, nút Tìm · Quyền · Thông tin. */
+.chat-head { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.chat-head-main { flex: 1; min-width: 0; }
+.chat-head-main h2 { margin: 0; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-head-sub { margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-head-tools { flex: none; display: flex; gap: 2px; }
+.chat-head .head-tool { flex: none; min-width: 38px; color: var(--muted); }
+.chat-head .head-tool.active { background: var(--brand-soft); color: var(--brand-dark); }
+.chat-head .head-perms.active { background: color-mix(in srgb, var(--tint) 12%, transparent); color: var(--tint); }
+.chat-back { flex: none; }
+/* Khung tin: nền nhạt, tin gộp theo người gửi, dải ngày ở giữa. */
+.msgs { gap: 3px; padding: 12px; margin-top: 8px; border-radius: 12px; background: color-mix(in srgb, var(--brand) 5%, var(--card)); }
+.msg-lead { margin-top: 10px; }
+.msg-ava { flex-direction: row; align-items: flex-start; gap: 8px; }
+.msg-ava-slot { flex: none; width: 36px; }
+.msg-body { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; max-width: 100%; }
+.msg-self .msg-body { align-items: flex-end; }
+.msg-bubble { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 7px 12px 5px; }
+.msg-self .msg-bubble { background: var(--brand-soft); color: var(--text); border-color: color-mix(in srgb, var(--brand) 25%, transparent); border-radius: 12px; }
+.msg-self .msg-bubble a { color: var(--brand-dark); }
+.msg-bubble .msg-from { display: block; margin-bottom: 2px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.msg-bubble .msg-time { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+.msg-media .msg-from, .msg-media .msg-time { padding: 0 6px; }
+.msg-day { align-self: center; margin: 14px 0 4px; }
+.msg-day > span { display: inline-block; padding: 2px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--muted); }
+/* Ô soạn: hàng nút công cụ phía trên, ô chữ + Gửi một hàng. */
+.compose { padding-top: 6px; }
+.compose-tools { display: flex; align-items: center; gap: 2px; margin-bottom: 6px; min-width: 0; }
+.ctool { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 36px; padding: 0 6px; border: 0; border-radius: 8px;
+  background: none; color: var(--muted); font: inherit; font-size: 18px; font-weight: 800; cursor: pointer; }
+.ctool:hover { background: var(--brand-soft); color: var(--brand-dark); }
+.ctool:focus-visible { outline: none; box-shadow: var(--focus); }
+.ctool:disabled { opacity: .5; cursor: default; }
+.compose-help { flex: 1; min-width: 0; margin-left: 8px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compose-row { display: flex; align-items: flex-end; gap: 8px; }
+.compose-row > textarea { flex: 1; min-width: 0; min-height: 44px; margin: 0; resize: vertical; }
+.compose-row > .send-btn { flex: none; min-height: 44px; }
+/* Bảng Thông tin hội thoại (cột phải). */
+.info-panel .side-body { margin: 0 -16px; padding: 0 16px; }
+.info-id { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0 12px; text-align: center; }
+.info-name { font-size: 16px; overflow-wrap: anywhere; }
+.info-stats { max-width: 100%; }
+.info-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0 -16px; padding: 0 16px 12px; border-bottom: 6px solid var(--bg); }
+.info-act { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; border: 0; border-radius: 8px; background: none;
+  color: var(--text); font: inherit; font-size: 12.5px; text-align: center; cursor: pointer; }
+.info-act:hover { background: var(--brand-soft); }
+.info-act:focus-visible { outline: none; box-shadow: var(--focus); }
+.info-act-ico { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--bg); }
+.info-sec { margin: 0 -16px; padding: 2px 16px 10px; border-bottom: 6px solid var(--bg); }
+.info-sec:last-child { border-bottom: 0; }
+.info-sec-head { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 42px; padding: 0; border: 0; background: none;
+  color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+.info-sec-head:focus-visible { outline: none; box-shadow: var(--focus); }
+.info-caret { display: inline-flex; transition: transform .15s; }
+.info-caret.open { transform: rotate(90deg); }
+.info-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.info-all { width: 100%; margin-top: 8px; justify-content: center; }
+.info-panel .media-row { padding: 6px 0; }
+@media (max-width: 760px) {
+  .chat-head { gap: 8px; padding-bottom: 8px; }
+  .chat-head .av-md { width: 36px; height: 36px; font-size: 15px; }
+  .chat-head-main h2 { font-size: 16px; }
+  .msgs { padding: 10px 8px; }
+  .msg-ava-slot { width: 30px; }
+  .msg-ava-slot .av-sm { width: 30px; height: 30px; font-size: 13px; }
+}

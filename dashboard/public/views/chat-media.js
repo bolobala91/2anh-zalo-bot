@@ -208,8 +208,8 @@ const TABS = [['photo', 'Ảnh/Video'], ['file', 'Tệp'], ['link', 'Link']];
 const EMPTY = { photo: 'Chưa có ảnh hay video nào trong hội thoại này.', file: 'Chưa có tệp nào trong hội thoại này.', link: 'Chưa có link nào trong hội thoại này.' };
 
 /** Bảng bên phải (điện thoại: phủ cả màn hình) liệt kê ảnh/video, tệp, link của một hội thoại. */
-export function MediaPanel({ conv, onClose, onOpenPhoto }) {
-  const [tab, setTab] = useState('photo');
+export function MediaPanel({ conv, onClose, onOpenPhoto, initialTab = 'photo' }) {
+  const [tab, setTab] = useState(initialTab);
   const [data, setData] = useState({}); // kind → { items, next }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

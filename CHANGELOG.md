@@ -2,6 +2,20 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.41.0] — 2026-10-14
+
+### Đổi — Phiên chat bố cục giống Zalo (bước 1)
+
+- **Danh sách hội thoại** có ảnh đại diện (chữ cái đầu, màu cố định theo tên), tên, giờ, dòng xem trước.
+- **Đầu khung chat** kiểu Zalo: ảnh, tên, dòng "Nhóm · số tin…", nút Tìm tin nhắn · Phân quyền · Thông tin hội thoại.
+- **Tin nhắn** gộp theo người gửi (ảnh đại diện và tên chỉ ở tin đầu cụm), tên và giờ nằm trong bong bóng, dải ngăn cách "Hôm nay", "Hôm qua"…; tin của bot nền nhạt màu thương hiệu.
+- **Ô soạn**: hàng nút công cụ phía trên (Gửi ảnh, Đính kèm tệp, @ Nhắc tên), ô "Nhập @, tin nhắn tới …" và nút Gửi cùng một hàng.
+- **Bảng Thông tin hội thoại** bên phải (màn từ 1400px mở sẵn, nhớ lựa chọn ẩn/hiện): nút Phân quyền, Tìm tin nhắn, Ảnh/tệp/link; mục Ảnh/Video, File, Link gần đây, có "Xem tất cả". Đóng Phân quyền / Tìm / Ảnh-tệp-link là về lại bảng Thông tin.
+
+### Sửa
+
+- Test kho tri thức không còn phụ thuộc tốc độ máy (giới hạn 8 giây chỉ áp ở test riêng).
+
 ## [2.40.2] — 2026-10-14
 
 ### Sửa

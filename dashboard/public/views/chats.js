@@ -7,6 +7,7 @@ import { fold, indexOfFolded, markMatches } from '../fold.js';
 import { classifyMedia } from '../media.js';
 import { FileCard, Lightbox, MediaPanel, Thumb, VideoCard } from './chat-media.js';
 import { PermsIcon, PermsPanel, permsTint } from './chat-perms.js';
+import { Avatar, InfoPanel } from './chat-info.js';
 import { FolderChip, FolderFilter, folderIndex, folderOfThread, inFolderFilter } from './folder-ui.js';
 
 export { markMatches };
@@ -81,9 +82,12 @@ export function preview(c) {
 }
 
 function ConvItem({ c, active, folder, onSelect }) {
-  return html`<li><button type="button" class=${`conv${active ? ' active' : ''}`} aria-current=${active ? 'true' : undefined} onClick=${() => onSelect(c)}>
+  return html`<li><button type="button" class=${`conv conv-ava${active ? ' active' : ''}`} aria-current=${active ? 'true' : undefined} onClick=${() => onSelect(c)}>
+    <${Avatar} name=${c.name} group=${c.threadType === 1} />
+    <span class="conv-main">
     <span class="conv-top"><span class="conv-name">${c.name}</span>${c.today ? html`<span class="conv-count" title=${`${c.today} tin hôm nay`}>${c.today}</span>` : null}<time class="conv-time">${fmtTime(c.lastAtMs)}</time></span>
     <span class="conv-sub">${folder ? html`<${FolderChip} folder=${folder} />` : c.threadType === 1 ? html`<span class="tag">Nhóm</span>` : null}<span class="conv-preview">${preview(c)}</span></span>
+    </span>
   </button></li>`;
 }
 
@@ -138,7 +142,26 @@ export function placeMentions(body, picks) {
 
 const LONG_PRESS_MS = 450;
 
-function Bubble({ m, group, focus, onOpenPhoto, active, onActive, onReply, onMention, onRecall }) {
+const VN = { timeZone: 'Asia/Ho_Chi_Minh' };
+const dayKey = (ts) => new Intl.DateTimeFormat('en-CA', { ...VN, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts));
+/** Giờ trong bong bóng: "20:51" (ngày đã có ở dải ngăn cách). */
+export const clock = (ts) => new Intl.DateTimeFormat('vi-VN', { ...VN, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ts));
+/** Dải ngăn cách ngày kiểu Zalo: "Hôm nay", "Hôm qua", "thứ Hai, 13/10/2026". */
+export function dayLabel(ts, now = Date.now()) {
+  const k = dayKey(ts);
+  if (k === dayKey(now)) return 'Hôm nay';
+  if (k === dayKey(now - 86_400_000)) return 'Hôm qua';
+  return new Intl.DateTimeFormat('vi-VN', { ...VN, weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(ts));
+}
+const RUN_GAP_MS = 5 * 60_000;
+/** Tin mở đầu một cụm (hiện ảnh đại diện + tên): khác người gửi, khác ngày, hoặc cách tin trước hơn 5 phút. */
+export function isLead(prev, m) {
+  return !prev || prev.isSelf !== m.isSelf || (prev.senderName || '') !== (m.senderName || '')
+    || dayKey(prev.ts) !== dayKey(m.ts) || m.ts - prev.ts > RUN_GAP_MS;
+}
+export const sameDay = (a, b) => dayKey(a) === dayKey(b);
+
+function Bubble({ m, group, lead = true, focus, onOpenPhoto, active, onActive, onReply, onMention, onRecall }) {
   const v = messageView(m);
   const md = v.media;
   const timer = useRef(0);
@@ -153,17 +176,21 @@ function Bubble({ m, group, focus, onOpenPhoto, active, onActive, onReply, onMen
   const li = useRef(null);
   // Hiện nút thao tác cho tin sát mép khung (vd. tin cuối) → cuộn cho thấy trọn, kẻo nút bị khung cắt mất.
   useEffect(() => { if (active) li.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); }, [active]);
-  return html`<li ref=${li} id=${`msg-${m.id}`} class=${`msg${m.isSelf ? ' msg-self' : ''}${focus ? ' msg-focus' : ''}${active ? ' msg-active' : ''}`}>
-    ${group && !m.isSelf ? html`<span class="msg-from">${m.senderName || 'Thành viên'}</span>` : null}
+  const ava = group && !m.isSelf;
+  return html`<li ref=${li} id=${`msg-${m.id}`} class=${`msg${m.isSelf ? ' msg-self' : ''}${ava ? ' msg-ava' : ''}${lead ? ' msg-lead' : ''}${focus ? ' msg-focus' : ''}${active ? ' msg-active' : ''}`}>
+    ${ava ? html`<span class="msg-ava-slot">${lead ? html`<${Avatar} name=${m.senderName || 'Thành viên'} size="sm" />` : null}</span>` : null}
+    <div class="msg-body">
     <div class="msg-row">
     <div class=${`msg-bubble${md ? ' msg-media' : ''}`} onTouchStart=${press} onTouchMove=${move} onTouchEnd=${release} onTouchCancel=${release}
       onContextMenu=${(e) => { e.preventDefault(); onActive(m.id); }}>
+      ${ava && lead ? html`<span class="msg-from">${m.senderName || 'Thành viên'}</span>` : null}
       ${md?.kind === 'photo' ? html`<${Thumb} url=${md.url} alt=${md.caption || `Ảnh của ${m.isSelf ? 'bot' : (m.senderName || 'thành viên')}`} onOpen=${() => onOpenPhoto(m.id)} />` : null}
       ${md?.kind === 'file' ? html`<${FileCard} name=${md.name} url=${md.url} ext=${md.ext} />` : null}
       ${md?.kind === 'video' ? html`<${VideoCard} url=${md.url} />` : null}
       ${!md && v.label ? html`<span class="msg-kind">[${v.label}]</span> ` : null}
       ${v.link ? html`<a href=${v.link} target="_blank" rel="noopener noreferrer" title=${v.link}>${shortUrl(v.link)}</a>` : null}
       ${v.text ? html`<span class="msg-text">${v.text}</span>` : null}
+      <time class="msg-time" datetime=${new Date(m.ts).toISOString()}>${m.isSelf ? 'Bot · ' : ''}${clock(m.ts)}</time>
     </div>
     ${recalled ? null : html`<span class="msg-actions" role="group" aria-label="Thao tác với tin">
       <button type="button" class="msg-act" onClick=${() => { onReply(m); onActive(null); }} aria-label="Trả lời tin này" title="Trả lời"><${Icon} name="reply" size=${16} /><span>Trả lời</span></button>
@@ -172,7 +199,7 @@ function Bubble({ m, group, focus, onOpenPhoto, active, onActive, onReply, onMen
       ${v.text || v.link ? html`<button type="button" class="msg-act" onClick=${copy} aria-label="Chép nội dung" title="Chép"><${Icon} name="copy" size=${16} /><span>Chép</span></button>` : null}
     </span>`}
     </div>
-    <time class="msg-time" datetime=${new Date(m.ts).toISOString()}>${m.isSelf ? 'Bot · ' : ''}${fmtTime(m.ts)}</time>
+    </div>
   </li>`;
 }
 
@@ -377,6 +404,14 @@ function Compose({ conv, onSent, reply, onClearReply, mentionReq }) {
     }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(e);
   }
+  // Nút "@" trên hàng công cụ: chèn "@" ở chỗ con trỏ rồi mở danh sách thành viên như khi gõ.
+  function startMention() {
+    const el = area.current;
+    const pos = el ? el.selectionStart ?? text.length : text.length;
+    const lead = pos > 0 && !/\s$/.test(text.slice(0, pos)) ? ' ' : '';
+    insertAt(pos, 0, `${lead}@`);
+    setQuery(''); setHi(0); loadMembers();
+  }
   const replyView = reply ? messageView(reply) : null;
   return html`<form class=${`compose${drag ? ' is-drag' : ''}`} onSubmit=${send} novalidate
     onDragOver=${(e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDrag(true); } }}
@@ -400,17 +435,21 @@ function Compose({ conv, onSent, reply, onClearReply, mentionReq }) {
       ${suggestions.map((m, i) => html`<li key=${m.uid} role="option" aria-selected=${i === hi ? 'true' : 'false'}>
         <button type="button" class=${`mention-item${i === hi ? ' active' : ''}`} onMouseDown=${(e) => e.preventDefault()} onClick=${() => pick(m)}>@${m.name}</button></li>`)}
     </ul>` : null}
-    <label for="chat-compose" class="sr-only">Tin nhắn gửi dưới tên bot</label>
-    <textarea id="chat-compose" ref=${area} rows="2" maxlength=${MAX_TEXT} value=${text} readOnly=${busy}
-      placeholder=${group ? (narrow() ? 'Nhắn dưới tên bot… (@ để nhắc tên)' : 'Nhắn dưới tên bot… (@ để nhắc tên, Ctrl+Enter để gửi)') : (narrow() ? 'Nhắn dưới tên bot…' : 'Nhắn dưới tên bot… (Ctrl+Enter để gửi)')}
-      aria-describedby="chat-compose-help" aria-autocomplete=${group ? 'list' : undefined} onInput=${onInput} onKeyDown=${onKeyDown} onPaste=${onPaste}
-      onBlur=${() => setTimeout(() => setQuery(null), 150)}></textarea>
-    <div class="compose-foot">
-      <small class="muted"><span id="chat-compose-help">Tin gửi dưới tên bot, ghi vào Nhật ký kèm tên bạn. Dán ảnh (Ctrl+V) hoặc kéo thả tệp vào đây.</span> ${text.length}/${MAX_TEXT}</small>
+    <div class="compose-tools" role="toolbar" aria-label="Công cụ soạn tin">
       <input ref=${picker} type="file" class="sr-only" multiple accept=${ATTACH_TYPES.map((x) => `.${x}`).join(',')} tabindex="-1" aria-hidden="true"
         onChange=${(e) => { addFiles(e.currentTarget.files); e.currentTarget.value = ''; }} />
-      <button type="button" class="btn btn-secondary btn-sm attach-btn" disabled=${busy} onClick=${() => picker.current?.click()} aria-label="Đính kèm ảnh hoặc tệp" title="Đính kèm ảnh/tệp"><${Icon} name="clip" size=${16} /></button>
-      <button class="btn btn-primary btn-sm" disabled=${busy}><${Icon} name="send" size=${16} /> ${busy ? 'Đang gửi…' : 'Gửi'}</button>
+      <button type="button" class="ctool" disabled=${busy} onClick=${() => picker.current?.click()} aria-label="Gửi ảnh" title="Gửi ảnh"><${Icon} name="image" size=${20} /></button>
+      <button type="button" class="ctool" disabled=${busy} onClick=${() => picker.current?.click()} aria-label="Đính kèm tệp" title="Đính kèm tệp"><${Icon} name="clip" size=${20} /></button>
+      ${group ? html`<button type="button" class="ctool ctool-at" disabled=${busy} onMouseDown=${(e) => e.preventDefault()} onClick=${startMention} aria-label="Nhắc tên thành viên" title="Nhắc tên (@)">@</button>` : null}
+      <small class="muted compose-help"><span id="chat-compose-help">Gửi dưới tên bot · dán ảnh (Ctrl+V) hoặc kéo thả tệp${narrow() ? '' : ' · Ctrl+Enter để gửi'}</span> · ${text.length}/${MAX_TEXT}</small>
+    </div>
+    <div class="compose-row">
+      <label for="chat-compose" class="sr-only">Tin nhắn gửi dưới tên bot</label>
+      <textarea id="chat-compose" ref=${area} rows="2" maxlength=${MAX_TEXT} value=${text} readOnly=${busy}
+        placeholder=${`Nhập ${group ? '@, ' : ''}tin nhắn tới ${conv.name || 'hội thoại'}`}
+        aria-describedby="chat-compose-help" aria-autocomplete=${group ? 'list' : undefined} onInput=${onInput} onKeyDown=${onKeyDown} onPaste=${onPaste}
+        onBlur=${() => setTimeout(() => setQuery(null), 150)}></textarea>
+      <button class="btn btn-primary btn-sm send-btn" disabled=${busy}><${Icon} name="send" size=${16} /> ${busy ? 'Đang gửi…' : 'Gửi'}</button>
     </div>
     <${Live} error=${msg.error} ok=${msg.ok} />
   </form>`;
@@ -418,6 +457,15 @@ function Compose({ conv, onSent, reply, onClearReply, mentionReq }) {
 
 const FLASH_MS = 2500;
 const narrow = () => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 760px)').matches;
+const INFO_KEY = 'zd:chat-info';
+/** Màn rộng (≥1400px) mở sẵn bảng Thông tin như Zalo, trừ khi người dùng đã đóng nó (nhớ trên trình duyệt này). */
+function infoPreferred() {
+  if (typeof window === 'undefined' || !window.matchMedia?.('(min-width: 1400px)').matches) return false;
+  try { return localStorage.getItem(INFO_KEY) !== 'closed'; } catch { return true; }
+}
+function rememberInfo(open) {
+  try { localStorage.setItem(INFO_KEY, open ? 'open' : 'closed'); } catch { /* chế độ riêng tư */ }
+}
 
 function Thread({ conv, onBack }) {
   const [reply, setReply] = useState(null); // tin đang trả lời
@@ -448,7 +496,10 @@ function Thread({ conv, onBack }) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadingNewer, setLoadingNewer] = useState(false);
   const [error, setError] = useState('');
-  const [side, setSide] = useState(null); // 'search' | 'media' | 'perms'
+  // Bảng bên phải: 'info' (Thông tin hội thoại, mở sẵn trên màn rộng) | 'search' | 'media' | 'perms'.
+  const [keepInfo, setKeepInfo] = useState(infoPreferred);
+  const [side, setSide] = useState(() => (infoPreferred() ? 'info' : null));
+  const [mediaTab, setMediaTab] = useState('photo');
   const [flash, setFlash] = useState(null);
   const [lightbox, setLightbox] = useState(null); // { items, index }
   const box = useRef(null);
@@ -577,25 +628,32 @@ function Thread({ conv, onBack }) {
     if (index >= 0) setLightbox({ items, index });
   }
 
-  const toggle = (name) => setSide((cur) => (cur === name ? null : name));
-  const toggles = { search: useRef(null), media: useRef(null), perms: useRef(null) };
-  // Đóng bảng thì trả tiêu điểm về đúng nút đã mở nó trên đầu khung tin.
-  const closeSide = (name) => { setSide(null); setTimeout(() => toggles[name].current?.focus(), 0); };
+  const back = keepInfo ? 'info' : null;
+  const toggle = (name) => setSide((cur) => (cur === name ? back : name));
+  const toggles = { search: useRef(null), info: useRef(null), perms: useRef(null) };
+  // Đóng bảng thì về bảng Thông tin (nếu đang ghim mở) và trả tiêu điểm về nút đã mở nó.
+  const closeSide = (name) => { setSide(back); setTimeout(() => (toggles[name] || toggles.info).current?.focus(), 0); };
+  function toggleInfo() {
+    const open = side !== 'info';
+    setKeepInfo(open); rememberInfo(open); setSide(open ? 'info' : null);
+  }
   const group = conv.threadType === 1;
+  const stats = convStats(conv);
   return html`
-    <header class="thread-head thread-head-stack">
-      <div class="thread-name">
-        <button type="button" class="btn btn-ghost btn-sm only-mobile" onClick=${onBack}>← Danh sách</button>
-        <h2 title=${conv.name}>${conv.name}</h2>${group ? html`<span class="tag">Nhóm</span>` : null}
+    <header class="chat-head">
+      <button type="button" class="btn btn-ghost btn-sm only-mobile chat-back" onClick=${onBack} aria-label="Về danh sách hội thoại">←</button>
+      <${Avatar} name=${conv.name} group=${group} />
+      <div class="chat-head-main">
+        <h2 title=${conv.name}>${conv.name}</h2>
+        <p class="muted small chat-head-sub">${group ? 'Nhóm' : 'Nhắn riêng'}${stats ? html` · <span>${stats}</span>` : null}</p>
       </div>
-      <div class="thread-bar">
-      <p class="thread-stats muted small">${convStats(conv)}</p>
+      <div class="chat-head-tools">
       <button type="button" ref=${toggles.search} class=${`btn btn-ghost btn-sm head-tool${side === 'search' ? ' active' : ''}`} aria-pressed=${side === 'search' ? 'true' : 'false'}
-        onClick=${() => toggle('search')} aria-label="Tìm trong hội thoại" title="Tìm trong hội thoại"><${Icon} name="search" /></button>
-      <button type="button" ref=${toggles.media} class=${`btn btn-ghost btn-sm head-tool${side === 'media' ? ' active' : ''}`} aria-pressed=${side === 'media' ? 'true' : 'false'}
-        onClick=${() => toggle('media')} aria-label="Ảnh/Video · Tệp · Link" title="Ảnh/Video · Tệp · Link"><${Icon} name="image" /><span class="head-tool-label">Ảnh/Video · Tệp · Link</span></button>
+        onClick=${() => toggle('search')} aria-label="Tìm trong hội thoại" title="Tìm tin nhắn"><${Icon} name="search" /></button>
       <button type="button" ref=${toggles.perms} class=${`btn btn-ghost btn-sm head-tool head-perms ${permsTint()}${side === 'perms' ? ' active' : ''}`} aria-pressed=${side === 'perms' ? 'true' : 'false'}
-        onClick=${() => toggle('perms')} aria-label=${group ? 'Quyền của bot trong nhóm này' : 'Quyền nhắn riêng của người này'} title="Phân quyền Bot"><${PermsIcon} /><span class="head-tool-label">Quyền</span></button>
+        onClick=${() => toggle('perms')} aria-label=${group ? 'Quyền của bot trong nhóm này' : 'Quyền nhắn riêng của người này'} title="Phân quyền Bot"><${PermsIcon} /></button>
+      <button type="button" ref=${toggles.info} class=${`btn btn-ghost btn-sm head-tool${side === 'info' ? ' active' : ''}`} aria-pressed=${side === 'info' ? 'true' : 'false'}
+        onClick=${toggleInfo} aria-label="Thông tin hội thoại" title="Thông tin hội thoại"><${Icon} name="sidebar" /></button>
       </div>
     </header>
     <${Live} error=${error || recallMsg.error} ok=${recallMsg.ok} />
@@ -608,15 +666,21 @@ function Thread({ conv, onBack }) {
             ? html`<button type="button" class="btn btn-ghost btn-sm" disabled=${loadingOlder} onClick=${loadOlder}>${loadingOlder ? 'Đang tải…' : 'Tải tin cũ hơn'}</button>`
             : html`<span class="muted small">${msgs.length ? 'Đầu cuộc trò chuyện' : 'Chưa có tin nhắn nào.'}</span>`}
         </li>
-        ${msgs.map((m) => html`<${Bubble} key=${m.id} m=${m} group=${group} focus=${flash === m.id} onOpenPhoto=${openPhoto}
+        ${msgs.map((m, i) => {
+          const prev = msgs[i - 1];
+          const day = !prev || !sameDay(prev.ts, m.ts);
+          return html`${day ? html`<li key=${`d${m.id}`} class="msg-day"><span>${dayLabel(m.ts)}</span></li>` : null}<${Bubble} key=${m.id} m=${m} group=${group} lead=${isLead(prev, m)} focus=${flash === m.id} onOpenPhoto=${openPhoto}
           active=${active === m.id} onActive=${setActive} onReply=${setReply}
-          onMention=${(x) => setMentionReq({ name: x.senderName || '', msg: x.id, n: Date.now() })} onRecall=${recall} />`)}
+          onMention=${(x) => setMentionReq({ name: x.senderName || '', msg: x.id, n: Date.now() })} onRecall=${recall} />`;
+        })}
         ${newer ? html`<li class="msgs-top"><button type="button" class="btn btn-ghost btn-sm" disabled=${loadingNewer} onClick=${loadNewer}>${loadingNewer ? 'Đang tải…' : 'Tải tin mới hơn'}</button></li>` : null}
       </ol>`}
     <${Compose} conv=${conv} onSent=${() => kick.current()} reply=${reply} onClearReply=${() => setReply(null)} mentionReq=${mentionReq} />
     ${side === 'search' ? html`<${ThreadSearch} conv=${conv} onJump=${jumpTo} onClose=${() => closeSide('search')} />` : null}
     ${side === 'perms' ? html`<${PermsPanel} conv=${conv} onClose=${() => closeSide('perms')} />` : null}
-    ${side === 'media' ? html`<${MediaPanel} conv=${conv} onClose=${() => closeSide('media')} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
+    ${side === 'media' ? html`<${MediaPanel} key=${mediaTab} conv=${conv} initialTab=${mediaTab} onClose=${() => closeSide('media')} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
+    ${side === 'info' ? html`<${InfoPanel} conv=${conv} statsText=${stats} onClose=${toggleInfo} onTool=${(name) => setSide(name)}
+      onOpen=${(tab) => { setMediaTab(tab); setSide('media'); }} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
     ${lightbox ? html`<${Lightbox} items=${lightbox.items} index=${lightbox.index}
       onIndex=${(index) => setLightbox((cur) => ({ ...cur, index }))} onClose=${() => setLightbox(null)} />` : null}`;
 }
