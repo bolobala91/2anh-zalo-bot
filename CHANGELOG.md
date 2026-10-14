@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.39.1] — 2026-10-14
+
+### Sửa
+
+- **Bot Zalo không chạy sau khi nâng cấp trên Hermes mới** ("Failed to load plugin '2anh-zalo-platform': No module named 'yaml'"): môi trường Python do Hermes quản lý không có sẵn `pyyaml`/`psutil`. Plugin nay khai báo đủ hai thư viện này trong `python_dependencies`; thêm test quét mọi thư viện ngoài plugin dùng để không thiếu khai báo nữa.
+
 ## [2.39.0] — 2026-10-14
 
 ### Thêm — chọn model ngay trong chat bằng lời thường

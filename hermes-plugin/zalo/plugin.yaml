@@ -3,7 +3,7 @@
 name: 2anh-zalo-platform
 label: Zalo
 kind: platform
-version: 2.39.0
+version: 2.39.1
 description: >
   Zalo gateway adapter for Hermes Agent.
 
@@ -41,6 +41,8 @@ python_dependencies:
   - youtube-transcript-api
   - lxml
   - requests
+  - pyyaml
+  - psutil
 optional_env:
   - name: ZALO_BRIDGE_URL
     description: "WebSocket URL of the zca-js sidecar (default: ws://127.0.0.1:3873)"

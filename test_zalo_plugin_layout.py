@@ -163,6 +163,39 @@ class ManifestTest(unittest.TestCase):
         memory = self._manifest("zalo_memory")
         self.assertEqual((memory["name"], memory["kind"]), ("zalo_memory", "exclusive"))
 
+    def test_third_party_imports_are_declared(self):
+        # Hermes mới chạy trong môi trường do `hermes pm` dựng: chỉ có thư viện của Hermes + python_dependencies.
+        # Thiếu khai báo (vd. pyyaml) thì plugin không nạp được, bot Zalo tắt hẳn.
+        import ast
+        local = {"zalo", "zalo_tools", "zalo_memory", "gateway", "hermes_cli", "hermes_constants", "agent", "tools",
+                 "plugins", "hermes_plugins", "model_tools", "toolsets", "utils", "run_agent", "cron", "tts"}
+        pip_name = {"yaml": "pyyaml", "PIL": "pillow", "pillow_jxl": "pillow-jxl-plugin", "docx": "python-docx",
+                    "pptx": "python-pptx", "fpdf": "fpdf2", "fitz": "pymupdf", "pymupdf": "pymupdf",
+                    "yt_dlp": "yt-dlp", "youtube_transcript_api": "youtube-transcript-api"}
+        declared = {d.split("[")[0].lower() for d in self._manifest("zalo")["python_dependencies"]}
+        missing = set()
+        for folder in ("zalo", "zalo_tools", "zalo_memory"):
+            for dirpath, _, files in os.walk(os.path.join(PLUGIN_DIR, folder)):
+                for name in files:
+                    if not name.endswith(".py") or name.startswith("test_"):
+                        continue
+                    with open(os.path.join(dirpath, name), encoding="utf-8") as fh:
+                        tree = ast.parse(fh.read())
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.Import):
+                            mods = [a.name for a in node.names]
+                        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+                            mods = [node.module]
+                        else:
+                            continue
+                        for mod in mods:
+                            top = mod.split(".")[0]
+                            if top in sys.stdlib_module_names or top in local or top.startswith("_"):
+                                continue
+                            if pip_name.get(top, top).lower() not in declared:
+                                missing.add(f"{top} ({folder}/{name})")
+        self.assertEqual(sorted(missing), [], "thêm vào python_dependencies trong hermes-plugin/zalo/plugin.yaml")
+
 
 if __name__ == "__main__":
     unittest.main()
