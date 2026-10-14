@@ -352,6 +352,15 @@ _FILE_CONTEXT_RE = re.compile(
 # Dấu bot viết để tách một câu trả lời thành nhiều tin Zalo (vd. bản soạn đứng
 # một tin cho dễ copy, lời xác nhận sang tin sau). Nhận cả khi model lỡ in đậm,
 # viết thường, thêm dấu câu hay để chung dòng — dấu này không được lọt vào tin.
+# Câu báo bận của gateway Hermes (locales/en.yaml › busy: interrupting/queued/steered/redirected/subagent/compressing).
+_BUSY_STATUS_HEADS = ("⚡ Interrupting current task", "⏳ Queued for the next turn", "⏩ Steered into current run",
+                      "↪ Redirected current run", "⏳ Subagent working", "⏳ Compressing context")
+
+
+def _is_busy_status(content: Optional[str]) -> bool:
+    return bool(content) and str(content).lstrip().startswith(_BUSY_STATUS_HEADS)
+
+
 _NEW_MESSAGE_RE = re.compile(r"[ \t]*[*_~]*\[\[\s*new[ _]message\s*\]\][*_~.:;!]*[ \t]*", re.IGNORECASE)
 
 # Loại tin KHÔNG bao giờ mang tệp đính kèm. Thẻ chia sẻ link (chat.recommended:
@@ -2010,6 +2019,13 @@ class ZaloAdapter(BasePlatformAdapter):
             wrapped = _CRON_WRAPPER_RE.match(content)
             if wrapped:
                 content = wrapped.group("body").strip()
+
+        if _is_busy_status(content):
+            # "⚡ Interrupting current task…", "⏳ Queued for the next turn…": câu báo bận tiếng Anh của gateway khi
+            # người dùng nhắn dồn. Vào nhóm Zalo chỉ lộ ra là bot; tin mới vẫn được xử lý bình thường. Lọc ở đây
+            # thay cho việc sửa lõi Hermes (gateway/run.py) — sửa lõi bị `hermes update` cất vào stash.
+            logger.debug("[zalo] bỏ câu báo bận của gateway: %s", (content or "")[:80])
+            return SendResult(success=True)
 
         if metadata.get("_interim_send") and (content or "").lstrip().startswith("💾"):
             # "💾 Self-improvement review / Memory updated" là việc nội bộ của

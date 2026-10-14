@@ -43,6 +43,31 @@ const run = (file, args, opts) => new Promise((resolve) => {
   execFile(file, args, { windowsHide: true, timeout: 60_000, ...opts }, (e, stdout, stderr) => resolve({ ok: !e, out: `${stdout || ''}${stderr || ''}` }));
 });
 
+export const HERMES_UPDATE_ARGS = ['update', '--yes', '--backup'];
+
+/**
+ * Cập nhật Hermes (scripts/hermes-update.js chạy tách rời, nhật ký ra hermes-update.log). `hermes update` tự khởi
+ * động lại gateway — nhưng ở Hermes mới, môi trường thư viện vừa dựng lại chưa có python_dependencies của plugin.
+ * Nên: cập nhật thành công + Hermes mới (xét SAU cập nhật: bản cũ có thể vừa lên bản mới) → `hermes pm install` →
+ * khởi động lại trợ lý để nạp thư viện. pm install lỗi chỉ cảnh báo kèm lệnh chạy tay. Trả mã thoát của `hermes update`.
+ * deps: { hermesBin, run(file, args) → Promise<mã thoát>, managed() → bool, restartAssistant(), log(text) }
+ */
+export async function runHermesUpdate({ hermesBin, run, managed, restartAssistant, log = console.log }) {
+  const code = await run(hermesBin, HERMES_UPDATE_ARGS);
+  if (code !== 0) return code;
+  if (!managed()) return 0;
+  log(`[2anh-zalo-bot] Hermes dùng môi trường thư viện do Hermes quản lý — chạy "${hermesBin} pm install" để cài thư viện cho plugin Zalo (có thể mất vài phút)…`);
+  const pm = await run(hermesBin, ['pm', 'install']).catch(() => null);
+  if (pm !== 0) {
+    log(`[WARN] "${hermesBin} pm install" lỗi (${pm ?? 'không chạy được'}) — Hermes đã cập nhật xong nhưng plugin Zalo có thể thiếu thư viện. `
+      + `Chạy tay: ${hermesBin} pm install, rồi khởi động lại trợ lý.`);
+    return 0;
+  }
+  log('[2anh-zalo-bot] Đã cài thư viện cho plugin — khởi động lại trợ lý…');
+  try { await restartAssistant(); log('[2anh-zalo-bot] Đã khởi động lại trợ lý.'); } catch (e) { log(`[WARN] Không khởi động lại được trợ lý: ${e.message} — khởi động lại tay.`); }
+  return 0;
+}
+
 export function createMaintenance({
   hermesBin, pluginYaml = () => '', dataDir, sidecarRoot = '', fetchImpl = globalThis.fetch, runImpl = run, spawnImpl = spawn, now = Date.now,
   platform = process.platform, useSystemdRun = () => existsSync('/run/systemd/system') && process.getuid?.() === 0,
@@ -79,11 +104,12 @@ export function createMaintenance({
     return { startedAt: s.startedAt || 0, running, log };
   }
 
-  /** Trạng thái cập nhật bot (scripts/self-update.js ghi). Kẹt "running" quá 30 phút coi như hỏng. */
+  /** Trạng thái cập nhật bot (scripts/self-update.js ghi). Kẹt "running" quá 60 phút coi như hỏng. */
   function botUpdateState() {
     let s = {};
     try { s = JSON.parse(readFileSync(botStateFile, 'utf8')); } catch { /* chưa cập nhật lần nào */ }
-    const stale = s.status === 'running' && now() - (s.startedAt || 0) > 30 * 60_000;
+    // 60 phút: bộ cài trong bản cập nhật có thể chạy `hermes pm install` (Hermes mới, tới 20 phút).
+    const stale = s.status === 'running' && now() - (s.startedAt || 0) > 60 * 60_000;
     let log = '';
     try { log = readFileSync(botLogFile, 'utf8').split(/\r?\n/).filter((l) => l.trim()).slice(-60).join('\n'); } catch { /* chưa có */ }
     return { status: stale ? 'failed' : (s.status || ''), from: s.from || '', to: s.to || '', step: s.step || '', error: stale ? 'Cập nhật dừng giữa chừng.' : (s.error || ''),
@@ -120,7 +146,13 @@ export function createMaintenance({
       if (updateState().running) throw fail(409, 'Hermes đang cập nhật — chờ xong rồi xem lại.');
       mkdirSync(dataDir, { recursive: true });
       const fd = openSync(logFile, 'w');
-      const child = spawnImpl(hermesBin, ['update', '--yes', '--backup'], { detached: true, windowsHide: true, stdio: ['ignore', fd, fd], env: { ...process.env, NO_COLOR: '1' } });
+      // Có scripts/hermes-update.js: chạy qua nó — cập nhật xong, Hermes mới thì thêm `hermes pm install` (thư viện
+      // của plugin) rồi khởi động lại trợ lý. Không có (không biết thư mục bot): gọi thẳng `hermes update` như cũ.
+      const runner = sidecarRoot ? join(sidecarRoot, 'scripts', 'hermes-update.js') : '';
+      const [file, argv] = runner && existsSync(runner)
+        ? [process.execPath, [runner, '--hermes-bin', hermesBin]]
+        : [hermesBin, HERMES_UPDATE_ARGS];
+      const child = spawnImpl(file, argv, { detached: true, windowsHide: true, stdio: ['ignore', fd, fd], env: { ...process.env, NO_COLOR: '1' } });
       await waitSpawned(child);
       writeFileSync(stateFile, JSON.stringify({ pid: child.pid, startedAt: now() }));
       hermesCheck = null;

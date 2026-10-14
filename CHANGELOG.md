@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.38.0] — 2026-10-14
+
+### Đổi — chạy được trên Hermes mới có bộ quản lý gói (`hermes pm`)
+
+- **Thư viện plugin do Hermes tự cài và giữ:** Hermes mới chạy bằng môi trường Python riêng (ghi trong `<HERMES_HOME>/installs/*/facts.json`), không dùng `.venv` trong mã Hermes nữa — các thư viện plugin Zalo cần (Word/Excel/PowerPoint/PDF, xử lý PDF, tải video, ảnh JPEG XL…) bị thiếu sau khi cập nhật Hermes. Nay plugin khai báo `python_dependencies`; trình cài và nút "Cập nhật Hermes" của dashboard chạy `hermes pm install` để Hermes cài vào môi trường của nó và giữ qua các lần dựng lại. Hermes cũ vẫn cài vào `.venv` như trước.
+- Trình cài, mục Kiểm tra và các trang quản trị Hermes của dashboard (Skill…) dò đúng Python mà Hermes đang dùng — trang Skill báo lỗi trên Hermes mới đã sửa.
+- **Câu báo bận tiếng Anh của gateway** ("⚡ Interrupting current task…", "⏳ Queued for the next turn…") không còn lọt vào Zalo — lọc ngay trong plugin, thay cho việc sửa lõi Hermes (sửa lõi bị `hermes update` cất vào stash).
+
 ## [2.37.0] — 2026-10-14
 
 ### Đổi — tương thích Hermes mới (và vẫn chạy với Hermes cũ)

@@ -407,6 +407,90 @@ function pythonPath(repoRoot) {
   return candidates.find(existsSync) || null;
 }
 
+const venvPython = (env, hostPlatform) => (hostPlatform === 'win32'
+  ? join(env, 'Scripts', 'python.exe')
+  : join(env, 'bin', 'python'));
+
+/**
+ * Hermes mới (2026-10): chạy bằng Python do Hermes quản lý, thư viện nằm trong môi trường ghi ở
+ * `<HERMES_HOME>/installs/<id>/facts.json` → packages.venv.environment (do `hermes pm` dựng lại, cài tay sẽ mất).
+ * Trả Python của môi trường đó (facts.json mới sửa nhất trong số có môi trường còn tồn tại), không có → null.
+ */
+function managedEnvPython(hermesHome, { hostPlatform = platform(), exists = existsSync } = {}) {
+  const installs = join(resolve(hermesHome), 'installs');
+  let ids = [];
+  try { ids = readdirSync(installs); } catch { return null; }
+  let best = null;
+  for (const id of ids) {
+    const facts = join(installs, id, 'facts.json');
+    let env;
+    try { env = JSON.parse(readFileSync(facts, 'utf8'))?.packages?.venv?.environment; } catch { continue; }
+    if (typeof env !== 'string' || !env.trim()) continue;
+    const python = venvPython(isAbsolute(env) ? env : join(resolve(hermesHome), env), hostPlatform);
+    if (!exists(python)) continue;
+    let mtime = 0;
+    try { mtime = statSync(facts).mtimeMs; } catch { /* vẫn dùng được */ }
+    if (!best || mtime > best.mtime) best = { python, mtime };
+  }
+  return best?.python || null;
+}
+
+/** "Python của Hermes": môi trường do Hermes quản lý (Hermes mới), không có thì `<repo>/.venv` | `<repo>/venv` (Hermes cũ). */
+export function hermesRuntimePython(layout, hermesHome, options = {}) {
+  return managedEnvPython(hermesHome, options) || (layout?.repoRoot ? pythonPath(layout.repoRoot) : null);
+}
+
+/** Hermes mới, thư viện do `hermes pm` quản lý: có facts.json trỏ tới môi trường còn tồn tại, hoặc mã Hermes có pm/workspace.py. */
+export function managedHermes(layout, hermesHome, options = {}) {
+  if (managedEnvPython(hermesHome, options)) return true;
+  return Boolean(layout?.repoRoot) && (options.exists || existsSync)(join(layout.repoRoot, 'pm', 'workspace.py'));
+}
+
+/**
+ * Lệnh `hermes` để chạy `hermes pm install`: ZALO_HERMES_BIN → <HERMES_HOME>/bin → `hermes` trên PATH (cách bộ cài
+ * vẫn tìm mã Hermes) → venv trong mã Hermes → để hệ thống tự tìm "hermes".
+ */
+export function hermesExecutable(layout, { env = process.env, hostPlatform = platform(), exists = existsSync } = {}) {
+  if (env.ZALO_HERMES_BIN) return env.ZALO_HERMES_BIN;
+  const exe = hostPlatform === 'win32' ? 'hermes.exe' : 'hermes';
+  const sub = hostPlatform === 'win32' ? 'Scripts' : 'bin';
+  const candidates = [
+    layout?.home && join(layout.home, 'bin', exe),
+    ...String(env.PATH || '').split(hostPlatform === 'win32' ? ';' : ':').filter(Boolean).map((dir) => join(dir, exe)),
+    ...(layout?.repoRoot ? [join(layout.repoRoot, '.venv', sub, exe), join(layout.repoRoot, 'venv', sub, exe)] : []),
+  ].filter(Boolean);
+  return candidates.find((p) => exists(p)) || 'hermes';
+}
+
+export const PM_INSTALL_TIMEOUT_MS = 20 * 60_000;
+
+/**
+ * Hermes mới: `hermes pm install` dựng lại môi trường thư viện kèm python_dependencies của plugin đang bật
+ * (`hermes pm repair` giữ đồ thị cũ nên không đủ). Lỗi chỉ thành cảnh báo kèm lệnh chạy tay — không dừng cài đặt.
+ * Trả { ok, command, detail }.
+ */
+export function runHermesPmInstall(layout, { run = spawnSync, log = console.log, env = process.env, hostPlatform = platform(), exists = existsSync } = {}) {
+  const bin = hermesExecutable(layout, { env, hostPlatform, exists });
+  const command = `${bin} pm install`;
+  log(`[INFO] Hermes mới: thư viện Python do Hermes quản lý — chạy "${command}" để cài thư viện cho plugin (có thể mất vài phút)…`);
+  let result;
+  try {
+    result = run(bin, ['pm', 'install'], {
+      encoding: 'utf8', windowsHide: true, timeout: PM_INSTALL_TIMEOUT_MS,
+      stdio: ['ignore', 'inherit', 'inherit'], env: { ...env, HERMES_HOME: layout.home },
+    });
+  } catch (error) { result = { status: null, error }; }
+  if (result?.status === 0) {
+    log('[PASS] hermes-pm-install - đã cài thư viện Python cho plugin vào môi trường của Hermes');
+    return { ok: true, command, detail: '' };
+  }
+  const why = result?.error?.code === 'ETIMEDOUT' ? `quá ${PM_INSTALL_TIMEOUT_MS / 60_000} phút`
+    : result?.error ? result.error.message : `mã thoát ${result?.status ?? result?.signal ?? '?'}`;
+  log(`[WARN] hermes-pm-install - "${command}" lỗi (${why}). Cài đặt vẫn tiếp tục; chạy tay sau đó: `
+    + `HERMES_HOME="${layout.home}" ${command} rồi khởi động lại Hermes gateway`);
+  return { ok: false, command, detail: why };
+}
+
 function vieneuLayout(hermesHome) {
   const root = join(hermesHome, 'tts');
   const venv = join(root, '.venv');
@@ -436,7 +520,8 @@ function ensureVieneu(sidecarRoot, layout, { skipPython = false, commandProbe = 
   atomicWriteText(target.scriptPath, readFileSync(source, 'utf8'));
   if (skipPython) return target;
 
-  const basePython = pythonPath(layout.repoRoot);
+  // Hermes mới không còn <repo>/.venv: dựng venv VieNeu từ Python của môi trường do Hermes quản lý.
+  const basePython = pythonPath(layout.repoRoot) || hermesRuntimePython(layout, layout.home);
   if (!basePython) throw new Error('Không tìm thấy Python venv của Hermes để tạo môi trường VieNeu');
   const probe = () => spawnSync(
     target.pythonPath,
@@ -475,20 +560,26 @@ function ensureVieneu(sidecarRoot, layout, { skipPython = false, commandProbe = 
   return target;
 }
 
-function ensureWebsockets(repoRoot, hermesHome, { skipPython = false } = {}) {
+function ensureWebsockets(layout, hermesHome, { skipPython = false, managed = false, run = spawnSync } = {}) {
   if (skipPython) return { skipped: true };
-  const python = pythonPath(repoRoot);
-  if (!python) throw new Error('Không tìm thấy Python venv của Hermes để cài websockets');
-  let probe = spawnSync(python, ['-c', 'import websockets'], { encoding: 'utf8' });
+  const python = hermesRuntimePython(layout, hermesHome);
+  if (!python) {
+    // Hermes mới chưa dựng xong môi trường (hermes pm install lỗi): đã cảnh báo kèm lệnh chạy tay, không dừng cài đặt.
+    if (managed) return { python: null, ok: false };
+    throw new Error('Không tìm thấy Python venv của Hermes để cài websockets');
+  }
+  let probe = run(python, ['-c', 'import websockets'], { encoding: 'utf8' });
+  // Hermes mới: cài tay vào môi trường do Hermes quản lý sẽ mất khi dựng lại — thư viện đi qua `hermes pm install`.
+  if (managed) return { python, ok: probe.status === 0 };
   if (probe.status !== 0) {
     const uv = platform() === 'win32'
       ? join(hermesHome, 'bin', 'uv.exe')
       : join(hermesHome, 'bin', 'uv');
     const install = existsSync(uv)
-      ? spawnSync(uv, ['pip', 'install', '--python', python, 'websockets'], { encoding: 'utf8' })
-      : spawnSync(python, ['-m', 'pip', 'install', 'websockets'], { encoding: 'utf8' });
+      ? run(uv, ['pip', 'install', '--python', python, 'websockets'], { encoding: 'utf8' })
+      : run(python, ['-m', 'pip', 'install', 'websockets'], { encoding: 'utf8' });
     if (install.status !== 0) throw new Error(`Không cài được websockets: ${install.stderr || install.stdout}`);
-    probe = spawnSync(python, ['-c', 'import websockets'], { encoding: 'utf8' });
+    probe = run(python, ['-c', 'import websockets'], { encoding: 'utf8' });
   }
   if (probe.status !== 0) throw new Error('Python của Hermes chưa import được websockets');
   return { python };
@@ -498,15 +589,16 @@ function ensureWebsockets(repoRoot, hermesHome, { skipPython = false } = {}) {
  * Cài bộ giải mã JPEG XL cho ảnh Zalo. Không có thì bot vẫn chạy, chỉ báo với
  * người gửi là chưa đọc được ảnh dạng đó — nên hỏng ở đây không chặn cài đặt.
  */
-function ensureJxlDecoder(repoRoot, hermesHome, { skipPython = false } = {}) {
+function ensureJxlDecoder(layout, hermesHome, { skipPython = false, managed = false, run = spawnSync } = {}) {
   if (skipPython) return { skipped: true };
-  const python = pythonPath(repoRoot);
+  const python = hermesRuntimePython(layout, hermesHome);
   if (!python) return { skipped: true };
-  if (spawnSync(python, ['-c', 'import pillow_jxl'], { encoding: 'utf8' }).status === 0) return { python };
+  if (run(python, ['-c', 'import pillow_jxl'], { encoding: 'utf8' }).status === 0) return { python };
+  if (managed) return { python, ok: false }; // Hermes mới: thư viện đi qua `hermes pm install`, không cài tay.
   const uv = join(hermesHome, 'bin', platform() === 'win32' ? 'uv.exe' : 'uv');
   const install = existsSync(uv)
-    ? spawnSync(uv, ['pip', 'install', '--python', python, 'pillow-jxl-plugin'], { encoding: 'utf8' })
-    : spawnSync(python, ['-m', 'pip', 'install', 'pillow-jxl-plugin'], { encoding: 'utf8' });
+    ? run(uv, ['pip', 'install', '--python', python, 'pillow-jxl-plugin'], { encoding: 'utf8' })
+    : run(python, ['-m', 'pip', 'install', 'pillow-jxl-plugin'], { encoding: 'utf8' });
   return { python, ok: install.status === 0 };
 }
 
@@ -724,31 +816,36 @@ export function doctorHermes({
     }
   }
   if (!skipPython) {
-    const python = pythonPath(layout.repoRoot);
+    const python = hermesRuntimePython(layout, layout.home, { hostPlatform });
+    // Hermes mới: thư viện khai trong plugin.yaml (python_dependencies), cài bằng `hermes pm install`; cài tay sẽ mất.
+    const managed = managedHermes(layout, layout.home, { hostPlatform });
+    const fix = (packages) => (managed
+      ? `chạy: ${hermesExecutable(layout, { hostPlatform })} pm install (rồi khởi động lại Hermes gateway)`
+      : `uv pip install --python <venv Hermes> ${packages}`);
     const probe = python ? commandProbe(python, ['-c', 'import websockets'], { encoding: 'utf8' }) : null;
-    add('python-websockets', Boolean(python && probe?.status === 0));
+    add('python-websockets', Boolean(python && probe?.status === 0), python && probe?.status === 0 ? '' : `thiếu — ${fix('websockets')}`);
     // Bộ giải mã JPEG XL chỉ là tuỳ chọn: thiếu thì bot vẫn chạy, chỉ báo với
     // người gửi là chưa đọc được ảnh dạng đó. Không đánh hỏng cả bản chẩn đoán.
     const jxl = python ? commandProbe(python, ['-c', 'import pillow_jxl'], { encoding: 'utf8' }) : null;
     add('python-pillow-jxl', true, jxl?.status === 0
       ? 'có — ảnh JPEG XL được chuyển sang JPG'
-      : 'thiếu — ảnh chỉ có bản JPEG XL sẽ báo lỗi; cài bằng: uv pip install --python <venv Hermes> pillow-jxl-plugin');
+      : `thiếu — ảnh chỉ có bản JPEG XL sẽ báo lỗi; cài bằng: ${fix('pillow-jxl-plugin')}`);
     // Thư viện dựng tệp cho zalo_make_file cũng là tuỳ chọn: thiếu thì chỉ công cụ đó báo lỗi.
     const docs = python ? commandProbe(python, ['-c', 'import docx, pptx, openpyxl, fpdf'], { encoding: 'utf8' }) : null;
     add('python-document-libs', true, docs?.status === 0
       ? 'có — bot tạo được tệp Word/PowerPoint/Excel/PDF'
-      : 'thiếu — bot chưa tạo được tệp; cài bằng: uv pip install --python <venv Hermes> python-docx python-pptx openpyxl fpdf2');
+      : `thiếu — bot chưa tạo được tệp; cài bằng: ${fix('python-docx python-pptx openpyxl fpdf2')}`);
     // Xử lý PDF (zalo_pdf) cũng tuỳ chọn.
     const pdf = python ? commandProbe(python, ['-c', 'import pymupdf, pdf2docx'], { encoding: 'utf8' }) : null;
     add('python-pdf-libs', true, pdf?.status === 0
       ? 'có — bot chuyển PDF sang Word, gộp và tách PDF được'
-      : 'thiếu — bot chưa xử lý PDF được; cài bằng: uv pip install --python <venv Hermes> pymupdf pdf2docx');
+      : `thiếu — bot chưa xử lý PDF được; cài bằng: ${fix('pymupdf pdf2docx')}`);
     // Đọc/tải video (zalo_video_info, zalo_video_download) cũng tuỳ chọn. ffmpeg để ghép hình với tiếng.
     const video = python ? commandProbe(python, ['-c', 'import yt_dlp, curl_cffi, youtube_transcript_api'], { encoding: 'utf8' }) : null;
     const ffmpeg = commandProbe('ffmpeg', ['-version'], { encoding: 'utf8' });
     add('video-tools', true, video?.status === 0 && ffmpeg?.status === 0
       ? 'có — bot đọc và tải được video YouTube/TikTok/Facebook'
-      : 'thiếu — bot chưa đọc/tải được video; cài: uv pip install --python <venv Hermes> "yt-dlp[default,curl-cffi]" youtube-transcript-api, và cài ffmpeg');
+      : `thiếu — bot chưa đọc/tải được video; cài: ${fix('"yt-dlp[default,curl-cffi]" youtube-transcript-api')}, và cài ffmpeg`);
   }
   if (!noDashboard) addDashboardChecks(add, { layout, root, commandProbe, hostPlatform });
   return { ok: checks.every((check) => check.ok), checks };
@@ -830,6 +927,8 @@ export async function installHermes({
   hostPlatform = platform(),
   dashboardInstaller = installDashboardService,
   gitRunner = spawnSync,
+  pmRunner = spawnSync,
+  log = console.log,
 } = {}) {
   if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Cần Node.js 22 trở lên');
   const root = resolve(sidecarRoot);
@@ -861,8 +960,13 @@ export async function installHermes({
     }
     atomicWriteText(layout.configPath, nextConfig);
   }
-  ensureWebsockets(layout.repoRoot, layout.home, { skipPython });
-  ensureJxlDecoder(layout.repoRoot, layout.home, { skipPython });
+  // Hermes mới: sau khi plugin + config đã ghi, để `hermes pm install` cài python_dependencies vào môi trường của
+  // Hermes (cài tay vào đó sẽ mất khi Hermes dựng lại). Hermes cũ: cài thẳng từng gói như trước.
+  const managed = !skipPython && managedHermes(layout, layout.home, { hostPlatform });
+  const pm = managed ? runHermesPmInstall(layout, { run: pmRunner, log, hostPlatform }) : null;
+  ensureWebsockets(layout, layout.home, { skipPython, managed, run: commandProbe });
+  ensureJxlDecoder(layout, layout.home, { skipPython, managed, run: commandProbe });
+  // Dò lại thư viện bằng Python của Hermes (Hermes mới: môi trường vừa dựng lại) — install-hermes.js in từng dòng.
   const diagnosis = doctorHermes({
     sidecarRoot: root,
     hermesHome: layout.home,
@@ -871,8 +975,10 @@ export async function installHermes({
     commandProbe,
     hostPlatform,
   });
-  if (!diagnosis.ok) throw new Error(`Cài đặt chưa hoàn chỉnh: ${JSON.stringify(diagnosis.checks)}`);
-  if (noDashboard) return { ...diagnosis, migration };
+  // `hermes pm install` lỗi → thiếu websockets là hệ quả đã cảnh báo kèm lệnh chạy tay; không dừng cả bản cài.
+  const blocking = diagnosis.checks.filter((c) => !c.ok && !(pm && !pm.ok && c.name === 'python-websockets'));
+  if (blocking.length) throw new Error(`Cài đặt chưa hoàn chỉnh: ${JSON.stringify(diagnosis.checks)}`);
+  if (noDashboard) return { ...diagnosis, migration, pm };
 
   // Dashboard không bao giờ làm hỏng bản cài chính: lỗi nào cũng chỉ thành cảnh báo.
   let config = null;
@@ -899,7 +1005,7 @@ export async function installHermes({
   const memory = memoryHint({
     hostPlatform, provider: String(configObject(layout.configPath)?.memory?.provider ?? '').trim(), configFile: layout.configPath, commandProbe,
   });
-  return { ...diagnosis, migration, dashboard, setupLink, caddy, secondBrain, memory };
+  return { ...diagnosis, migration, pm, dashboard, setupLink, caddy, secondBrain, memory };
 }
 
 export function uninstallHermes({

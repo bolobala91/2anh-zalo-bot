@@ -3,7 +3,7 @@
 name: 2anh-zalo-platform
 label: Zalo
 kind: platform
-version: 2.37.0
+version: 2.38.0
 description: >
   Zalo gateway adapter for Hermes Agent.
 
@@ -22,6 +22,25 @@ requires_env: []
 # Adapter dùng công cụ/trạng thái của zalo-tools — nạp zalo-tools trước (Hermes chỉ coi đây là gợi ý thứ tự).
 requires_plugins:
   - zalo-tools
+# Thư viện Python cả ba plugin (zalo, zalo-tools, zalo_memory) cần trong tiến trình Hermes. Khai chung ở đây vì
+# trình quản lý gói của Hermes mới (`hermes pm install`) chỉ nhận plugin đang bật có khoá trùng đường dẫn thư mục:
+# khoá `platforms/zalo` ↔ thư mục plugins/platforms/zalo (khoá `zalo-tools` ≠ thư mục zalo_tools nên không được nhận).
+# Hermes cũ chỉ đọc khoá này để cảnh báo khi thiếu; bộ cài vẫn tự cài như trước.
+python_dependencies:
+  - websockets
+  - httpx
+  - pillow
+  - pillow-jxl-plugin
+  - python-docx
+  - python-pptx
+  - openpyxl
+  - fpdf2
+  - pymupdf
+  - pdf2docx
+  - "yt-dlp[default,curl-cffi]"
+  - youtube-transcript-api
+  - lxml
+  - requests
 optional_env:
   - name: ZALO_BRIDGE_URL
     description: "WebSocket URL of the zca-js sidecar (default: ws://127.0.0.1:3873)"

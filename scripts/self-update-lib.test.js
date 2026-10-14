@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runSelfUpdate } from './self-update-lib.js';
+import { INSTALL_TIMEOUT_MS, runSelfUpdate } from './self-update-lib.js';
 
 function setup(t, { git = true, healthy = () => ({ ok: true }), runHook = () => '', lockChangesOn = '' } = {}) {
   // lockChangesOn: lệnh nào chạy xong thì đổi THƯ VIỆN trong package-lock (không chỉ số phiên bản).
@@ -114,4 +114,21 @@ test('dấu vân tay thư viện: đổi số phiên bản bot không tính là 
   writeFileSync(f, lock('2.9.0', '2.1.2')); const a = depsHash(f);
   writeFileSync(f, lock('2.9.1', '2.1.2')); assert.equal(depsHash(f), a);
   writeFileSync(f, lock('2.9.1', '2.2.0')); assert.notEqual(depsHash(f), a);
+});
+
+test('bộ cài được tới 30 phút (Hermes mới chạy hermes pm install); chờ khoẻ chỉ bắt đầu sau khi bộ cài xong', async (t) => {
+  const { calls, deps, go } = setup(t, { healthy: (c) => ({ ok: c.includes('restart dashboard') }) });
+  const inner = deps.run;
+  let installOpts = null;
+  deps.run = async (cmd, args, opts) => {
+    if (args.some((a) => String(a).endsWith('install-hermes.js'))) installOpts = opts;
+    return inner(cmd, args, opts);
+  };
+  let healthAt = -1;
+  const healthy = deps.healthy;
+  deps.healthy = async () => { if (healthAt < 0) healthAt = calls.length; return healthy(); };
+  assert.equal((await go()).status, 'done');
+  assert.equal(installOpts.timeout, INSTALL_TIMEOUT_MS);
+  assert.ok(INSTALL_TIMEOUT_MS >= 25 * 60_000);
+  assert.ok(healthAt > calls.findIndex((c) => c.includes('install-hermes.js')));
 });

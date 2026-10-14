@@ -87,6 +87,7 @@ class AdapterLiveTest(unittest.TestCase):
         import sys
         sys.path.insert(0, os.path.join(ROOT, "hermes-plugin"))
         from gateway.config import PlatformConfig
+        import zalo_test_env  # noqa: F401  (cho "zalo" là nền tảng hợp lệ)
         from zalo.adapter import ZaloAdapter
         home = Path(tempfile.mkdtemp(prefix="zalo-live-ad-"))
         self.addCleanup(shutil.rmtree, home, True)

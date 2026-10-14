@@ -17,6 +17,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from gateway.config import PlatformConfig
+import zalo_test_env  # noqa: E402,F401  (cho "zalo" là nền tảng hợp lệ)
 import plugins
 import plugins.platforms
 
@@ -1921,6 +1922,25 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["ack"], {"type": "ack", "reqId": socket.frames[0]["reqId"], "ok": True})
         self.assertLess(result["seconds"], 1.0)
+
+
+class BusyStatusFilterTest(unittest.TestCase):
+    """Câu báo bận tiếng Anh của gateway không lọt vào Zalo (thay cho sửa lõi gateway/run.py)."""
+
+    def test_detects_gateway_busy_acks_only(self):
+        for text in ("⚡ Interrupting current task (đang gọi web_search). I'll respond to your message shortly.",
+                     "  ⏳ Queued for the next turn. I'll respond once the current task finishes.",
+                     "⏩ Steered into current run. Your message arrives after the next tool call."):
+            self.assertTrue(zalo_adapter._is_busy_status(text), text)
+        for text in ("", None, "Dạ em đang xử lý ạ", "⏳ Đang tạo video", "Interrupting current task"):
+            self.assertFalse(zalo_adapter._is_busy_status(text), text)
+
+    def test_send_drops_busy_ack(self):
+        adapter = zalo_adapter.ZaloAdapter.__new__(zalo_adapter.ZaloAdapter)
+        adapter._skip_inactive_group_cron = lambda chat_id, metadata: False
+        adapter._guess_thread_type = lambda chat_id, metadata: zalo_adapter.THREAD_TYPE_GROUP
+        result = asyncio.run(adapter.send("123", "⚡ Interrupting current task. I'll respond to your message shortly."))
+        self.assertTrue(result.success)
 
 
 class ZaloToolSchemaTest(unittest.TestCase):

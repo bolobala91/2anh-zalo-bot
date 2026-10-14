@@ -14,7 +14,8 @@ try {
   // Chuyển chỗ plugin (≤ 2.36 chép vào mã Hermes, nay ở <HERMES_HOME>/plugins): báo rõ đã dọn gì, giữ gì.
   for (const path of result.migration?.removed || []) console.log(`[MIGRATED] đã gỡ bản plugin cũ: ${path}`);
   for (const { path, reason } of result.migration?.kept || []) console.log(`[WARN] giữ bản plugin cũ ${path} (${reason}) — gỡ tay để Hermes dùng bản mới`);
-  for (const check of result.checks) console.log(`[PASS] ${check.name}${check.detail ? ` - ${check.detail}` : ''}`);
+  // Chỉ còn trường hợp hỏng mà không dừng cài: Hermes mới, `hermes pm install` lỗi (đã in [WARN] kèm lệnh chạy tay).
+  for (const check of result.checks) console.log(`[${check.ok ? 'PASS' : 'WARN'}] ${check.name}${check.detail ? ` - ${check.detail}` : ''}`);
   if (result.dashboard) {
     // Không cài được dịch vụ vẫn là PASS kèm chi tiết (cảnh báo), không làm hỏng bản cài.
     console.log(`[PASS] dashboard-service - ${result.dashboard.installed ? '' : 'chưa tự chạy: '}${result.dashboard.detail}`);

@@ -13,6 +13,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from gateway.config import PlatformConfig  # noqa: E402
+import zalo_test_env  # noqa: E402,F401  (cho "zalo" là nền tảng hợp lệ)
 import plugins  # noqa: E402
 import plugins.platforms  # noqa: E402
 

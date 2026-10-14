@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { compareVersions, createMaintenance, parseUpdateCheck, pluginVersion } from './maintenance.js';
+import { compareVersions, createMaintenance, HERMES_UPDATE_ARGS, parseUpdateCheck, pluginVersion, runHermesUpdate } from './maintenance.js';
 
 test('phiên bản: đọc plugin.yaml, so x.y.z, hiểu kết quả hermes update --check', () => {
   assert.equal(pluginVersion('name: zalo_tools\nversion: 2.7.0\n'), '2.7.0');
@@ -96,12 +96,65 @@ test('cập nhật bot: chỉ lên đúng bản mới nhất; Linux+systemd ch�
   assert.equal(spawned[1].opts.windowsHide, true);
 });
 
-test('cập nhật bot: bản cài cũ chưa có trình cập nhật → báo rõ; trạng thái kẹt quá 30 phút coi như hỏng', async (t) => {
+test('cập nhật bot: bản cài cũ chưa có trình cập nhật → báo rõ; trạng thái kẹt quá 60 phút coi như hỏng', async (t) => {
   let clock = 1_000_000;
   const { m, dir } = setup(t, { sidecarRoot: join(tmpdir(), 'khong-co-thu-muc-nay'), now: () => clock });
   await assert.rejects(m.updateBot('v2.8.0'), { statusCode: 503 });
   writeFileSync(join(dir, 'bot-update.json'), JSON.stringify({ status: 'running', startedAt: clock, to: 'v2.8.0' }));
   assert.equal(m.botUpdateState().running, true);
   clock += 31 * 60_000;
+  assert.equal(m.botUpdateState().running, true, 'bộ cài có thể đang chạy hermes pm install (tới 20 phút)');
+  clock += 30 * 60_000;
   assert.deepEqual([m.botUpdateState().running, m.botUpdateState().status], [false, 'failed']);
+});
+
+test('cập nhật Hermes qua scripts/hermes-update.js khi biết thư mục bot (để chạy thêm hermes pm install)', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'zalo-root-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, 'scripts'));
+  writeFileSync(join(root, 'scripts', 'hermes-update.js'), '');
+  const spawned = [];
+  const { m } = setup(t, { hermesBin: '/opt/hermes/bin/hermes', sidecarRoot: root, spawnImpl: (file, args, opts) => { spawned.push({ file, args, opts }); const c = new EventEmitter(); c.pid = process.pid; c.unref = () => {}; setImmediate(() => c.emit('spawn')); return c; } });
+  assert.equal((await m.updateHermes()).running, true);
+  assert.equal(spawned[0].file, process.execPath);
+  assert.deepEqual(spawned[0].args, [join(root, 'scripts', 'hermes-update.js'), '--hermes-bin', '/opt/hermes/bin/hermes']);
+  assert.equal(spawned[0].opts.detached, true);
+});
+
+function updateFlow({ codes = {}, managed = true, restartFails = false } = {}) {
+  const calls = []; const logs = [];
+  const deps = {
+    hermesBin: 'hermes',
+    run: async (file, args) => { calls.push(args.join(' ')); return codes[args[0]] ?? 0; },
+    managed: () => { calls.push('managed?'); return managed; },
+    restartAssistant: async () => { calls.push('restart assistant'); if (restartFails) throw new Error('systemctl lỗi'); },
+    log: (s) => logs.push(s),
+  };
+  return { calls, logs, go: () => runHermesUpdate(deps) };
+}
+
+test('runHermesUpdate: Hermes mới → update xong mới xét, rồi hermes pm install, rồi khởi động lại trợ lý', async () => {
+  const { calls, logs, go } = updateFlow();
+  assert.equal(await go(), 0);
+  assert.deepEqual(calls, [HERMES_UPDATE_ARGS.join(' '), 'managed?', 'pm install', 'restart assistant']);
+  assert.ok(logs.some((l) => l.includes('pm install')));
+});
+
+test('runHermesUpdate: Hermes cũ → chỉ hermes update như trước; update lỗi → dừng, trả mã lỗi', async () => {
+  let f = updateFlow({ managed: false });
+  assert.equal(await f.go(), 0);
+  assert.deepEqual(f.calls, ['update --yes --backup', 'managed?']);
+  f = updateFlow({ codes: { update: 2 } });
+  assert.equal(await f.go(), 2);
+  assert.deepEqual(f.calls, ['update --yes --backup']);
+});
+
+test('runHermesUpdate: pm install lỗi → [WARN] kèm lệnh chạy tay, không khởi động lại; khởi động lại lỗi → [WARN]', async () => {
+  let f = updateFlow({ codes: { pm: 1 } });
+  assert.equal(await f.go(), 0, 'Hermes vẫn đã cập nhật xong');
+  assert.ok(!f.calls.includes('restart assistant'));
+  assert.ok(f.logs.some((l) => l.startsWith('[WARN]') && l.includes('hermes pm install')));
+  f = updateFlow({ restartFails: true });
+  assert.equal(await f.go(), 0);
+  assert.ok(f.logs.some((l) => l.startsWith('[WARN]') && l.includes('systemctl lỗi')));
 });

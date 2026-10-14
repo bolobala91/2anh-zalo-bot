@@ -16,6 +16,9 @@ import { join } from 'node:path';
 export const REPO = 'luonghaianh1208/2anh-zalo-bot';
 export const TAG = /^v\d+\.\d+\.\d+$/;
 const HEALTH_TIMEOUT_MS = 180_000;
+// Bộ cài có thể chạy `hermes pm install` (Hermes mới, tới 20 phút) — dài hơn mức 15 phút mặc định của mỗi lệnh.
+// Chờ khoẻ (HEALTH_TIMEOUT_MS) chỉ bắt đầu sau khi bộ cài xong, nên không bị bước này ăn mất thời gian.
+export const INSTALL_TIMEOUT_MS = 30 * 60_000;
 
 /** Dấu vân tay phần THƯ VIỆN của package-lock (bỏ số phiên bản của chính bot — đổi mỗi bản phát hành). */
 export function depsHash(p) {
@@ -64,7 +67,9 @@ export async function runSelfUpdate({ root, hermesHome, to, from = '', stateFile
       log('Thư viện thay đổi — chạy npm ci');
       await run('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: root, shell: process.platform === 'win32' });
     }
-    await run(process.execPath, [join(root, 'scripts', 'install-hermes.js'), '--hermes-home', hermesHome, '--sidecar-root', root, '--no-dashboard'], { cwd: root });
+    log('Chạy bộ cài (Hermes mới: kèm `hermes pm install`, có thể mất vài phút)');
+    await run(process.execPath, [join(root, 'scripts', 'install-hermes.js'), '--hermes-home', hermesHome, '--sidecar-root', root, '--no-dashboard'],
+      { cwd: root, timeout: INSTALL_TIMEOUT_MS });
   }
   async function restartAll() {
     log('Khởi động lại kết nối Zalo…'); await deps.restartSidecar();

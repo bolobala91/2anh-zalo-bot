@@ -4,8 +4,8 @@
  * để hai thao tác không cùng sửa config.yaml.
  */
 import { spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const HELPER = join(dirname(fileURLToPath(import.meta.url)), 'hermes-admin.py');
@@ -31,7 +31,8 @@ function pythonBesideHermes({ env, platform, exists, real }) {
  * Tìm Python của Hermes và thư mục hermes-agent: ZALO_HERMES_PYTHON → `<HERMES_HOME>/hermes-agent/(.)venv` (bản cài
  * Windows) → venv chứa lệnh `hermes` trên PATH → /opt/hermes/hermes-agent/.venv. Không thấy → null.
  */
-export function locateHermesPython({ hermesHome, env = process.env, platform = process.platform, exists = existsSync, real = realpathSync }) {
+export function locateHermesPython({ hermesHome, env = process.env, platform = process.platform, exists = existsSync, real = realpathSync,
+  managed = () => managedEnvPython(hermesHome, platform) }) {
   const rootOf = (py) => dirname(dirname(dirname(py)));
   const ok = (py) => py && exists(py) && exists(join(rootOf(py), 'hermes_cli'));
   const candidates = [
@@ -41,7 +42,33 @@ export function locateHermesPython({ hermesHome, env = process.env, platform = p
     ...(platform === 'win32' ? [] : venvPython('/opt/hermes/hermes-agent', platform)),
   ];
   const python = candidates.find(ok);
+  // Hermes mới (bộ quản lý gói `hermes pm`): chạy bằng môi trường riêng ghi trong <HERMES_HOME>/installs/*/facts.json,
+  // .venv cũ trong mã Hermes không còn đủ thư viện. Mã Hermes vẫn là thư mục cài → dùng Python mới + root cũ.
+  const roots = [python && rootOf(python), join(hermesHome, 'hermes-agent'), platform === 'win32' ? '' : '/opt/hermes/hermes-agent']
+    .filter((r) => r && exists(join(r, 'hermes_cli')));
+  const env2 = env.ZALO_HERMES_PYTHON ? '' : managed();
+  if (env2 && roots.length) return { python: env2, root: roots[0], managed: true };
   return python ? { python, root: rootOf(python) } : null;
+}
+
+/** Python của môi trường do Hermes quản lý (facts.json mới nhất còn môi trường tồn tại), hoặc ''. */
+export function managedEnvPython(hermesHome, platform = process.platform) {
+  const base = join(hermesHome, 'installs');
+  let best = { at: -1, py: '' };
+  let ids = [];
+  try { ids = readdirSync(base); } catch { return ''; }
+  for (const id of ids) {
+    const facts = join(base, id, 'facts.json');
+    try {
+      const dir = JSON.parse(readFileSync(facts, 'utf8'))?.packages?.venv?.environment;
+      if (!dir) continue;
+      const envDir = isAbsolute(dir) ? dir : join(hermesHome, dir);
+      const py = platform === 'win32' ? join(envDir, 'Scripts', 'python.exe') : join(envDir, 'bin', 'python');
+      const at = statSync(facts).mtimeMs;
+      if (existsSync(py) && at > best.at) best = { at, py };
+    } catch { /* facts hỏng → bỏ qua */ }
+  }
+  return best.py;
 }
 
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
@@ -56,7 +83,9 @@ function runOnce({ python, root, hermesHome, cmd, args, timeoutMs, spawnImpl, ke
   const result = new Promise((resolve, reject) => {
     const child = spawnImpl(python, [HELPER, cmd], {
       cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, HERMES_HOME: hermesHome, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', NO_COLOR: '1' },
+      env: { ...process.env, HERMES_HOME: hermesHome, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', NO_COLOR: '1',
+        // Môi trường Hermes mới không cài mã Hermes vào venv — cho Python thấy thư mục mã.
+        PYTHONPATH: [root, process.env.PYTHONPATH].filter(Boolean).join(process.platform === 'win32' ? ';' : ':') },
     });
     child.stdout.setEncoding?.('utf8'); child.stderr.setEncoding?.('utf8');
     let out = ''; let err = '';

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -22,6 +22,9 @@ import {
   legacyPluginTargets,
   migrateLegacyPlugins,
   gitTracks,
+  hermesRuntimePython,
+  managedHermes,
+  hermesExecutable,
 } from './hermes-install-lib.js';
 
 // Mặc định không đụng systemd / thư mục Startup thật khi kiểm thử.
@@ -730,4 +733,204 @@ test('doctor: thiếu plugin ở <HERMES_HOME>/plugins thì hỏng dù mã Herme
   withIsolation('in-process');
   d = doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true, noDashboard: true });
   assert.equal(d.checks.find((c) => c.name === 'plugin-isolation'), undefined);
+});
+
+// ---- Hermes mới: Python + thư viện do Hermes quản lý (installs/<id>/facts.json, `hermes pm install`) ----
+
+const envPythonRel = (hostPlatform = process.platform) => (hostPlatform === 'win32' ? join('Scripts', 'python.exe') : join('bin', 'python'));
+
+/** Giả một bản cài Hermes mới: <home>/installs/<id>/facts.json trỏ tới môi trường có python. Trả đường python. */
+function seedManaged(home, { id = 'inst1', hostPlatform = process.platform, withPython = true, mtime = null } = {}) {
+  const env = join(home, 'envs', id);
+  const python = join(env, envPythonRel(hostPlatform));
+  if (withPython) { mkdirSync(dirname(python), { recursive: true }); writeFileSync(python, ''); }
+  const facts = join(home, 'installs', id, 'facts.json');
+  mkdirSync(dirname(facts), { recursive: true });
+  writeFileSync(facts, JSON.stringify({ packages: { venv: { environment: env } } }));
+  if (mtime) utimesSync(facts, mtime, mtime);
+  return python;
+}
+
+function seedVenv(repo) {
+  const python = join(repo, '.venv', envPythonRel());
+  mkdirSync(dirname(python), { recursive: true });
+  writeFileSync(python, '');
+  return python;
+}
+
+test('hermesRuntimePython: facts.json có môi trường còn tồn tại → python của môi trường đó (đúng kiểu đường theo hệ điều hành)', (t) => {
+  const fx = fixture(t);
+  const layout = { home: fx.hermesHome, repoRoot: fx.hermesRepo };
+  seedVenv(fx.hermesRepo);
+  for (const hostPlatform of ['linux', 'win32']) {
+    const home = join(fx.root, `home-${hostPlatform}`);
+    const python = seedManaged(home, { hostPlatform });
+    assert.equal(hermesRuntimePython(layout, home, { hostPlatform }), python);
+    assert.equal(managedHermes(layout, home, { hostPlatform }), true);
+  }
+});
+
+test('hermesRuntimePython: nhiều facts.json → bỏ cái có môi trường đã mất, chọn cái mới sửa nhất', (t) => {
+  const fx = fixture(t);
+  const layout = { home: fx.hermesHome, repoRoot: fx.hermesRepo };
+  const old = seedManaged(fx.hermesHome, { id: 'old', mtime: new Date('2026-01-01') });
+  const fresh = seedManaged(fx.hermesHome, { id: 'fresh', mtime: new Date('2026-10-01') });
+  seedManaged(fx.hermesHome, { id: 'gone', withPython: false, mtime: new Date('2026-10-10') });
+  assert.equal(hermesRuntimePython(layout, fx.hermesHome), fresh);
+  utimesSync(join(fx.hermesHome, 'installs', 'old', 'facts.json'), new Date('2026-10-12'), new Date('2026-10-12'));
+  assert.equal(hermesRuntimePython(layout, fx.hermesHome), old);
+});
+
+test('hermesRuntimePython: thiếu / hỏng facts.json → quay về <repo>/.venv (Hermes cũ); không có gì → null', (t) => {
+  const fx = fixture(t);
+  const layout = { home: fx.hermesHome, repoRoot: fx.hermesRepo };
+  assert.equal(hermesRuntimePython(layout, fx.hermesHome), null);
+  const venv = seedVenv(fx.hermesRepo);
+  assert.equal(hermesRuntimePython(layout, fx.hermesHome), venv);
+  const facts = join(fx.hermesHome, 'installs', 'x', 'facts.json');
+  mkdirSync(dirname(facts), { recursive: true });
+  for (const body of ['{không phải json', '{}', JSON.stringify({ packages: { venv: { environment: 42 } } }),
+    JSON.stringify({ packages: { venv: { environment: join(fx.root, 'khong-co') } } })]) {
+    writeFileSync(facts, body);
+    assert.equal(hermesRuntimePython(layout, fx.hermesHome), venv, body);
+    assert.equal(managedHermes(layout, fx.hermesHome), false, body);
+  }
+});
+
+test('managedHermes: facts.json hợp lệ, hoặc mã Hermes có pm/workspace.py; còn lại là Hermes cũ', (t) => {
+  const fx = fixture(t);
+  const layout = { home: fx.hermesHome, repoRoot: fx.hermesRepo };
+  assert.equal(managedHermes(layout, fx.hermesHome), false);
+  mkdirSync(join(fx.hermesRepo, 'pm'));
+  writeFileSync(join(fx.hermesRepo, 'pm', 'workspace.py'), '');
+  assert.equal(managedHermes(layout, fx.hermesHome), true);
+  assert.equal(managedHermes({ home: fx.hermesHome, repoRoot: '' }, fx.hermesHome), false);
+});
+
+test('hermesExecutable: ZALO_HERMES_BIN → <HERMES_HOME>/bin → PATH → venv mã Hermes → "hermes"', () => {
+  const layout = { home: '/h', repoRoot: '/r' };
+  const has = (...paths) => (p) => paths.includes(p);
+  assert.equal(hermesExecutable(layout, { env: { ZALO_HERMES_BIN: '/x/hermes' }, hostPlatform: 'linux', exists: has() }), '/x/hermes');
+  assert.equal(hermesExecutable(layout, { env: { PATH: '/usr/bin' }, hostPlatform: 'linux', exists: has(join('/h', 'bin', 'hermes'), join('/usr/bin', 'hermes')) }), join('/h', 'bin', 'hermes'));
+  assert.equal(hermesExecutable(layout, { env: { PATH: '/usr/bin' }, hostPlatform: 'linux', exists: has(join('/usr/bin', 'hermes'), join('/r', '.venv', 'bin', 'hermes')) }), join('/usr/bin', 'hermes'));
+  assert.equal(hermesExecutable(layout, { env: {}, hostPlatform: 'linux', exists: has(join('/r', '.venv', 'bin', 'hermes')) }), join('/r', '.venv', 'bin', 'hermes'));
+  assert.equal(hermesExecutable(layout, { env: {}, hostPlatform: 'win32', exists: has() }), 'hermes');
+});
+
+/** commandProbe giả: ghi lại mọi lệnh; `missing` = các module Python coi như chưa cài. */
+function fakeProbe(calls, missing = []) {
+  return (cmd, args) => {
+    calls.push([cmd, ...args]);
+    if (args[0] === '-c') return { status: missing.some((m) => args[1].includes(m)) ? 1 : 0 };
+    return { status: 0, stdout: '', stderr: '' };
+  };
+}
+
+test('cài trên Hermes mới: chạy `hermes pm install` sau khi đã ghi plugin + config, dò lại bằng Python của Hermes, không pip tay', async (t) => {
+  const fx = fixture(t);
+  const python = seedManaged(fx.hermesHome);
+  const calls = []; const pm = []; const logs = [];
+  const result = await installHermes({
+    sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome,
+    commandProbe: fakeProbe(calls, ['pillow_jxl']),
+    pmRunner: (cmd, args, opts) => {
+      // Lúc này plugin (kèm plugin.yaml khai python_dependencies) và config.yaml đã nằm sẵn cho Hermes PM đọc.
+      assert.ok(existsSync(join(pluginTargets(fx.hermesHome).platform, 'plugin.yaml')));
+      assert.match(readFileSync(join(fx.hermesHome, 'config.yaml'), 'utf8'), /platforms\/zalo/);
+      pm.push({ cmd, args, opts });
+      return { status: 0 };
+    },
+    log: (s) => logs.push(s),
+  });
+  assert.equal(pm.length, 1);
+  assert.deepEqual(pm[0].args, ['pm', 'install']);
+  assert.equal(pm[0].opts.env.HERMES_HOME, fx.hermesHome);
+  assert.ok(pm[0].opts.timeout >= 15 * 60_000);
+  assert.equal(result.pm.ok, true);
+  assert.ok(calls.some((c) => c[0] === python && c[2] === 'import websockets'), 'dò bằng python của môi trường do Hermes quản lý');
+  assert.ok(!calls.some((c) => c.includes('pip')), 'không pip install tay vào môi trường sẽ bị dựng lại');
+  assert.ok(logs.some((l) => /\[PASS\] hermes-pm-install/.test(l)));
+  assert.match(result.checks.find((c) => c.name === 'python-pillow-jxl').detail, /pm install/);
+});
+
+test('cài trên Hermes cũ: không chạy `hermes pm install`, vẫn cài thẳng từng gói vào <repo>/.venv như trước', async (t) => {
+  const fx = fixture(t);
+  const python = seedVenv(fx.hermesRepo);
+  const calls = [];
+  const result = await installHermes({
+    sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome,
+    commandProbe: fakeProbe(calls, ['pillow_jxl']),
+    pmRunner: () => { throw new Error('không được gọi trên Hermes cũ'); },
+    log: () => {},
+  });
+  assert.equal(result.pm, null);
+  assert.ok(calls.some((c) => c[0] === python && c.join(' ').includes('pip install pillow-jxl-plugin')), 'vẫn cài tay pillow-jxl-plugin');
+  assert.match(result.checks.find((c) => c.name === 'python-pillow-jxl').detail, /uv pip install --python <venv Hermes> pillow-jxl-plugin/);
+});
+
+test('cài trên Hermes mới: `hermes pm install` lỗi / quá giờ → [WARN] kèm lệnh chạy tay, cài đặt vẫn xong', async (t) => {
+  const timeout = { status: null, error: Object.assign(new Error('spawnSync hermes ETIMEDOUT'), { code: 'ETIMEDOUT' }) };
+  for (const failure of [{ status: 1 }, timeout, 'throw']) {
+    const fx = fixture(t);
+    seedManaged(fx.hermesHome);
+    const logs = [];
+    const result = await installHermes({
+      sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome,
+      commandProbe: fakeProbe([], ['websockets', 'pillow_jxl', 'docx', 'pymupdf', 'yt_dlp']),
+      pmRunner: () => { if (failure === 'throw') throw new Error('ENOENT'); return failure; },
+      log: (s) => logs.push(s),
+    });
+    assert.equal(result.pm.ok, false);
+    const warn = logs.find((l) => l.startsWith('[WARN] hermes-pm-install'));
+    assert.ok(warn, JSON.stringify(logs));
+    assert.match(warn, /pm install/);
+    assert.ok(warn.includes(`HERMES_HOME="${fx.hermesHome}"`), warn);
+    if (failure === timeout) assert.match(warn, /quá 20 phút/);
+    // Plugin + config đã ghi; thiếu websockets chỉ được báo, không dừng bản cài.
+    assert.ok(existsSync(join(pluginTargets(fx.hermesHome).platform, 'adapter.py')));
+    const ws = result.checks.find((c) => c.name === 'python-websockets');
+    assert.equal(ws.ok, false);
+    assert.match(ws.detail, /pm install/);
+  }
+});
+
+test('cài trên Hermes mới: pm install chạy được mà vẫn thiếu websockets → báo hỏng (không che lỗi thật)', async (t) => {
+  const fx = fixture(t);
+  seedManaged(fx.hermesHome);
+  await assert.rejects(installHermes({
+    sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, commandProbe: fakeProbe([], ['websockets']),
+    pmRunner: () => ({ status: 0 }), log: () => {},
+  }), /Cài đặt chưa hoàn chỉnh/);
+});
+
+test('cài với --skip-python: không đụng `hermes pm install` dù là Hermes mới', async (t) => {
+  const fx = fixture(t);
+  seedManaged(fx.hermesHome);
+  const result = await installHermes({
+    sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true,
+    pmRunner: () => { throw new Error('không được gọi'); }, log: () => {},
+  });
+  assert.equal(result.pm, null);
+});
+
+test('doctor: gợi ý sửa thư viện theo loại Hermes — mới: `hermes pm install`, cũ: uv pip install vào venv', async (t) => {
+  const fx = fixture(t);
+  await installHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, skipPython: true });
+  seedVenv(fx.hermesRepo);
+  const missing = ['websockets', 'pillow_jxl', 'docx', 'pymupdf', 'yt_dlp'];
+  const doctor = () => doctorHermes({ sidecarRoot: fx.sidecar, hermesHome: fx.hermesHome, noDashboard: true, commandProbe: fakeProbe([], missing) });
+  const names = ['python-websockets', 'python-pillow-jxl', 'python-document-libs', 'python-pdf-libs', 'video-tools'];
+  let d = doctor();
+  for (const name of names) {
+    const detail = d.checks.find((c) => c.name === name).detail;
+    assert.match(detail, /uv pip install --python <venv Hermes>/, name);
+    assert.doesNotMatch(detail, /pm install/, name);
+  }
+  seedManaged(fx.hermesHome);
+  d = doctor();
+  for (const name of names) {
+    const detail = d.checks.find((c) => c.name === name).detail;
+    assert.match(detail, /pm install/, name);
+    assert.doesNotMatch(detail, /uv pip/, name);
+  }
 });
