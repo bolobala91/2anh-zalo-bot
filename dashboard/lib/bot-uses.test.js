@@ -84,3 +84,22 @@ test('dựng lại 30 ngày: nhắn riêng theo chat_id; nhóm ghép tên với 
   ]);
   assert.deepEqual(buildBackfill({ stateDb: join(dir, 'khong-co.db'), now: NOW }).rows, []);
 });
+
+test('khách dùng bot: UID không có trong lịch sử tin nhắn (dữ liệu test lọt vào) thì không tính, tên luôn theo UID', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'zd-uses-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'zalo'));
+  const r = (uid, name, thread, group) => JSON.stringify({ t: NOW - H, uid, name, thread, group, owner: false });
+  writeFileSync(join(dir, 'zalo', 'bot-uses.jsonl'), [
+    r('111', 'Tên cũ', 'g1', true), r('9876543210987654321', 'Lan', 'g1', true), r('9876543210987654321', 'Lan', 'g1', true),
+    r('u1', 'Giả', 'g1', true), r('9876543210987654321', 'Lan', '9876543210987654321', false),
+  ].join('\n'));
+  const uses = createBotUses({
+    hermesHome: dir, now: () => NOW,
+    personName: (uid) => ({ 111: 'An' }[uid] || ''),
+    isKnown: (uid) => uid === '111',
+  });
+  const s = uses.stats(1);
+  assert.deepEqual([s.group.uses, s.group.people, s.dm.uses], [1, 1, 0]);
+  assert.deepEqual(s.group.top.map((p) => [p.uid, p.name]), [['111', 'An']]);
+});

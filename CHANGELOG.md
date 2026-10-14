@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.40.1] — 2026-10-14
+
+### Sửa
+
+- **Bảng "Khách dùng bot" hiện người không có thật** (vd. "Lan" trong một nhóm không ai tên Lan): test Python chạy trên máy cài bot ghi người giả vào sổ lượt dùng của bot thật. Nay test luôn chạy trong thư mục Hermes tạm, không đụng vào bot; bảng chỉ tính UID có thật trong lịch sử tin nhắn của bot, tên luôn lấy theo UID.
+
 ## [2.40.0] — 2026-10-14
 
 ### Đổi — dashboard dùng hết bề ngang màn hình PC

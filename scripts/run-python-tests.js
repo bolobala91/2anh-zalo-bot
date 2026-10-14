@@ -7,7 +7,7 @@
 // Hermes qua HERMES_HOME → python3 → python.
 // Không tìm thấy Python nào chạy được: cảnh báo rõ ràng rồi thoát 0, không làm hỏng `npm test`
 // trên máy khách chưa cài Python.
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { platform, tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -107,7 +107,11 @@ const isolation = mkdtempSync(join(tmpdir(), 'zalo-py-tests-'));
 // Môi trường do Hermes quản lý không chứa mã Hermes: thêm gốc mã Hermes vào PYTHONPATH để import được gateway.
 const hermesRoot = hermesLayout()?.repoRoot;
 const pythonPath = [hermesRoot, process.env.PYTHONPATH].filter(Boolean).join(platform() === 'win32' ? ';' : ':');
-const testEnv = { ...process.env, ZALO_PERMISSIONS_FILE: join(isolation, 'permissions.json'), ...(pythonPath ? { PYTHONPATH: pythonPath } : {}) };
+// HERMES_HOME của test là thư mục tạm: plugin ghi thống kê lượt dùng, hạn mức… vào <HERMES_HOME>/zalo — trỏ vào bot
+// thật thì người giả của test ("Lan", "u1"…) lẫn vào bảng xếp hạng Khách dùng bot.
+const testHome = join(isolation, 'hermes-home');
+mkdirSync(testHome, { recursive: true });
+const testEnv = { ...process.env, HERMES_HOME: testHome, ZALO_PERMISSIONS_FILE: join(isolation, 'permissions.json'), ...(pythonPath ? { PYTHONPATH: pythonPath } : {}) };
 process.on('exit', () => rmSync(isolation, { recursive: true, force: true }));
 
 for (const suite of suites) {

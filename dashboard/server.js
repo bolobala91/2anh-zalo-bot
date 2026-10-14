@@ -93,6 +93,8 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
       owners: () => [...owners.list(), ...owners.overrideUids()],
       groupName: (id) => threadNames.cached().get(id) || '',
       personName: (uid) => { try { return (uid && (store.senderNames([uid]).get(uid) || people.list().find((p) => p.uid === uid)?.name)) || ''; } catch { return ''; } },
+      // Chưa đọc được lịch sử tin nhắn thì không lọc (tránh bảng trống).
+      isKnown: (uid) => !store.available() || store.senderNames([uid]).has(uid) || people.list().some((p) => p.uid === uid),
     }),
     threadNames,
     users,

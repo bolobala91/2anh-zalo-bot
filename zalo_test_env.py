@@ -24,4 +24,14 @@ def allow_zalo_platform() -> None:
     gw_config._Platform__bundled_plugin_names = set(current) | {"zalo"}
 
 
+def isolate_hermes_home() -> None:
+    """Test không bao giờ ghi vào bot thật (thống kê lượt dùng, hạn mức… nằm trong <HERMES_HOME>/zalo)."""
+    import os
+    import tempfile
+    if os.environ.get("ZALO_TEST_HOME_ISOLATED") != "1":
+        os.environ["HERMES_HOME"] = tempfile.mkdtemp(prefix="zalo-test-home-")
+        os.environ["ZALO_TEST_HOME_ISOLATED"] = "1"
+
+
+isolate_hermes_home()
 allow_zalo_platform()

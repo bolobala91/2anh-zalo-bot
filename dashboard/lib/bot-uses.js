@@ -83,7 +83,7 @@ export function buildBackfill({ stateDb, zaloDb, now }) {
   return { builtAt: now, rows };
 }
 
-export function createBotUses({ hermesHome, stateDb = '', zaloDb = '', owners = () => [], groupName = () => '', personName = () => '', now = Date.now }) {
+export function createBotUses({ hermesHome, stateDb = '', zaloDb = '', owners = () => [], groupName = () => '', personName = () => '', isKnown = null, now = Date.now }) {
   const file = join(hermesHome, 'zalo', 'bot-uses.jsonl');
   const backfillFile = join(hermesHome, 'zalo', 'bot-uses-backfill.json');
   let cache = { mtime: -1, rows: [] };
@@ -113,7 +113,14 @@ export function createBotUses({ hermesHome, stateDb = '', zaloDb = '', owners = 
       const firstLive = real.length ? Math.min(...real.map((r) => r.t)) : Infinity;
       const old = backfill().rows.filter((r) => r.t < firstLive);
       const approx = old.some((r) => r.t >= since);
-      const rows = [...old, ...real].filter((r) => r.t >= since && !r.owner && !(r.uid && own.has(r.uid)));
+      // isKnown: UID có thật trong lịch sử tin nhắn của bot. UID lạ (người giả của test lọt vào sổ…) thì bỏ, để tên luôn khớp UID.
+      const known = new Map();
+      const real_ = (uid) => {
+        if (!uid || !isKnown) return true;
+        if (!known.has(uid)) { let ok = true; try { ok = Boolean(isKnown(uid)); } catch { /* không kiểm được: giữ */ } known.set(uid, ok); }
+        return known.get(uid);
+      };
+      const rows = [...old, ...real].filter((r) => r.t >= since && !r.owner && !(r.uid && own.has(r.uid)) && real_(r.uid));
       const board = (group) => {
         const map = new Map();
         for (const r of rows.filter((x) => x.group === group)) {
