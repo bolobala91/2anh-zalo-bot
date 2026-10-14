@@ -85,7 +85,7 @@ function ConvItem({ c, active, folder, onSelect }) {
   return html`<li><button type="button" class=${`conv conv-ava${active ? ' active' : ''}`} aria-current=${active ? 'true' : undefined} onClick=${() => onSelect(c)}>
     <${Avatar} name=${c.name} group=${c.threadType === 1} url=${c.avatar || ''} />
     <span class="conv-main">
-    <span class="conv-top"><span class="conv-name">${c.name}</span>${c.today ? html`<span class="conv-count" title=${`${c.today} tin hôm nay`}>${c.today}</span>` : null}<time class="conv-time">${fmtTime(c.lastAtMs)}</time></span>
+    <span class="conv-top"><span class="conv-name">${c.name}</span>${c.pinned ? html`<span class="conv-pin" title="Đã ghim"><${Icon} name="pin" size=${14} /></span>` : null}${c.today ? html`<span class="conv-count" title=${`${c.today} tin hôm nay`}>${c.today}</span>` : null}<time class="conv-time">${fmtTime(c.lastAtMs)}</time></span>
     <span class="conv-sub">${folder ? html`<${FolderChip} folder=${folder} />` : c.threadType === 1 ? html`<span class="tag">Nhóm</span>` : null}<span class="conv-preview">${preview(c)}</span></span>
     </span>
   </button></li>`;
@@ -467,7 +467,7 @@ function rememberInfo(open) {
   try { localStorage.setItem(INFO_KEY, open ? 'open' : 'closed'); } catch { /* chế độ riêng tư */ }
 }
 
-function Thread({ conv, onBack }) {
+function Thread({ conv, onBack, onPinned }) {
   const [reply, setReply] = useState(null); // tin đang trả lời
   const [active, setActive] = useState(null); // id tin đang mở nút thao tác (bấm giữ)
   const [mentionReq, setMentionReq] = useState(null); // { name, msg, n } — chèn @Tên vào ô soạn
@@ -503,10 +503,24 @@ function Thread({ conv, onBack }) {
   const [info, setInfo] = useState(null);   // { name, avatar, members, desc } — từ Zalo qua sidecar
   const [board, setBoard] = useState(null); // { pins, notes, polls } | { error }
   const [pinsOpen, setPinsOpen] = useState(false);
+  const [reminders, setReminders] = useState(null); // null = đang tải; [] khi lỗi/không có
+  const [pinned, setPinned] = useState(Boolean(conv.pinned));
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinMsg, setPinMsg] = useState({});
+  async function togglePin() {
+    setPinBusy(true); setPinMsg({});
+    try {
+      await api(`/api/chats/${encodeURIComponent(conv.threadId)}/pin`, { method: 'POST', body: { threadType: conv.threadType, pinned: !pinned } });
+      setPinned(!pinned);
+      setPinMsg({ ok: pinned ? 'Đã bỏ ghim hội thoại trên Zalo của bot.' : 'Đã ghim hội thoại lên đầu danh sách (cả trên Zalo của bot).' });
+      onPinned?.();
+    } catch (err) { setPinMsg({ error: err.message }); } finally { setPinBusy(false); }
+  }
   useEffect(() => {
     let alive = true;
     const id = encodeURIComponent(conv.threadId);
     api(`/api/chats/${id}/info?type=${conv.threadType}`).then((r) => { if (alive) setInfo(r.info); }, () => {});
+    api(`/api/schedules/reminders?threadId=${id}&threadType=${conv.threadType}`).then((r) => { if (alive) setReminders(r.reminders); }, () => { if (alive) setReminders([]); });
     if (conv.threadType !== 1) return () => { alive = false; };
     const load = () => api(`/api/chats/${id}/board`).then((r) => { if (alive) setBoard(r.board); }, (e) => { if (alive) setBoard((b) => b || { error: e.message }); });
     load();
@@ -681,7 +695,7 @@ function Thread({ conv, onBack }) {
         <button type="button" class="pin-row" disabled=${!p.ref} onClick=${() => { setPinsOpen(false); jumpTo(p.ref); }}>
           <span class="muted small">${p.sender || 'Tin ghim'}</span><span>${p.text || '[Tin không có chữ]'}</span></button></li>`)}</ul>` : null}
     </div>` : null}
-    <${Live} error=${error || recallMsg.error} ok=${recallMsg.ok} />
+    <${Live} error=${error || recallMsg.error || pinMsg.error} ok=${recallMsg.ok || pinMsg.ok} />
     ${newer ? html`<div class="jump-bar"><span class="muted small">Đang xem tin cũ.</span>
       <button type="button" class="btn btn-secondary btn-sm" onClick=${() => kick.current()}>Về tin mới nhất ↓</button></div>` : null}
     ${msgs === null ? (error ? null : html`<${Spinner} />`) : html`
@@ -704,7 +718,7 @@ function Thread({ conv, onBack }) {
     ${side === 'search' ? html`<${ThreadSearch} conv=${conv} onJump=${jumpTo} onClose=${() => closeSide('search')} />` : null}
     ${side === 'perms' ? html`<${PermsPanel} conv=${conv} onClose=${() => closeSide('perms')} />` : null}
     ${side === 'media' ? html`<${MediaPanel} key=${mediaTab} conv=${conv} initialTab=${mediaTab} onClose=${() => closeSide('media')} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
-    ${side === 'info' ? html`<${InfoPanel} conv=${conv} info=${info} board=${board} onJump=${(ref) => ref && jumpTo(ref)} statsText=${stats} onClose=${toggleInfo} onTool=${(name) => setSide(name)}
+    ${side === 'info' ? html`<${InfoPanel} conv=${conv} info=${info} board=${board} reminders=${reminders} pinned=${pinned} pinBusy=${pinBusy} onPin=${togglePin} onJump=${(ref) => ref && jumpTo(ref)} statsText=${stats} onClose=${toggleInfo} onTool=${(name) => setSide(name)}
       onOpen=${(tab) => { setMediaTab(tab); setSide('media'); }} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
     ${lightbox ? html`<${Lightbox} items=${lightbox.items} index=${lightbox.index}
       onIndex=${(index) => setLightbox((cur) => ({ ...cur, index }))} onClose=${() => setLightbox(null)} />` : null}`;
@@ -816,7 +830,11 @@ export function Chats() {
       </section>
       <section class="card chat-thread" aria-label="Tin nhắn">
         ${selected
-          ? html`<${Thread} key=${keyOf(selected)} conv=${selected} onBack=${() => setSelected(null)} />`
+          ? html`<${Thread} key=${keyOf(selected)} conv=${selected} onBack=${() => setSelected(null)} onPinned=${() => setList((cur) => {
+              // Ghim/bỏ ghim: đổi ngay trong danh sách (đã ghim lên đầu), không chờ lượt làm mới 10 giây.
+              const next = (cur || []).map((c) => (keyOf(c) === keyOf(selected) ? { ...c, pinned: !c.pinned } : c));
+              return [...next.filter((c) => c.pinned), ...next.filter((c) => !c.pinned)];
+            })} />`
           : html`<p class="muted chat-empty">Chọn một hội thoại bên trái để xem tin nhắn.</p>`}
       </section>
     </div>`;

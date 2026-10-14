@@ -46,16 +46,24 @@ const RECENT = { photo: 8, file: 3, link: 3 };
 const num = (n) => new Intl.NumberFormat('vi-VN').format(n);
 
 /** Mục "Bảng tin" của nhóm (chỉ đọc) kiểu Zalo: 3 dòng gọn Tin ghim · Ghi chú · Bình chọn, bấm dòng nào mở danh sách dòng đó. */
-function Bulletin({ board, onJump }) {
+function Bulletin({ board, reminders, group, onJump }) {
   const [open, setOpen] = useState(true);
   const [kind, setKind] = useState(null); // 'pins' | 'notes' | 'polls'
-  const rows = [['pins', 'pin', 'Tin ghim'], ['notes', 'file', 'Ghi chú'], ['polls', 'chart', 'Bình chọn']];
+  const rows = [...(group ? [['pins', 'pin', 'Tin ghim'], ['notes', 'file', 'Ghi chú'], ['polls', 'chart', 'Bình chọn']] : []), ['reminders', 'clock', 'Nhắc hẹn']];
+  const data = { pins: [], notes: [], polls: [], ...(board && !board.error ? board : {}), reminders: Array.isArray(reminders) ? reminders : [] };
+  const loading = (group && !board) || reminders === null;
+  const failed = group && board?.error;
   const list = (k) => {
     if (k === 'pins') {
       return board.pins.map((p) => html`<li key=${p.id}>
         <button type="button" class="board-item" disabled=${!p.ref} onClick=${() => onJump(p.ref)} title=${p.ref ? 'Xem tin này trong khung chat' : 'Tin này không có trong lịch sử của bot'}>
           <span class="board-main"><small class="muted">${p.sender || 'Tin ghim'}</small><span class="board-text">${p.text || '[Tin không có chữ]'}</span></span>
         </button></li>`);
+    }
+    if (k === 'reminders') {
+      return data.reminders.map((r) => html`<li key=${r.id}><div class="board-item"><span class="board-main">
+        <small class="muted">${r.startAt ? fmtTime(r.startAt) : 'Chưa đặt giờ'}${r.repeat ? ' · lặp lại' : ''}${r.mine ? ' · bot tạo' : ''}</small>
+        <span class="board-text">${r.title || '[Không có tiêu đề]'}</span></span></div></li>`);
     }
     if (k === 'notes') return board.notes.map((n) => html`<li key=${n.id}><div class="board-item"><span class="board-main"><span class="board-text">${n.text}</span></span></div></li>`);
     return board.polls.map((v) => html`<li key=${v.id}><div class="board-item">
@@ -64,14 +72,14 @@ function Bulletin({ board, onJump }) {
   };
   return html`<section class="info-sec">
     <button type="button" class="info-sec-head" aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
-      <span>Bảng tin nhóm</span><span class=${`info-caret${open ? ' open' : ''}`} aria-hidden="true"><${Icon} name="next" size=${16} /></span></button>
+      <span>${group ? 'Bảng tin nhóm' : 'Nhắc hẹn'}</span><span class=${`info-caret${open ? ' open' : ''}`} aria-hidden="true"><${Icon} name="next" size=${16} /></span></button>
     ${open ? html`<div class="info-sec-body">
-      ${!board ? html`<p class="muted small">Đang tải…</p>`
-        : board.error ? html`<p class="muted small">${board.error}</p>`
+      ${loading ? html`<p class="muted small">Đang tải…</p>`
+        : failed ? html`<p class="muted small">${board.error}</p>`
           : html`<ul class="board-rows">${rows.map(([k, icon, label]) => html`<li key=${k}>
-            <button type="button" class="board-row" aria-expanded=${kind === k ? 'true' : 'false'} disabled=${!board[k].length} onClick=${() => setKind(kind === k ? null : k)}>
+            <button type="button" class="board-row" aria-expanded=${kind === k ? 'true' : 'false'} disabled=${!data[k].length} onClick=${() => setKind(kind === k ? null : k)}>
               <span class="board-ico" aria-hidden="true"><${Icon} name=${icon} size=${16} /></span>
-              <span class="board-label">${label}</span><span class="muted small">${board[k].length ? num(board[k].length) : 'Chưa có'}</span>
+              <span class="board-label">${label}</span><span class="muted small">${data[k].length ? num(data[k].length) : 'Chưa có'}</span>
             </button>
             ${kind === k ? html`<ul class="board-list">${list(k)}</ul>` : null}
           </li>`)}</ul>`}
@@ -109,7 +117,7 @@ function Section({ title, state, onAll, empty, children }) {
  * Bảng "Thông tin hội thoại" (giống cột phải của Zalo). onOpen(tab) mở bảng Ảnh/Video · Tệp · Link ở đúng tab;
  * onTool('perms' | 'search') mở Phân quyền / Tìm tin nhắn ngay trong cột này.
  */
-export function InfoPanel({ conv, info, board, statsText, onClose, onOpen, onTool, onOpenPhoto, onJump }) {
+export function InfoPanel({ conv, info, board, reminders, pinned, pinBusy, onPin, statsText, onClose, onOpen, onTool, onOpenPhoto, onJump }) {
   const group = conv.threadType === 1;
   const photos = useRecent(conv, 'photo');
   const files = useRecent(conv, 'file');
@@ -129,11 +137,13 @@ export function InfoPanel({ conv, info, board, statsText, onClose, onOpen, onToo
         ${statsText ? html`<span class="muted small info-stats">${statsText}</span>` : null}
       </div>
       <div class="info-actions">
+        <button type="button" class=${`info-act${pinned ? ' is-on' : ''}`} disabled=${pinBusy} aria-pressed=${pinned ? 'true' : 'false'} onClick=${onPin}>
+          <span class="info-act-ico"><${Icon} name="pin" size=${18} /></span>${pinned ? 'Bỏ ghim' : 'Ghim hội thoại'}</button>
         <button type="button" class="info-act" onClick=${() => onTool('perms')}><span class="info-act-ico"><${Icon} name="shield" size=${18} /></span>Phân quyền</button>
         <button type="button" class="info-act" onClick=${() => onTool('search')}><span class="info-act-ico"><${Icon} name="search" size=${18} /></span>Tìm tin nhắn</button>
         <button type="button" class="info-act" onClick=${() => onOpen('photo')}><span class="info-act-ico"><${Icon} name="image" size=${18} /></span>Ảnh, tệp, link</button>
       </div>
-      ${group ? html`<${Bulletin} board=${board} onJump=${onJump} />` : null}
+      <${Bulletin} board=${board} reminders=${reminders} group=${group} onJump=${onJump} />
       <${Section} title="Ảnh/Video" state=${photos} onAll=${() => onOpen('photo')} empty="Chưa có ảnh hay video nào.">
         <ul class="media-grid info-grid">${(photos?.items || []).map((x) => html`<li key=${x.id}>
           ${x.video

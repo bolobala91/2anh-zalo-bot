@@ -245,3 +245,17 @@ test('Phiên chat kiểu Zalo: thông tin hội thoại và bảng tin (tin ghim
   assert.equal('msgId' in b.pins[0], false);
   assert.equal(b.notes[0].text, 'Nội quy');
 });
+
+test('ghim hội thoại: danh sách đưa hội thoại đã ghim lên đầu; ghim/bỏ ghim chuyển đúng người làm', async (t) => {
+  const sidecar = fakeSidecar({
+    pinnedThreads: async () => ['0:100'],
+    pinThread: async (m) => { sidecar.calls.push(['pin', m]); return {}; },
+  });
+  const { call, cookie } = await ready(t, { sidecar });
+  const list = (await call('/api/chats', { cookie })).json.conversations;
+  assert.deepEqual(list.map((c) => [c.threadId, Boolean(c.pinned)]), [['100', true], ['200', false], ['987654', false]]);
+  const res = await call('/api/chats/200/pin', { method: 'POST', cookie, body: { threadType: 1, pinned: true } });
+  assert.equal(res.status, 200);
+  assert.deepEqual(sidecar.calls.at(-1), ['pin', { threadId: '200', threadType: 1, pinned: true, actor: 'khach' }]);
+  assert.equal((await call('/api/chats/200/pin', { method: 'POST', cookie, body: { threadType: 1, pinned: 'x' } })).status, 400);
+});

@@ -148,6 +148,11 @@ export function createControlRouter({ token, health, qr, logout, send, loginCode
       if (!Array.isArray(ids) || ids.length > 200) throw bad('ids phải là danh sách tối đa 200 nhóm');
       return { avatars: await directory.groupAvatars(ids.map(String)) };
     }));
+    router.get('/pinned-threads', wrap(async () => ({ pinned: await directory.pinnedThreads() })));
+    router.post('/pin-thread', wrap(async (req) => {
+      const { threadId, threadType, pinned, actor } = req.body || {};
+      return directory.setPinned({ threadId: String(threadId ?? ''), threadType, pinned, actor: checkActor(actor) });
+    }));
     router.get('/board', wrap(async (req) => ({ board: await directory.board({ groupId: String(req.query.groupId ?? '') }) })));
     router.post('/reminders/remove', wrap(async (req) => {
       const { reminderId, threadId, threadType, actor } = req.body || {};

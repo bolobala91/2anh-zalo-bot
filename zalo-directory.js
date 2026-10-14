@@ -92,6 +92,7 @@ export function createZaloDirectory({ getApi, acquire = async () => {}, audit = 
   const avatarCache = new Map(); // uid → { at, url } (url '' = người không có ảnh — cũng đệm để khỏi hỏi lại)
   const boardCache = new Map();  // groupId → { at, value }
   const fresh = (hit, ttl) => hit && now() - hit.at < ttl;
+  let pinCache = null; // { at, list }
   const api = () => {
     const a = getApi();
     if (!a) throw new Error('Zalo chưa đăng nhập');
@@ -183,6 +184,27 @@ export function createZaloDirectory({ getApi, acquire = async () => {}, audit = 
       const value = { pins: items.filter((x) => x.kind === 'pin').map(strip), notes: items.filter((x) => x.kind === 'note').map(strip), polls: items.filter((x) => x.kind === 'poll').map(strip) };
       boardCache.set(String(groupId), { at: now(), value });
       return value;
+    },
+    /** Hội thoại đang ghim trên Zalo → ["1:groupId" | "0:uid" | "?:id" (Zalo không ghi loại)]. Đệm 1 phút. */
+    async pinnedThreads() {
+      if (fresh(pinCache, BOARD_TTL_MS)) return pinCache.list;
+      const raw = (await api().getPinConversations())?.conversations;
+      const list = (Array.isArray(raw) ? raw : []).map((x) => /^([gu]?)(\d{1,32})$/.exec(String(x))).filter(Boolean)
+        .map(([, p, id]) => `${p === 'g' ? 1 : p === 'u' ? 0 : '?'}:${id}`);
+      pinCache = { at: now(), list };
+      return list;
+    },
+    /** Ghim / bỏ ghim một hội thoại (như nút "Ghim hội thoại" của Zalo). Xin lượt + audit như mọi lệnh ghi. */
+    async setPinned({ threadId, threadType, pinned, actor }) {
+      checkThread(threadId, threadType);
+      if (typeof pinned !== 'boolean') throw bad('pinned phải là true/false');
+      const a = api();
+      await audit({ action: pinned ? 'dashboard_thread_pin' : 'dashboard_thread_unpin', actor, threadId: String(threadId), threadType }, async () => {
+        await acquire();
+        await a.setPinnedConversations(pinned, String(threadId), threadType);
+      });
+      pinCache = null;
+      return {};
     },
     async removeReminder({ reminderId, threadId, threadType, actor }) {
       checkThread(threadId, threadType);

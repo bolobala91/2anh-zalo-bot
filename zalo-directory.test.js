@@ -151,3 +151,26 @@ test('ảnh nhóm theo lô cho danh sách hội thoại: một lần gọi cho n
   await dir.groupAvatars([G, '66']);
   assert.equal(seen.length, 1);
 });
+
+test('ghim hội thoại: đọc danh sách ghim (có/không tiền tố g/u), ghim/bỏ ghim xin lượt + audit + xoá đệm', async () => {
+  const api = fakeApi({
+    getPinConversations: async () => { api.calls.push(['pins']); return { conversations: [`g${G}`, `u${A}`, '777', 'rác'] }; },
+    setPinnedConversations: async (pinned, id, type) => { api.calls.push(['setpin', pinned, id, type]); return ''; },
+  });
+  const audits = [];
+  let acquired = 0;
+  const dir = createZaloDirectory({ getApi: () => api, now: () => 0, acquire: async () => { acquired += 1; },
+    audit: async (meta, fn) => { audits.push(meta); return fn(); } });
+  assert.deepEqual(await dir.pinnedThreads(), [`1:${G}`, `0:${A}`, '?:777']);
+  await dir.pinnedThreads();
+  assert.equal(api.calls.filter((c) => c[0] === 'pins').length, 1, 'đệm');
+  await dir.setPinned({ threadId: G, threadType: 1, pinned: true, actor: 'anh' });
+  assert.deepEqual(api.calls.at(-1), ['setpin', true, G, 1]);
+  assert.equal(acquired, 1);
+  assert.deepEqual(audits.at(-1), { action: 'dashboard_thread_pin', actor: 'anh', threadId: G, threadType: 1 });
+  await dir.pinnedThreads();
+  assert.equal(api.calls.filter((c) => c[0] === 'pins').length, 2, 'ghim xong thì đọc lại');
+  await dir.setPinned({ threadId: A, threadType: 0, pinned: false, actor: 'anh' });
+  assert.equal(audits.at(-1).action, 'dashboard_thread_unpin');
+  await assert.rejects(dir.setPinned({ threadId: A, threadType: 0, pinned: 'yes', actor: 'anh' }), /pinned/);
+});

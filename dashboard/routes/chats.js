@@ -61,15 +61,21 @@ export function chatRoutes({ store, sidecar, threadNames, agentTrace = null, out
       let today = new Map();
       try { today = store.todayCounts ? store.todayCounts(startOfDayVN(now())) : today; } catch { /* số hôm nay là phụ */ }
       const ai = aiStats();
-      const [gAva, uAva] = sidecar.groupAvatars ? await Promise.all([
-        softly(() => sidecar.groupAvatars(list.filter((c) => c.threadType === 1).map((c) => c.threadId).slice(0, 200))),
-        softly(() => sidecar.avatars(list.filter((c) => c.threadType === 0).map((c) => c.threadId).slice(0, 200))),
-      ]) : [{}, {}];
-      res.json({ ok: true, conversations: list.map(({ peerName, ...c }) => {
+      const [gAva, uAva, pins] = await Promise.all([
+        softly(() => sidecar.groupAvatars?.(list.filter((c) => c.threadType === 1).map((c) => c.threadId).slice(0, 200))),
+        softly(() => sidecar.avatars?.(list.filter((c) => c.threadType === 0).map((c) => c.threadId).slice(0, 200))),
+        softly(() => sidecar.pinnedThreads?.()),
+      ]);
+      const pinned = new Set(Array.isArray(pins) ? pins : []);
+      const isPinned = (c) => pinned.has(`${c.threadType}:${c.threadId}`) || pinned.has(`?:${c.threadId}`);
+      const rows = list.map(({ peerName, ...c }) => {
         const avatar = (c.threadType === 1 ? gAva : uAva)[c.threadId];
         return { ...c, name: nameOf(groups, c.threadId, c.threadType, peerName),
-          today: today.get(`${c.threadType}:${c.threadId}`) || 0, ai: ai.get(String(c.threadId)) || null, ...(avatar ? { avatar } : {}) };
-      }) });
+          today: today.get(`${c.threadType}:${c.threadId}`) || 0, ai: ai.get(String(c.threadId)) || null,
+          ...(avatar ? { avatar } : {}), ...(isPinned(c) ? { pinned: true } : {}) };
+      });
+      // Như Zalo: hội thoại đã ghim lên đầu, giữ thứ tự mới nhất trong từng phần.
+      res.json({ ok: true, conversations: [...rows.filter((c) => c.pinned), ...rows.filter((c) => !c.pinned)] });
     } catch (err) { failStore(res, err, READ_FAIL); }
   });
 
@@ -213,6 +219,17 @@ export function chatRoutes({ store, sidecar, threadNames, agentTrace = null, out
   });
 
   // Thu hồi một tin của bot (theo rowid trong đúng hội thoại). Tin người khác → 400; ghi Nhật ký Zalo kèm tên người bấm.
+  // Ghim / bỏ ghim hội thoại trên Zalo của bot (như nút "Ghim hội thoại" của Zalo). Ghi Nhật ký kèm tên người làm.
+  r.post('/chats/:threadId/pin', requireAuth, async (req, res) => {
+    const type = parseType(req.body?.threadType);
+    if (!THREAD_ID.test(req.params.threadId) || type === null) return bad(res, BAD_THREAD);
+    if (typeof req.body?.pinned !== 'boolean') return bad(res, 'pinned phải là true/false.');
+    try {
+      await sidecar.pinThread({ threadId: req.params.threadId, threadType: type, pinned: req.body.pinned, actor: req.user.username });
+      res.json({ ok: true });
+    } catch (err) { failSidecar(res, err); }
+  });
+
   r.post('/chats/:threadId/recall', requireAuth, async (req, res) => {
     const type = parseType(req.body?.threadType);
     if (!THREAD_ID.test(req.params.threadId) || type === null) return bad(res, BAD_THREAD);

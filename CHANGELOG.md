@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.43.0] — 2026-10-15
+
+### Thêm — Phiên chat kiểu Zalo (bước 3)
+
+- **Ghim hội thoại** từ bảng Thông tin (nút Ghim hội thoại / Bỏ ghim) — ghim thật trên Zalo của bot; hội thoại đã ghim nằm đầu danh sách kèm biểu tượng ghim, như Zalo. Ghi Nhật ký kèm tên người làm.
+- **Nhắc hẹn** của hội thoại trong bảng Thông tin (nhóm: thêm dòng Nhắc hẹn vào Bảng tin; nhắn riêng: mục Nhắc hẹn) — giờ nhắc, lặp lại hay không, bot tạo hay không.
+
 ## [2.42.1] — 2026-10-15
 
 ### Đổi

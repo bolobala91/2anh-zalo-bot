@@ -1498,3 +1498,8 @@ button.board-item:disabled { cursor: default; }
 .board-row:focus-visible, .board-item:focus-visible { outline: none; box-shadow: var(--focus); }
 .board-label { flex: 1; min-width: 0; }
 .board-rows .board-list { margin: 2px 0 8px 40px; }
+/* Bước 3: ghim hội thoại, nhắc hẹn. */
+.info-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.info-act.is-on .info-act-ico { background: var(--brand-soft); color: var(--brand-dark); }
+.info-act:disabled { opacity: .55; cursor: default; }
+.conv-pin { flex: none; display: inline-flex; color: var(--muted); margin-left: 4px; }
