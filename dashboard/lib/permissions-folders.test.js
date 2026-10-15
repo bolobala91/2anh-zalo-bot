@@ -117,3 +117,17 @@ test('màu thư mục: thư mục mới nhận màu chưa dùng; đổi màu; m�
   assert.equal(disk().folders[f1].color, 'pink');
   assert.equal(normalizeFolders({ a: { groups: [], color: 'neon' } }).a.color, undefined);
 });
+
+test('thêm người vào thư mục (từ Liên hệ): giữ người cũ, bỏ trùng, chuyển từ thư mục khác sang, cập nhật tên', (t) => {
+  const { store, disk } = fresh(t);
+  const P = '1111111111111111111'; const Q = '2222222222222222222'; const R = '3333333333333333333';
+  const { id: f1 } = store.createFolder('Trải nghiệm');
+  const { id: f2 } = store.createFolder('Khách hàng');
+  store.setFolderPeople(f1, [{ uid: P, name: 'Lan' }]);
+  store.setFolderPeople(f2, [{ uid: Q, name: 'Minh' }]);
+  store.addFolderPeople(f1, [{ uid: Q, name: 'Minh' }, { uid: R }, { uid: P, name: 'Lan Anh' }]);
+  assert.deepEqual(disk().folders[f1].people, [{ uid: P, name: 'Lan Anh' }, { uid: Q, name: 'Minh' }, { uid: R }]);
+  assert.equal(disk().folders[f2].people, undefined, 'người chỉ thuộc một thư mục: chuyển khỏi thư mục cũ');
+  assert.throws(() => store.addFolderPeople(f1, [{ uid: '12' }]), InvalidPermissions);
+  assert.throws(() => store.addFolderPeople('khong-co', [{ uid: P }]), InvalidPermissions);
+});

@@ -171,6 +171,16 @@ export function permissionRoutes({ permissions, sidecar, threadNames, activity, 
       res.json(full(state));
     } catch (err) { fail(res, err, SAVE_FAIL); }
   });
+  // Liên hệ: đồng ý kết bạn rồi xếp luôn vào thư mục, hoặc chuyển 1/nhiều người — thêm vào, không thay cả danh sách.
+  r.post('/permissions/folders/:fid/people/add', requireAuth, (req, res) => {
+    try {
+      const people = req.body?.people;
+      const state = permissions.addFolderPeople(req.params.fid, people);
+      const f = state.folders.find((x) => x.id === req.params.fid);
+      logFolder(req, `thêm ${Array.isArray(people) ? people.length : 0} người vào thư mục "${f?.name}"`);
+      res.json(full(state));
+    } catch (err) { fail(res, err, SAVE_FAIL); }
+  });
   r.put('/permissions/folders/:fid/settings', requireAuth, (req, res) => {
     let s;
     try { s = parseSettings(req.body); } catch (err) { return fail(res, err, SAVE_FAIL); }

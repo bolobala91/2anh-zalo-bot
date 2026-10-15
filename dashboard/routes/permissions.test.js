@@ -239,3 +239,16 @@ test('PUT /api/permissions/groups: áp một thay đổi cho nhiều nhóm, mộ
   }
   assert.equal(JSON.stringify(disk()), before);
 });
+
+test('thêm người vào thư mục qua API (Liên hệ): giữ người cũ, ghi Nhật ký; dữ liệu sai → 400; chưa đăng nhập → 401', async (t) => {
+  const { call, owner, disk } = await ready(t);
+  const fid = (await call('/api/permissions/folders', { method: 'POST', cookie: owner, body: { name: 'Trải nghiệm' } })).json.created;
+  const P = '1111111111111111111'; const Q = '2222222222222222222';
+  assert.equal((await call(`/api/permissions/folders/${fid}/people/add`, { method: 'POST', body: { people: [{ uid: P }] } })).status, 401);
+  assert.equal((await call(`/api/permissions/folders/${fid}/people/add`, { method: 'POST', cookie: owner, body: { people: [{ uid: P, name: 'Lan' }] } })).status, 200);
+  const res = await call(`/api/permissions/folders/${fid}/people/add`, { method: 'POST', cookie: owner, body: { people: [{ uid: Q, name: 'Minh' }] } });
+  assert.equal(res.status, 200);
+  assert.deepEqual(disk().folders[fid].people, [{ uid: P, name: 'Lan' }, { uid: Q, name: 'Minh' }]);
+  assert.equal((await call(`/api/permissions/folders/${fid}/people/add`, { method: 'POST', cookie: owner, body: { people: 'x' } })).status, 400);
+  assert.equal((await call('/api/permissions/folders/khong-co/people/add', { method: 'POST', cookie: owner, body: { people: [{ uid: P }] } })).status, 400);
+});

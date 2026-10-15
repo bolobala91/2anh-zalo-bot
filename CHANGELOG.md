@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.44.0] — 2026-10-15
+
+### Thêm — xếp người vào thư mục ngay ở trang Liên hệ
+
+- **Đồng ý kết bạn và xếp luôn vào thư mục**: ô "Xếp người được đồng ý vào" trên thẻ Lời mời kết bạn (nhớ lựa chọn lần trước). Áp cho cả nút Đồng ý từng người lẫn "Đồng ý đã chọn" — người đó nhắn riêng với bot và dùng đúng quyền của thư mục, không phải vào Phân quyền Bot nữa.
+- **Chuyển 1 hoặc nhiều người vào thư mục** từ danh sách Liên hệ (bạn bè cũ cũng được): tích chọn → "Chuyển vào" → chọn thư mục. Mỗi người hiện nhãn thư mục đang thuộc.
+- API mới thêm người vào thư mục (không ghi đè cả danh sách); người đang ở thư mục khác được chuyển sang.
+
 ## [2.43.3] — 2026-10-15
 
 ### Sửa

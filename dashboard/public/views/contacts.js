@@ -3,6 +3,25 @@ import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, fmtTime, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
 import { BulkBar, flip, stillPicked } from './multi-pick.js';
+import { FolderChip, folderIndex } from './folder-ui.js';
+
+const FOLDER_KEY = 'zd:friend-folder';
+const lastFolder = () => { try { return localStorage.getItem(FOLDER_KEY) || ''; } catch { return ''; } };
+const rememberFolder = (id) => { try { localStorage.setItem(FOLDER_KEY, id); } catch { /* chế độ riêng tư */ } };
+
+/** Thêm người vào một thư mục của Phân quyền Bot (người đang ở thư mục khác được chuyển sang). */
+export const addToFolder = (fid, people) => api(`/api/permissions/folders/${encodeURIComponent(fid)}/people/add`, {
+  method: 'POST', body: { people: people.map((p) => (p.name ? { uid: p.uid, name: p.name } : { uid: p.uid })) },
+});
+
+/** Ô chọn thư mục ("Không xếp" = để như cũ). */
+function FolderSelect({ id, folders, value, onChange, label, emptyLabel = 'Không xếp vào thư mục' }) {
+  return html`<label class="folder-select" for=${id}><span class="small muted">${label}</span>
+    <select id=${id} value=${value} onChange=${(e) => onChange(e.currentTarget.value)}>
+      <option value="">${emptyLabel}</option>
+      ${folders.map((f) => html`<option key=${f.id} value=${f.id}>${f.name}</option>`)}
+    </select></label>`;
+}
 
 /** Nghỉ giữa hai lần gọi Zalo khi xử lý hàng loạt, tránh bị Zalo chặn vì gọi dồn. */
 export const BULK_DELAY_MS = 400;
@@ -39,12 +58,20 @@ export function bulkSummary({ done, failed }, accept) {
   return { ok, error: bad };
 }
 
-function Requests({ onChanged }) {
+function Requests({ onChanged, folders }) {
   const [list, setList] = useState(null);
   const [msg, setMsg] = useState({});
   const [busy, setBusy] = useState('');
   const [picked, setPicked] = useState(() => new Set());
   const [progress, setProgress] = useState('');
+  const [folder, setFolderRaw] = useState(lastFolder);
+  const setFolder = (v) => { setFolderRaw(v); rememberFolder(v); };
+  const target = folders.find((f) => f.id === folder) || null; // thư mục đã bị xoá thì coi như "Không xếp"
+  // Sau khi đồng ý: xếp vào thư mục đã chọn. Lỗi xếp không làm hỏng việc kết bạn đã xong — chỉ báo lại.
+  async function file(people) {
+    if (!target || !people.length) return '';
+    try { await addToFolder(target.id, people); return ` Đã xếp vào thư mục ${target.name}.`; } catch (e) { return ` Chưa xếp được vào thư mục ${target.name}: ${e.message}`; }
+  }
   const load = () => api('/api/contacts/requests').then((r) => setList(r.requests)).catch((e) => setMsg({ error: e.message }));
   useEffect(() => { load(); }, []);
   async function answer(r, accept) {
@@ -52,7 +79,8 @@ function Requests({ onChanged }) {
     setBusy(r.uid); setMsg({});
     try {
       await api(`/api/contacts/requests/${r.uid}`, { method: 'POST', body: { accept } });
-      setMsg({ ok: accept ? `Đã đồng ý kết bạn với ${r.name || 'người này'}.` : `Đã từ chối lời mời của ${r.name || 'người này'}.` });
+      const filed = accept ? await file([r]) : '';
+      setMsg({ ok: accept ? `Đã đồng ý kết bạn với ${r.name || 'người này'}.${filed}` : `Đã từ chối lời mời của ${r.name || 'người này'}.` });
       await load(); onChanged();
     } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
   }
@@ -63,19 +91,22 @@ function Requests({ onChanged }) {
     const res = await runSequential(items, (r) => api(`/api/contacts/requests/${r.uid}`, { method: 'POST', body: { accept } }),
       { onProgress: (i, n) => setProgress(`Đang xử lý ${i}/${n}…`) });
     setProgress(''); setPicked(new Set());
-    setMsg(bulkSummary(res, accept));
+    const sum = bulkSummary(res, accept);
+    const filed = accept ? await file(res.done) : '';
+    setMsg({ ...sum, ok: sum.ok ? sum.ok + filed : sum.ok });
     try { await load(); if (res.done.length) onChanged(); } finally { setBusy(''); }
   }
   if (!list && !msg.error) return null;
   const sel = stillPicked(picked, list || []);
   return html`<section class="card">
     <h2>Lời mời kết bạn đang chờ ${list ? html`<span class="badge">${list.length}</span>` : null}</h2>
-    <p class="muted small">Đồng ý thì người đó thành bạn của bot. Họ có nhắn riêng được với bot hay không vẫn theo mục Nhắn riêng ở Phân quyền Bot.</p>
+    <p class="muted small">Đồng ý thì người đó thành bạn của bot. Chọn thư mục bên dưới để xếp luôn người được đồng ý vào thư mục đó — họ nhắn riêng với bot và dùng đúng quyền của thư mục, không phải vào Phân quyền Bot nữa.</p>
+    ${folders.length ? html`<${FolderSelect} id="req-folder" folders=${folders} value=${target ? folder : ''} onChange=${setFolder} label="Xếp người được đồng ý vào" />` : null}
     <${Live} error=${msg.error} ok=${msg.ok} />
     ${progress ? html`<p class="small bulk-progress" aria-live="polite">${progress}</p>` : null}
     ${list && !list.length ? html`<p class="muted">Không có lời mời nào.</p>` : null}
     ${list && list.length > 1 ? html`<${BulkBar} shown=${list} picked=${new Set(sel)} onPick=${setPicked} unit="lời mời">
-      <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== ''} onClick=${() => answerMany(true)}>Đồng ý đã chọn</button>
+      <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== ''} onClick=${() => answerMany(true)}>Đồng ý đã chọn${target ? ` → ${target.name}` : ''}</button>
       <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => answerMany(false)}>Từ chối đã chọn</button>
     <//>` : null}
     <ul class="row-list">
@@ -85,7 +116,7 @@ function Requests({ onChanged }) {
         <span class="avatar avatar-sm" aria-hidden="true">${(r.name || '?').slice(0, 1).toUpperCase()}</span>
         <span class="row-main"><strong>${r.name || 'Chưa rõ tên'}</strong>
           <small class="muted">${r.message ? `“${r.message}” · ` : ''}${r.at ? fmtTime(r.at) : ''}</small></span>
-        <button class="btn btn-primary btn-sm" disabled=${busy !== ''} onClick=${() => answer(r, true)}>Đồng ý</button>
+        <button class="btn btn-primary btn-sm" disabled=${busy !== ''} onClick=${() => answer(r, true)} title=${target ? `Đồng ý và xếp vào thư mục ${target.name}` : 'Đồng ý kết bạn'}>Đồng ý${target ? ` → ${target.name}` : ''}</button>
         <button class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => answer(r, false)}>Từ chối</button>
       </li>`)}
     </ul>
@@ -97,6 +128,26 @@ export function Contacts() {
   const [q, setQ] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [folders, setFolders] = useState([]);
+  const [picked, setPicked] = useState(() => new Set());
+  const [moveTo, setMoveTo] = useState(lastFolder);
+  const [moveMsg, setMoveMsg] = useState({});
+  const [moving, setMoving] = useState(false);
+  const loadFolders = () => api('/api/permissions').then((r) => setFolders(r.folders || []), () => {});
+  useEffect(() => { loadFolders(); }, []);
+  const index = folderIndex(folders);
+  async function move() {
+    const target = folders.find((f) => f.id === moveTo);
+    const people = (data?.contacts || []).filter((c) => picked.has(c.uid));
+    if (!target || !people.length) return;
+    setMoving(true); setMoveMsg({});
+    try {
+      await addToFolder(target.id, people);
+      rememberFolder(target.id);
+      setMoveMsg({ ok: `Đã chuyển ${people.length} người vào thư mục ${target.name}.` });
+      setPicked(new Set()); await loadFolders();
+    } catch (e) { setMoveMsg({ error: e.message }); } finally { setMoving(false); }
+  }
   const load = (fresh = false) => {
     const params = new URLSearchParams({ kind, q, ...(fresh ? { fresh: '1' } : {}) });
     return api(`/api/contacts?${params}`).then((r) => { setData(r); setError(''); }).catch((e) => setError(e.message));
@@ -105,7 +156,7 @@ export function Contacts() {
 
   const errs = Object.values(data?.errors || {});
   return html`<${PageHead} title="Liên hệ" sub="Bạn bè của bot, người đã nhắn riêng và người có hồ sơ trong sổ người quen." />
-    <${Requests} onChanged=${() => load(true)} />
+    <${Requests} folders=${folders} onChanged=${() => { load(true); loadFolders(); }} />
     <section class="card">
       <div class="toolbar">
         <div class="chips" role="group" aria-label="Lọc liên hệ">
@@ -120,12 +171,19 @@ export function Contacts() {
       ${errs.map((e) => html`<${Notice} kind="warn">${e}<//>`)}
       ${!data && !error ? html`<${Spinner} />` : null}
       ${data && !data.contacts.length ? html`<p class="muted">Không có ai khớp.</p>` : null}
+      <${Live} error=${moveMsg.error} ok=${moveMsg.ok} />
+      ${data?.contacts?.length && folders.length ? html`<${BulkBar} shown=${data.contacts} picked=${new Set(stillPicked(picked, data.contacts))} onPick=${setPicked} unit="người">
+        <${FolderSelect} id="move-folder" folders=${folders} value=${folders.some((f) => f.id === moveTo) ? moveTo : ''} onChange=${setMoveTo} label="Chuyển vào" emptyLabel="Chọn thư mục…" />
+        <button type="button" class="btn btn-primary btn-sm" disabled=${moving || !folders.some((f) => f.id === moveTo)} onClick=${move}>${moving ? 'Đang chuyển…' : 'Chuyển'}</button>
+      <//>` : null}
       <ul class="row-list">
         ${(data?.contacts || []).map((c) => html`<li key=${c.uid} class="row-item">
+          ${folders.length ? html`<input type="checkbox" class="bulk-check" checked=${picked.has(c.uid)} disabled=${moving}
+            aria-label=${`Chọn ${c.name || 'người này'}`} onChange=${() => setPicked(flip(picked, c.uid))} />` : null}
           <span class="avatar avatar-sm" aria-hidden="true">${(c.name || '?').slice(0, 1).toUpperCase()}</span>
           <span class="row-main"><strong>${c.name || 'Chưa rõ tên'}</strong>
             ${c.profile?.note ? html`<small class="muted">${c.profile.note}</small>` : null}</span>
-          <span class="row-tags">${contactBadges(c).map((b) => html`<span key=${b} class="badge">${b}</span>`)}</span>
+          <span class="row-tags">${index.people.get(c.uid) ? html`<${FolderChip} folder=${index.people.get(c.uid)} />` : null}${contactBadges(c).map((b) => html`<span key=${b} class="badge">${b}</span>`)}</span>
           ${c.lastDmAt ? html`<small class="muted">${fmtTime(c.lastDmAt)}</small>` : null}
         </li>`)}
       </ul>

@@ -612,6 +612,19 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
      * Đặt danh sách NGƯỜI của thư mục (`[{ uid, name }]`): khi họ nhắn riêng, bot dùng cài đặt thư mục và họ được
      * tính là có trong danh sách nhắn riêng. Người đang ở thư mục khác thì chuyển sang (mỗi người một thư mục).
      */
+    /**
+     * Thêm người vào thư mục (Liên hệ: đồng ý kết bạn rồi xếp luôn, hoặc chuyển 1/nhiều người): giữ người đang có,
+     * tên mới thay tên cũ; người đang ở thư mục khác thì chuyển sang (mỗi người chỉ thuộc một thư mục).
+     */
+    addFolderPeople(fid, people) {
+      if (!Array.isArray(people)) throw new InvalidPermissions('Danh sách người không hợp lệ.');
+      const { data } = read();
+      const current = folderOrThrow(data, fid).people || [];
+      const incoming = new Map(people.map((p) => [String(p?.uid ?? ''), p]));
+      const merged = current.map((p) => (incoming.has(p.uid) ? { uid: p.uid, name: tidy(incoming.get(p.uid).name, MAX_NAME) || p.name } : p));
+      const have = new Set(current.map((p) => p.uid));
+      return this.setFolderPeople(fid, [...merged, ...people.filter((p) => !have.has(String(p?.uid ?? '')))]);
+    },
     setFolderPeople(fid, people) {
       if (!Array.isArray(people) || people.some((p) => !isObj(p) || !ZALO_UID.test(String(p.uid ?? '')))) {
         throw new InvalidPermissions('Danh sách người không hợp lệ — UID Zalo là dãy 15–22 chữ số.');
