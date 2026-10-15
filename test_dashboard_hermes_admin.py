@@ -221,6 +221,29 @@ class HelperEndToEndTest(unittest.TestCase):
             self.assertEqual((bad["ok"], bad.get("user")), (False, True), list(files))
         self.assertFalse(os.path.exists(os.path.join(home, "hermes-agent", "evil.py")))
 
+    def test_backup_never_includes_itself_or_older_backups(self):
+        # Bố cục thật: bản sao lưu nằm trong <HERMES_HOME>/zalo/dashboard/backups — tức là bên trong zalo/ được sao lưu.
+        # Trước đây tệp .partial đang ghi tự nén chính nó (phình tới hàng chục GB) và mỗi bản gom luôn mã tải về.
+        home = self.home
+        dash = os.path.join(home, "zalo", "dashboard")
+        out = os.path.join(dash, "backups")
+        for d in (out, os.path.join(dash, "update-tmp"), os.path.join(dash, "outbox")):
+            os.makedirs(d, exist_ok=True)
+        write(os.path.join(home, "zalo", "permissions.json"), "{}")
+        write(os.path.join(out, "hermes-zalo-20260101-000000.zip"), "bản cũ")
+        write(os.path.join(out, "hermes-zalo-20260101-000001.zip.partial"), "dở dang")
+        write(os.path.join(dash, "update-tmp", "code.tar.gz"), "mã tải về")
+        write(os.path.join(dash, "outbox", "gui.pdf"), "tệp chờ gửi")
+        first = self.run_cmd("backup.create", {"dir": out})
+        second = self.run_cmd("backup.create", {"dir": out})
+        for r in (first, second):
+            self.assertTrue(r["ok"], r)
+            with zipfile.ZipFile(os.path.join(out, r["file"])) as zf:
+                names = set(zf.namelist())
+            self.assertIn("zalo/permissions.json", names)
+            leaked = sorted(n for n in names if n.startswith(("zalo/dashboard/backups/", "zalo/dashboard/update-tmp/", "zalo/dashboard/outbox/")) or n.endswith(".partial"))
+            self.assertEqual(leaked, [], "bản sao lưu không chứa chính nó, bản cũ, mã tải về hay tệp chờ gửi")
+
     def test_refusals_are_user_errors(self):
         r = self.run_cmd("skills.uninstall", {"name": "khong-co"})
         self.assertEqual((r["ok"], r.get("user")), (False, True))

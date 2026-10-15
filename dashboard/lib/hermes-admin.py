@@ -757,6 +757,9 @@ BACKUP_FILES = {"config.yaml", ".env", "SOUL.md", "auth.json", "cron/jobs.json"}
 BACKUP_DIRS = ("memories/", "skills/", "zalo/")
 BACKUP_SKIP_PARTS = {".hub", "node_modules", "__pycache__", ".git", "venv", ".venv", ".cache"}
 BACKUP_SKIP_FILES = {"zalo/dashboard/sessions.json"}
+# Thư mục của dashboard nằm trong zalo/ nhưng không phải cài đặt: chính các bản sao lưu (tệp .partial đang ghi từng tự
+# nén chính nó, phình tới hàng chục GB), mã tải về khi cập nhật, tệp chờ gửi.
+BACKUP_SKIP_PREFIXES = ("zalo/dashboard/backups/", "zalo/dashboard/update-tmp/", "zalo/dashboard/outbox/")
 BACKUP_MAX_FILE = 20 * 1024 * 1024
 BACKUP_KEEP = 5
 BACKUP_NAME = re.compile(r"^hermes-zalo-\d{8}-\d{6}(-[a-z0-9-]{1,30})?\.zip$")
@@ -773,7 +776,7 @@ def _backup_wanted(rel):
     parts = rel.split("/")
     if any(p in BACKUP_SKIP_PARTS or p in ("", ".", "..") for p in parts) or rel in BACKUP_SKIP_FILES:
         return False
-    if rel.endswith((".pyc", ".db-wal", ".db-shm", ".lock")):
+    if rel.endswith((".pyc", ".db-wal", ".db-shm", ".lock", ".partial")) or rel.startswith(BACKUP_SKIP_PREFIXES):
         return False
     return rel in BACKUP_FILES or rel.startswith(BACKUP_DIRS)
 
@@ -800,6 +803,8 @@ def _make_backup(out_dir, label=""):
         for path in sorted(p for r in roots for p in ([r] if r.is_file() else r.rglob("*") if r.is_dir() else [])):
             if not path.is_file() or path.is_symlink():
                 continue
+            if os.path.abspath(path) in (os.path.abspath(tmp), os.path.abspath(final)):
+                continue  # không bao giờ nén chính tệp đang ghi (thư mục sao lưu có thể nằm trong vùng được sao lưu)
             rel = path.relative_to(home).as_posix()
             if not _backup_wanted(rel):
                 continue

@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.43.2] — 2026-10-15
+
+### Sửa
+
+- **Sao lưu cài đặt có thể tự nén chính nó, phình tới hàng chục GB và làm cập nhật bot treo**: thư mục chứa bản sao lưu nằm trong vùng được sao lưu (`zalo/`), tệp `.partial` đang ghi bị đưa vào danh sách nén. Nay bản sao lưu không bao giờ chứa chính nó, các bản cũ, mã tải về khi cập nhật (`update-tmp/`) hay tệp chờ gửi (`outbox/`) — bản sao lưu cũng nhẹ đi nhiều.
+
 ## [2.43.1] — 2026-10-15
 
 ### Sửa
