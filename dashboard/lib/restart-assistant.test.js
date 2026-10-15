@@ -76,3 +76,40 @@ test('spawn phát sự kiện error (ENOENT) thì rejects', async () => {
   const spawnImpl = () => { const c = new EventEmitter(); c.unref = () => {}; setImmediate(() => c.emit('error', new Error('ENOENT'))); return c; };
   await assert.rejects(makeRestartAssistant({ cmd: 'do-it', platform: 'linux', hermesHome: '/h', spawnImpl })(), /ENOENT/);
 });
+
+// Tiến trình giả có sự kiện spawn/exit như ChildProcess.
+function proc() {
+  const h = {};
+  const p = {
+    on(ev, fn) { (h[ev] ||= []).push(fn); return p; }, once(ev, fn) { return p.on(ev, fn); },
+    removeListener() { return p; }, unref() {},
+    emit(ev, ...a) { for (const fn of h[ev] || []) fn(...a); },
+  };
+  setImmediate(() => p.emit('spawn'));
+  return p;
+}
+const tick = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test('Windows: gateway cũ chưa nhả khoá (Hermes thoát mã 75) thì đợi rồi chạy lại; mã khác thì thôi; có giới hạn', async () => {
+  const kids = [];
+  const spawnImpl = () => { const p = proc(); kids.push(p); return p; };
+  const execImpl = async () => ({ stdout: '' });
+  const restart = makeRestartAssistant({ platform: 'win32', hermesHome: 'C:/h', spawnImpl, execImpl, existsImpl: () => true, retryDelayMs: 5, maxRetries: 2 });
+  await restart();
+  assert.equal(kids.length, 1);
+  kids[0].emit('exit', 75);
+  await tick(30);
+  assert.equal(kids.length, 2, 'mã 75 → chạy lại');
+  kids[1].emit('exit', 75);
+  await tick(30);
+  assert.equal(kids.length, 3);
+  kids[2].emit('exit', 75);
+  await tick(30);
+  assert.equal(kids.length, 3, 'quá số lần thử thì dừng');
+
+  const other = [];
+  await makeRestartAssistant({ platform: 'win32', hermesHome: 'C:/h', spawnImpl: () => { const p = proc(); other.push(p); return p; }, execImpl, existsImpl: () => true, retryDelayMs: 5 })();
+  other[0].emit('exit', 1);
+  await tick(30);
+  assert.equal(other.length, 1, 'thoát vì lỗi khác thì không chạy lại vô tận');
+});

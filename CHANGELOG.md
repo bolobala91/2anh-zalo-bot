@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.43.3] — 2026-10-15
+
+### Sửa
+
+- **Windows + Hermes mới: cập nhật bot tự quay về bản cũ vì trợ lý không chạy lại** — gateway cũ vừa tắt chưa kịp nhả khoá "mỗi máy một gateway", gateway mới bị Hermes từ chối (mã 75) và không ai chạy lại. Nay gặp mã 75 thì đợi 5 giây rồi chạy lại (tối đa 10 lần).
+
 ## [2.43.2] — 2026-10-15
 
 ### Sửa
