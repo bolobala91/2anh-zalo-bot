@@ -194,6 +194,53 @@ class PeopleScopeToolsTest(PermissionsFile, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(people.describe_person(MEMBER), "Lan", "không rõ nơi → chỉ tên")
 
 
+class FolderRulesTest(PermissionsFile, unittest.TestCase):
+    """Quy tắc riêng của thư mục: chỉ nhóm/người trong thư mục được đính, nơi khác không."""
+
+    def setUp(self):
+        super().setUp()
+        from plugins.zalo_tools import folder_rules
+        self.fr = folder_rules
+        self.fr._seen.clear()
+        self.write({"version": 1, "folders": {
+            "khkt1": {"name": "KHKT", "groups": [GROUP_A], "people": [{"uid": MEMBER, "name": "Em A"}],
+                      "rules": "1. Hỏi trước – gợi sau.\n2. Không làm hộ bài đánh giá."},
+            "lop": {"name": "Lớp", "groups": [GROUP_B]},
+        }})
+
+    def hook(self, thread_id, is_group, sender, session="s1"):
+        zalo_tools.bind_turn({"sender_uid": sender, "thread_id": thread_id, "is_group": is_group, "is_owner": False})
+        self.addCleanup(zalo_tools.bind_turn, None)
+        return self.fr.pre_llm_call(session_id=session, platform="zalo")
+
+    def test_lookup_by_group_folder_and_person_folder(self):
+        self.assertEqual(gp.folder_rules(GROUP_A, True)[0], "KHKT")
+        self.assertIsNone(gp.folder_rules(GROUP_B, True))  # thư mục không có quy tắc
+        self.assertEqual(gp.folder_rules(MEMBER, False, MEMBER)[0], "KHKT")
+        self.assertIsNone(gp.folder_rules(OWNER, False, OWNER))
+
+    def test_hook_injects_full_rules_then_short_reminder_and_repeats(self):
+        first = self.hook(GROUP_A, True, OWNER)["context"]
+        self.assertIn("Không làm hộ bài đánh giá", first)
+        second = self.hook(GROUP_A, True, OWNER)["context"]
+        self.assertNotIn("Không làm hộ", second)
+        self.assertIn("KHKT", second)
+        for _ in range(self.fr.REPEAT_EVERY - 2):
+            self.hook(GROUP_A, True, OWNER)
+        self.assertIn("Không làm hộ", self.hook(GROUP_A, True, OWNER)["context"])
+
+    def test_dm_of_person_in_folder_gets_rules_others_do_not(self):
+        self.assertIn("Hỏi trước", self.hook(MEMBER, False, MEMBER, "dm")["context"])
+        self.assertIsNone(self.hook(GROUP_B, True, MEMBER, "g2"))
+        self.assertIsNone(self.hook(OWNER, False, OWNER, "o"))
+        self.assertIsNone(self.fr.pre_llm_call(session_id="x", platform="telegram"))
+
+    def test_changed_rules_are_sent_again_in_full(self):
+        self.hook(GROUP_A, True, OWNER)
+        self.write({"version": 1, "folders": {"khkt1": {"name": "KHKT", "groups": [GROUP_A], "rules": "Quy tắc mới."}}})
+        self.assertIn("Quy tắc mới.", self.hook(GROUP_A, True, OWNER)["context"])
+
+
 class BomTest(PermissionsFile, unittest.TestCase):
     def test_hand_edited_file_with_bom_is_read(self):
         with open(self.path, "w", encoding="utf-8-sig") as fh:

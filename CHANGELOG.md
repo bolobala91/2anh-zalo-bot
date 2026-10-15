@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.47.0] — 2026-10-16
+
+### Thêm — Quy tắc riêng cho từng thư mục
+
+- Phân quyền Bot › chọn một thư mục › **Quy tắc riêng của thư mục**: viết bộ quy tắc (tối đa 3.000 ký tự, mỗi quy tắc một dòng). Bot làm theo bộ quy tắc này khi trả lời **trong nhóm thuộc thư mục** và khi **người trong thư mục nhắn riêng**; nhóm/người ngoài thư mục không bị ảnh hưởng. Ví dụ: thư mục "KHKT" với các quy tắc "hỏi trước – gợi sau", "không làm hộ bài đánh giá", "có nguồn mới khẳng định".
+- Áp dụng từ tin nhắn tiếp theo, không cần khởi động lại. Đổi thư mục của nhóm/người là đổi quy tắc theo.
+- Bot nhận đủ bộ quy tắc ở lượt đầu của phiên, khi quy tắc đổi và nhắc lại định kỳ; các lượt giữa chỉ một dòng nhắc — không làm phình lịch sử hội thoại.
+
 ## [2.46.0] — 2026-10-15
 
 ### Thêm — Tổng quan › Sử dụng AI

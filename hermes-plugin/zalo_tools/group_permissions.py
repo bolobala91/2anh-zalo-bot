@@ -227,6 +227,21 @@ def _folders(raw: Any) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str], Dict[
     return layers, owner, person_owner
 
 
+FOLDER_RULES_MAX = 3000
+
+
+def _folder_rules(raw: Any) -> Dict[str, Tuple[str, str]]:
+    """``{fid: (tên thư mục, quy tắc riêng)}`` — chỉ thư mục có quy tắc (dashboard › Phân quyền › thư mục)."""
+    out: Dict[str, Tuple[str, str]] = {}
+    for fid, entry in (raw.items() if isinstance(raw, dict) else []):
+        if not _FOLDER_ID.match(str(fid)) or not isinstance(entry, dict):
+            continue
+        rules = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", str(entry.get("rules") or "")).strip()[:FOLDER_RULES_MAX]
+        if rules:
+            out[str(fid)] = (str(entry.get("name") or "Thư mục")[:60], rules)
+    return out
+
+
 def _parse(text: str) -> Dict[str, Any]:
     data = json.loads(text)
     if not isinstance(data, dict) or data.get("version") != 1:
@@ -234,6 +249,7 @@ def _parse(text: str) -> Dict[str, Any]:
     groups = data.get("groups") if isinstance(data.get("groups"), dict) else {}
     folders, folder_of, person_folder = _folders(data.get("folders"))
     return {
+        "folder_rules": _folder_rules(data.get("folders")),
         "defaults": _layer(data.get("defaults")),
         "folders": folders,
         "folder_of": folder_of,
@@ -303,6 +319,16 @@ def _person_folder_layer(data: Dict[str, Any], uid: str) -> Optional[Dict[str, A
     """Lớp thư mục chứa người này (None = không ở thư mục nào)."""
     fid = (data.get("person_folder") or {}).get(str(uid or ""))
     return ((data.get("folders") or {}).get(fid) or {}) if fid else None
+
+
+def folder_rules(thread_id: str, is_group: bool, sender_uid: str = "") -> Optional[Tuple[str, str]]:
+    """Quy tắc riêng của thư mục chứa cuộc trò chuyện này: nhóm → thư mục của nhóm; nhắn riêng → thư mục của người.
+
+    Trả ``(tên thư mục, quy tắc)`` hoặc None."""
+    data = _load()
+    key = "folder_of" if is_group else "person_folder"
+    fid = (data.get(key) or {}).get(str((thread_id if is_group else sender_uid) or ""))
+    return (data.get("folder_rules") or {}).get(fid) if fid else None
 
 
 def tool_off(tool_name: str) -> bool:

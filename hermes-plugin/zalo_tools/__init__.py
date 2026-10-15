@@ -63,6 +63,12 @@ def register(ctx) -> None:
         ctx.register_hook("pre_llm_call", freshness.pre_llm_call)
     except Exception:  # cố hết sức — thiếu thì bot vẫn trả lời, chỉ không tự tra trước
         logger.warning("[zalo] không bật được tra cứu trước khi trả lời", exc_info=True)
+    # Quy tắc riêng của thư mục (Phân quyền › thư mục): nhóm/người trong thư mục được trả lời theo bộ quy tắc đó.
+    try:
+        from . import folder_rules
+        ctx.register_hook("pre_llm_call", folder_rules.pre_llm_call)
+    except Exception:  # cố hết sức — thiếu thì bot trả lời theo vai trò chung
+        logger.warning("[zalo] không bật được quy tắc riêng của thư mục", exc_info=True)
     # Cài đặt trả lời (xưng hô, độ dài, màu…) + giờ hiện tại: đính mỗi lượt Zalo, sửa là áp dụng ngay — xem reply_style.py.
     try:
         from . import reply_style

@@ -131,3 +131,20 @@ test('thêm người vào thư mục (từ Liên hệ): giữ người cũ, bỏ
   assert.throws(() => store.addFolderPeople(f1, [{ uid: '12' }]), InvalidPermissions);
   assert.throws(() => store.addFolderPeople('khong-co', [{ uid: P }]), InvalidPermissions);
 });
+
+test('quy tắc riêng của thư mục: lưu giữ xuống dòng, lưu cài đặt/đổi màu không làm rơi, rỗng = bỏ, quá dài bị chặn', (t) => {
+  const { store, disk } = fresh(t);
+  const { id } = store.createFolder('KHKT');
+  store.setFolderMembers(id, [A]);
+  const state = store.setFolderRules(id, '  1. Hỏi trước – gợi sau.\r\n2. Không làm hộ.\u0007  ');
+  assert.equal(state.folders[0].rules, '1. Hỏi trước – gợi sau.\n2. Không làm hộ.');
+  store.setFolderSettings(id, body({}, { web: false }));
+  store.setFolderColor(id, 'red');
+  assert.equal(disk().folders[id].rules, '1. Hỏi trước – gợi sau.\n2. Không làm hộ.');
+  assert.equal(normalizeFolders(disk().folders)[id].rules, '1. Hỏi trước – gợi sau.\n2. Không làm hộ.');
+  assert.throws(() => store.setFolderRules(id, 'x'.repeat(3001)), InvalidPermissions);
+  assert.throws(() => store.setFolderRules(id, null), InvalidPermissions);
+  store.setFolderRules(id, '   ');
+  assert.equal('rules' in disk().folders[id], false);
+  assert.equal(store.get().folders[0].rules, '');
+});

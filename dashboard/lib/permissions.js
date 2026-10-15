@@ -76,6 +76,8 @@ export const MAX_FOLDER_PEOPLE = 300;
 /** Màu thư mục (khớp public/views/folder-ui.js). Plugin và kết nối Zalo không dùng tới. */
 export const FOLDER_COLORS = ['blue', 'green', 'orange', 'purple', 'pink', 'teal', 'red', 'indigo', 'gray'];
 const MAX_FOLDER_NAME = 60;
+/** Quy tắc riêng của thư mục (bot đính vào lượt trả lời ở nhóm/người trong thư mục) — giống FOLDER_RULES_MAX bên Python. */
+export const MAX_FOLDER_RULES = 3000;
 const MAX_DM_PEOPLE = 200;
 const MAX_PERSON_NAME = 80;
 
@@ -90,6 +92,9 @@ const studioOff = () => Object.fromEntries(STUDIO_KEYS.map((k) => [k, false]));
 // Ở mặc định và nhắn riêng chỉ ghi nút xưởng đang BẬT (thiếu khoá = tắt) — tệp gọn, bản cũ đọc vẫn y như trước.
 const onlyOn = (studio) => Object.fromEntries(STUDIO_KEYS.filter((k) => studio[k] === true).map((k) => [k, true]));
 const tidy = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+// Quy tắc viết thành danh sách: giữ xuống dòng, bỏ ký tự điều khiển.
+// eslint-disable-next-line no-control-regex
+const tidyRules = (v) => (typeof v === 'string' ? v.replace(/\r\n?/g, '\n').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').trim().slice(0, MAX_FOLDER_RULES) : '');
 
 /** `_truthy` của adapter: None → mặc định, còn lại so chuỗi đã hạ chữ thường. */
 const truthy = (v, dflt = false) => (v === undefined || v === null ? dflt : ['1', 'true', 'yes', 'on'].includes(String(v).trim().toLowerCase()));
@@ -215,7 +220,8 @@ export function normalizeFolders(raw) {
       people.push(name ? { uid, name } : { uid });
     }
     const color = FOLDER_COLORS.includes(entry.color) ? entry.color : null;
-    out[fid] = { name: tidy(entry.name, MAX_FOLDER_NAME) || 'Thư mục', ...(color ? { color } : {}), groups, ...(people.length ? { people } : {}), ...layer(entry) };
+    const rules = tidyRules(entry.rules);
+    out[fid] = { name: tidy(entry.name, MAX_FOLDER_NAME) || 'Thư mục', ...(color ? { color } : {}), groups, ...(people.length ? { people } : {}), ...(rules ? { rules } : {}), ...layer(entry) };
   }
   return out;
 }
@@ -466,7 +472,7 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
         ...Object.fromEntries(QUOTA_KEYS.map((k) => [k, g[k] ?? base[k]])) }];
     }));
     const folders = Object.entries(data.folders || {}).map(([id, f], i) => ({
-      id, name: f.name, color: f.color || FOLDER_COLORS[i % FOLDER_COLORS.length], groups: [...f.groups], people: (f.people || []).map((p) => ({ uid: p.uid, name: p.name || '' })), ...merge(defaults, f), ...quotasOf(f),
+      id, name: f.name, color: f.color || FOLDER_COLORS[i % FOLDER_COLORS.length], groups: [...f.groups], people: (f.people || []).map((p) => ({ uid: p.uid, name: p.name || '' })), rules: f.rules || '', ...merge(defaults, f), ...quotasOf(f),
     }));
     return { exists, corrupt, defaults, groups, folders, dm: dmView(data.dm), studio: studioView(data.studio), toolsOff: data.tools?.off || [] };
   };
@@ -581,6 +587,17 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       write(data);
       return view({ data, exists: true, corrupt: false });
     },
+    /** Quy tắc riêng của thư mục (rỗng = bỏ): bot làm theo khi trả lời nhóm/người trong thư mục. */
+    setFolderRules(fid, rules) {
+      if (typeof rules !== 'string') throw new InvalidPermissions('Quy tắc không hợp lệ — tải lại trang rồi thử lại.');
+      if (rules.trim().length > MAX_FOLDER_RULES) throw new InvalidPermissions(`Quy tắc dài quá ${MAX_FOLDER_RULES} ký tự — rút gọn bớt.`);
+      const { data } = read();
+      const folder = folderOrThrow(data, fid);
+      const clean = tidyRules(rules);
+      if (clean) folder.rules = clean; else delete folder.rules;
+      write(data);
+      return view({ data, exists: true, corrupt: false });
+    },
     setFolderColor(fid, color) {
       if (!FOLDER_COLORS.includes(color)) throw new InvalidPermissions('Màu không hợp lệ — chọn lại trong bảng màu.');
       const { data } = read();
@@ -655,7 +672,7 @@ export function createPermissionsStore({ file, globalReplyOnlyTagged = true, dmE
       seedReplyOnlyTagged(data);
       const defaults = { ...merge(builtin(), data.defaults), ...noQuotas() };
       const { entry, changed } = diffLayer(settings, defaults, folder);
-      data.folders[fid] = { name: folder.name, ...(folder.color ? { color: folder.color } : {}), groups: folder.groups, ...(folder.people?.length ? { people: folder.people } : {}), ...entry };
+      data.folders[fid] = { name: folder.name, ...(folder.color ? { color: folder.color } : {}), groups: folder.groups, ...(folder.people?.length ? { people: folder.people } : {}), ...(folder.rules ? { rules: folder.rules } : {}), ...entry };
       write(data);
       return { state: view({ data, exists: true, corrupt: false }), changed };
     },

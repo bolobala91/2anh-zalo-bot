@@ -25,6 +25,7 @@ const pick = (s) => ({ active: s.active, replyOnlyTagged: s.replyOnlyTagged, fea
   studio: { ...(s.studio || {}) }, studioQuota: s.studioQuota ?? null, imageQuota: s.imageQuota ?? null, videoQuota: s.videoQuota ?? null });
 // Hạn mức theo nhóm/thư mục: lượt xưởng, ảnh AI, video AI (null = theo lớp trên).
 const QUOTA_KEYS = ['studioQuota', 'imageQuota', 'videoQuota'];
+const MAX_RULES = 3000; // = MAX_FOLDER_RULES (lib/permissions.js)
 const sameQuotas = (a, b) => QUOTA_KEYS.every((k) => (a[k] ?? null) === (b[k] ?? null));
 const sameBools = (a = {}, b = {}) => Object.keys({ ...a, ...b }).every((k) => a[k] === b[k]);
 const quotaText = (v) => (v === null || v === undefined ? '' : String(v));
@@ -278,6 +279,8 @@ function FolderEditor({ folder, perms, list, admin, onSaved, onBack, onDirty, on
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState({});
   const membersDirty = picked.size !== folder.groups.length || folder.groups.some((id) => !picked.has(id));
+  const [rules, setRules] = useState(folder.rules || '');
+  const rulesDirty = rules.trim() !== (folder.rules || '');
   const base = `/api/permissions/folders/${encodeURIComponent(folder.id)}`;
   async function run(key, path, method, body, ok) {
     setBusy(key); setMsg({});
@@ -325,6 +328,19 @@ function FolderEditor({ folder, perms, list, admin, onSaved, onBack, onDirty, on
       </div>
     </details>
     <${FolderPeople} folder=${folder} folders=${perms.folders} admin=${admin} busy=${busy} run=${run} base=${base} />
+    <details class="perm-box" open=${!!folder.rules}>
+      <summary><span>Quy tắc riêng của thư mục</span><span class="muted perm-box-sum">· ${folder.rules ? 'đang dùng' : 'chưa đặt'}${rulesDirty ? ' (chưa lưu)' : ''}</span></summary>
+      <p class="muted small">Bot làm theo các quy tắc này khi trả lời trong nhóm thuộc thư mục, và khi người trong thư mục nhắn riêng. Nơi khác không bị ảnh hưởng. Mỗi quy tắc một dòng là dễ đọc nhất.</p>
+      <label for="folder-rules" class="sr-only">Quy tắc riêng của thư mục</label>
+      <textarea id="folder-rules" rows="10" maxlength=${MAX_RULES} value=${rules} onInput=${(e) => setRules(e.currentTarget.value)}
+        placeholder="Vd. 1. Hỏi trước – gợi sau: hỏi em đã thử gì rồi mới gợi ý từng bước."></textarea>
+      <p class="muted small">${rules.trim().length}/${MAX_RULES} ký tự</p>
+      <div class="row">
+        <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== '' || !rulesDirty}
+          onClick=${() => run('rules', `${base}/rules`, 'PUT', { rules }, rules.trim() ? 'Đã lưu quy tắc — áp dụng từ tin nhắn tiếp theo.' : 'Đã bỏ quy tắc riêng của thư mục.')}>Lưu quy tắc</button>
+        <button type="button" class="btn btn-ghost btn-sm" disabled=${busy !== '' || !rulesDirty} onClick=${() => setRules(folder.rules || '')}>Hoàn tác</button>
+      </div>
+    </details>
     <details class="perm-box">
       <summary><span>Tên, màu và xoá thư mục</span></summary>
       <p class="small">Màu thư mục — để phân biệt ở Phân quyền và Phiên chat:</p>
