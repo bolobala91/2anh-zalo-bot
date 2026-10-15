@@ -333,6 +333,18 @@ def draw_with(engine: Dict[str, Any], prompt: str, size: str, refs: List[str]) -
     raise EngineError("nguồn lạ")
 
 
+def _ai_event(kind: str, **kw) -> None:
+    """Ghi sổ sự kiện AI cho dashboard (Tổng quan › Sử dụng AI) — cố hết sức, không bao giờ làm hỏng việc vẽ/tạo."""
+    try:
+        try:
+            from .ai_events import record
+        except ImportError:  # test trong repo nạp mô-đun rời
+            from ai_events import record
+        record(kind, **kw)
+    except Exception:
+        logger.debug("[zalo] không ghi được sự kiện AI", exc_info=True)
+
+
 def draw(prompt: str, *, size: Optional[str] = None, aspect: str = "square",
          refs: Optional[List[str]] = None) -> Dict[str, Any]:
     """Vẽ theo thứ tự ưu tiên: {data, engine, model, fallbacks: ["Stali: lỗi 402 …"]}. Hết nguồn thì EngineError."""
@@ -356,7 +368,9 @@ def draw(prompt: str, *, size: Optional[str] = None, aspect: str = "square",
             failed.append(f"{ENGINE_LABELS[engine['id']]}: {type(exc).__name__}")
             logger.warning("[zalo] vẽ ảnh qua %s lỗi", engine["id"], exc_info=True)
             continue
+        _ai_event("image", engine=engine["id"], model=engine["model"], fallbacks=len(failed), turn=_zalo_turn())
         return {"data": data, "engine": engine["id"], "model": engine["model"], "fallbacks": failed}
+    _ai_event("image", ok=False, fallbacks=len(failed), turn=_zalo_turn())
     raise EngineError("không nguồn nào vẽ được — " + "; ".join(failed))
 
 
@@ -437,7 +451,12 @@ def make_video(prompt: str, *, model: Optional[str] = None, seconds: Optional[in
                refs: Optional[List[str]] = None, sleep=time.sleep, clock=time.monotonic) -> Dict[str, Any]:
     """Tạo video và chờ tới khi xong (ngoài Zalo: CLI, cron). Trả {data, model, seconds, id, aspect}."""
     job = submit_video(prompt, model=model, seconds=seconds, aspect=aspect, refs=refs)
-    data = wait_video(job, sleep=sleep, clock=clock)
+    try:
+        data = wait_video(job, sleep=sleep, clock=clock)
+    except Exception:
+        _ai_event("video", engine="stali", model=job["model"], seconds=job["seconds"], ok=False, turn=_zalo_turn())
+        raise
+    _ai_event("video", engine="stali", model=job["model"], seconds=job["seconds"], turn=_zalo_turn())
     return {"data": data, "model": job["model"], "seconds": job["seconds"], "id": job["id"], "aspect": job["aspect"]}
 
 
@@ -480,7 +499,12 @@ def _send_to_turn(turn: Dict[str, Any], payload: Dict[str, Any]) -> bool:
 
 def _finish_in_background(turn: Dict[str, Any], job: Dict[str, Any], prompt: str, save, wait=wait_video, send=_send_to_turn) -> None:
     try:
-        data = wait(job, timeout=BACKGROUND_TIMEOUT)
+        try:
+            data = wait(job, timeout=BACKGROUND_TIMEOUT)
+        except Exception:
+            _ai_event("video", engine="stali", model=job["model"], seconds=job["seconds"], ok=False, turn=turn)
+            raise
+        _ai_event("video", engine="stali", model=job["model"], seconds=job["seconds"], turn=turn)
         path = save(data, prefix=f"stali_{job['model']}")
         caption = f"🎬 Video {job['seconds']} giây: {prompt[:150]}"
         if not send(turn, {"msg": caption, "attachments": [str(path)]}):

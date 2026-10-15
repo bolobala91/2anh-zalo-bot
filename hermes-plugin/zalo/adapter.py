@@ -1104,6 +1104,15 @@ class ZaloAdapter(BasePlatformAdapter):
         # Chỉ đếm ảnh cho câu "đã đính kèm cho Vision": tài liệu đi đường khác,
         # Hermes tự chèn ghi chú trỏ agent tới tệp đã lưu.
         image_count = sum(1 for mime in media_types if mime.startswith("image/"))
+        if image_count:
+            # Sổ sự kiện AI (Tổng quan › Sử dụng AI): lượt đọc ảnh (vision) — cố hết sức.
+            try:
+                events = _zalo_tools_module("ai_events", "record")
+                events.record("vision", model=events.main_model(), n=image_count, turn={
+                    "sender_uid": sender_uid, "sender_name": sender_name, "thread_id": thread_id,
+                    "is_group": is_group, "is_owner": self._is_owner(sender_uid)})
+            except Exception:
+                logger.debug("[zalo] không ghi được lượt đọc ảnh", exc_info=True)
         channel_context = (
             self._build_channel_context(context_entries, image_count, attach_failures)
             if is_group else self._image_failure_note(attach_failures)

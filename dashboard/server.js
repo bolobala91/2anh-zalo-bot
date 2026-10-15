@@ -43,6 +43,7 @@ import { createAiKeys } from './lib/ai-keys.js';
 import { createAiModels } from './lib/ai-models.js';
 import { createMediaEngines } from './lib/media-engines.js';
 import { createBotUses } from './lib/bot-uses.js';
+import { createAiEvents } from './lib/ai-events.js';
 import { createAgentTrace } from './lib/agent-trace.js';
 import { createMcpServers } from './lib/mcp-servers.js';
 import { createSettings } from './lib/settings.js';
@@ -95,6 +96,10 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
       personName: (uid) => { try { return (uid && (store.senderNames([uid]).get(uid) || people.list().find((p) => p.uid === uid)?.name)) || ''; } catch { return ''; } },
       // Chưa đọc được lịch sử tin nhắn thì không lọc (tránh bảng trống).
       isKnown: (uid) => !store.available() || store.senderNames([uid]).has(uid) || people.list().some((p) => p.uid === uid),
+    }),
+    aiEvents: createAiEvents({
+      hermesHome: paths.hermesHome,
+      personName: (uid) => { try { return (uid && (store.senderNames([uid]).get(uid) || people.list().find((p) => p.uid === uid)?.name)) || ''; } catch { return ''; } },
     }),
     threadNames,
     users,

@@ -3,7 +3,7 @@ import { requireAuth } from '../lib/http-guards.js';
 import { startOfDayVN } from '../lib/store-reader.js';
 import { fallbackName } from '../lib/thread-names.js';
 
-export function statusRoutes({ sidecar, linker, store, threadNames, health = null, botUses = null, now = Date.now }) {
+export function statusRoutes({ sidecar, linker, store, threadNames, health = null, botUses = null, aiEvents = null, now = Date.now }) {
   // Số đo máy chủ mới nhất (đã có sẵn trong bộ nhớ, không đo thêm) cho menu và Tổng quan.
   const host = () => {
     try { const h = health?.latest?.(); return h ? { cpuPct: h.cpuPct, ramPct: h.ramPct, diskPct: h.diskPct } : null; } catch { return null; }
@@ -22,6 +22,22 @@ export function statusRoutes({ sidecar, linker, store, threadNames, health = nul
       return null;
     }
   };
+  // Sử dụng AI (Tổng quan): đọc ảnh, vẽ ảnh, tạo video theo loại / model / ngày; đệm 30 giây theo khoảng ngày.
+  const aiCache = new Map();
+  r.get('/ai-events', requireAuth, (req, res) => {
+    if (!aiEvents) return res.status(404).json({ ok: false, error: 'Chưa có số liệu sử dụng AI.' });
+    try {
+      const days = Number(req.query.days) || 7;
+      const hit = aiCache.get(days);
+      if (hit && now() - hit.at < 30_000) return res.json({ ok: true, ...hit.value });
+      const value = aiEvents.stats(days);
+      aiCache.set(days, { at: now(), value });
+      res.json({ ok: true, ...value });
+    } catch (err) {
+      console.error('[dashboard] đọc số liệu sử dụng AI lỗi:', err);
+      res.status(500).json({ ok: false, error: 'Chưa đọc được số liệu sử dụng AI.' });
+    }
+  });
   // Khách dùng bot (Tổng quan): lượt trong nhóm / nhắn riêng + xếp hạng; đệm 60 giây theo khoảng ngày.
   const usesCache = new Map();
   r.get('/bot-uses', requireAuth, (req, res) => {

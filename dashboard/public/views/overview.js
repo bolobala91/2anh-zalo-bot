@@ -218,6 +218,52 @@ function BotUses() {
   <//>`;
 }
 
+const KIND_LABEL = { vision: 'Đọc ảnh', image: 'Vẽ ảnh', video: 'Tạo video' };
+const ENGINE_LABEL = { stali: 'Stali', '9router': '9router', codex: 'ChatGPT (Codex)' };
+const nf = new Intl.NumberFormat('vi-VN');
+
+/** Sử dụng AI ngoài lượt gọi model chính: đọc ảnh, vẽ ảnh, tạo video — theo loại, nguồn + model, người dùng. */
+function AiUse({ usageDays }) {
+  const [days, setDays] = useState(7);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let alive = true;
+    setError('');
+    api(`/api/ai-events?days=${days}`).then((r) => { if (alive) setData(r); }, (e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
+  }, [days]);
+  const ready = data && data.days === days;
+  const inRange = ready ? new Set(data.daily.map((d) => d.date)) : new Set();
+  const calls = (usageDays || []).filter((d) => inRange.has(d.date)).reduce((a, d) => a + (d.calls || 0), 0);
+  const tot = ready ? data.totals : null;
+  const pair = (t) => `${nf.format(t.ok)}${t.failed ? ` · ${nf.format(t.failed)} lỗi` : ''}`;
+  return html`<${Card} title="Sử dụng AI" icon="bot" tint="purple" extra="ov-ai-card">
+    <div class="chips" role="group" aria-label="Khoảng thời gian">${USE_PERIODS.map(([d, label]) => html`<button key=${d} type="button"
+      class="btn btn-secondary btn-sm chip" aria-pressed=${days === d ? 'true' : 'false'} onClick=${() => setDays(d)}>${label}</button>`)}</div>
+    ${error ? html`<p class="muted small">${error}</p>` : !ready ? html`<${Spinner} />` : html`
+      <dl class="ov-facts ov-ai-facts">
+        <div><dt>Lượt gọi AI</dt><dd>${nf.format(calls)}</dd><dd class="ov-small muted">trò chuyện, công cụ</dd></div>
+        <div><dt>Đọc ảnh (vision)</dt><dd>${nf.format(tot.vision.ok)}</dd><dd class="ov-small muted">${nf.format(tot.vision.images)} ảnh</dd></div>
+        <div><dt>Vẽ ảnh</dt><dd>${pair(tot.image)}</dd><dd class="ov-small muted">${data.fallbacks ? `${nf.format(data.fallbacks)} lần chuyển nguồn dự phòng` : 'thành công'}</dd></div>
+        <div><dt>Tạo video</dt><dd>${pair(tot.video)}</dd><dd class="ov-small muted">${nf.format(tot.video.seconds)} giây</dd></div>
+      </dl>
+      ${data.byModel.length ? html`<div class="table-wrap"><table class="ov-table">
+        <thead><tr><th>Việc</th><th>Nguồn</th><th>Model</th><th class="num">Thành công</th><th class="num">Lỗi</th></tr></thead>
+        <tbody>${data.byModel.map((m) => html`<tr key=${`${m.kind}|${m.engine}|${m.model}`}>
+          <td>${KIND_LABEL[m.kind]}</td><td>${m.kind === 'vision' ? 'Model chính' : (ENGINE_LABEL[m.engine] || (m.engine || '—'))}</td>
+          <td><code>${m.model || (m.kind === 'image' ? 'không nguồn nào vẽ được' : '—')}</code></td>
+          <td class="num">${nf.format(m.ok)}</td><td class="num">${m.failed ? nf.format(m.failed) : '—'}</td></tr>`)}</tbody></table></div>`
+        : html`<p class="muted small">Chưa có lượt đọc ảnh, vẽ ảnh hay tạo video nào trong khoảng này.</p>`}
+      ${data.top.length ? html`<div class="ov-board"><h3>Dùng nhiều nhất</h3><ol class="ov-rank">${data.top.map((p, i) => html`<li key=${`${p.name}:${i}`}>
+        <span class="ov-rank-row"><span class="ov-rank-no">${i + 1}</span>
+          <span class="ov-rank-who"><strong>${p.name}${p.owner ? ' (chủ nhân)' : ''}</strong>
+            <small class="muted">${[p.vision && `${p.vision} đọc ảnh`, p.image && `${p.image} ảnh`, p.video && `${p.video} video`].filter(Boolean).join(' · ')}</small></span>
+          <span class="conv-count">${nf.format(p.total)}</span></span></li>`)}</ol></div>` : null}
+      <p class="muted small">Đếm từ khi cài bản này. "Lượt gọi AI" là mọi lần bot gọi model (kể cả khi đọc ảnh, gọi công cụ); đọc ảnh dùng model chính của bot.</p>`}
+  <//>`;
+}
+
 export function Overview({ me, status: s }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
@@ -301,5 +347,6 @@ export function Overview({ me, status: s }) {
       <//>
       </div>
       <${BotUses} />
+      <${AiUse} usageDays=${days} />
     </div>`;
 }

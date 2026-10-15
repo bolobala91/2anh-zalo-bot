@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import group_permissions
+from . import ai_events  # noqa: F401  (nạp sẵn: adapter ghi lượt đọc ảnh qua _zalo_tools_module("ai_events"))
 
 logger = logging.getLogger(__name__)
 

@@ -125,6 +125,23 @@ class DrawTest(Base):
         with self.assertRaises(me.EngineError):
             me.draw("   ")
 
+    def test_draw_records_ai_events_for_dashboard(self):
+        from pathlib import Path
+        from plugins.zalo_tools import ai_events
+        path = Path(self.home.name) / "zalo" / "ai-events.jsonl"
+
+        def post(url, json=None, headers=None, timeout=None):
+            return Resp(402, {"error": {"message": "hết"}}) if "stali" in url else Resp(200, {"data": [{"b64_json": B64}]})
+
+        with mock.patch.object(ai_events, "log_path", lambda: path), mock.patch("requests.post", post):
+            me.draw("con mèo")
+        with mock.patch.object(ai_events, "log_path", lambda: path), mock.patch("requests.post", lambda *a, **k: Resp(500, None)):
+            with self.assertRaises(me.EngineError):
+                me.draw("x")
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([(r["kind"], r["engine"], r["model"], r["ok"], r.get("fallbacks", 0)) for r in rows],
+                         [("image", "9router", "ag/gemini-3.1-flash-image", True, 1), ("image", "", "", False, 2)])
+
     def test_references_use_edits_and_codex_engine(self):
         seen = {}
 

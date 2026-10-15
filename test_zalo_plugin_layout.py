@@ -173,6 +173,10 @@ class ManifestTest(unittest.TestCase):
                     "pptx": "python-pptx", "fpdf": "fpdf2", "fitz": "pymupdf", "pymupdf": "pymupdf",
                     "yt_dlp": "yt-dlp", "youtube_transcript_api": "youtube-transcript-api"}
         declared = {d.split("[")[0].lower() for d in self._manifest("zalo")["python_dependencies"]}
+        # Mô-đun anh em trong chính plugin (vd. ``from ai_events import …`` khi test nạp mô-đun rời) là nội bộ.
+        for folder in ("zalo", "zalo_tools", "zalo_memory"):
+            for dirpath, _, files in os.walk(os.path.join(PLUGIN_DIR, folder)):
+                local |= {f[:-3] for f in files if f.endswith(".py")}
         missing = set()
         for folder in ("zalo", "zalo_tools", "zalo_memory"):
             for dirpath, _, files in os.walk(os.path.join(PLUGIN_DIR, folder)):

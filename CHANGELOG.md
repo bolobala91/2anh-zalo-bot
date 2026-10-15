@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.46.0] — 2026-10-15
+
+### Thêm — Tổng quan › Sử dụng AI
+
+- Thẻ **Sử dụng AI** (Hôm nay / 7 ngày / 30 ngày): lượt gọi AI, **lượt đọc ảnh (vision)** kèm số ảnh, **lượt vẽ ảnh** và **tạo video** (thành công / lỗi, tổng số giây video, số lần phải chuyển nguồn dự phòng).
+- Bảng **theo nguồn và model**: vẽ bằng Stali / 9router / ChatGPT, model nào, bao nhiêu lượt, lỗi bao nhiêu; video model nào; đọc ảnh bằng model nào.
+- Danh sách **người dùng nhiều nhất** (đọc ảnh / ảnh / video) — chỉ tên, UID ở lại máy chủ.
+- Plugin ghi sổ sự kiện `<HERMES_HOME>/zalo/ai-events.jsonl` (giữ 90 ngày); số liệu bắt đầu từ khi cài bản này.
+
 ## [2.45.0] — 2026-10-15
 
 ### Đổi — bỏ trang quét QR cũ ở cổng 3872
