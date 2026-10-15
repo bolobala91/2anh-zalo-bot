@@ -77,8 +77,14 @@ export function importLegacyHermesHistory({
       };
     }).filter((message) => message.threadId && message.text && message.ts != null);
 
-    const inserted = store.insertMessages(String(accountId), messages, 'legacy-hermes');
-    return { scanned: messages.length, inserted, skipped: messages.length - inserted };
+    // Tin sidecar đã tự ghi (bản live song sinh) thì bỏ: bản Hermes còn Markdown/mã màu, không msgId — sẽ thành
+    // tin trùng trong Phiên chat. Chỉ nhập phần lịch sử sidecar chưa có (trước khi có sidecar, lúc sidecar không chạy).
+    const before = typeof store.hasLiveTwin === 'function'
+      ? messages.filter((m) => !store.hasLiveTwin(String(accountId), m)) : messages;
+
+    const inserted = store.insertMessages(String(accountId), before, 'legacy-hermes');
+    const pruned = typeof store.pruneLegacyOverlap === 'function' ? store.pruneLegacyOverlap(String(accountId)) : 0;
+    return { scanned: messages.length, inserted, skipped: messages.length - inserted, pruned };
   } finally {
     source.close();
   }

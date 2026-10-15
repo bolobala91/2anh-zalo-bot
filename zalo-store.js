@@ -253,6 +253,35 @@ export function openZaloStore({ path, retentionDays = 365, now = Date.now } = {}
     return { inserted: !existed };
   }
 
+  // Bản sao Hermes (legacy-hermes) của một tin sidecar đã tự ghi: cùng hội thoại, cùng chiều gửi, lệch dưới 3 phút.
+  // Bản legacy còn nguyên Markdown/mã màu và không có msgId nên không gộp được theo identity — thành tin trùng.
+  const TWIN_WINDOW_MS = 3 * 60_000;
+  const liveTwinStatement = db.prepare(`
+    SELECT 1 FROM messages
+    WHERE account_id = ? AND thread_id = ? AND thread_type = ? AND is_self = ? AND source = 'live'
+      AND timestamp_ms BETWEEN ? AND ? LIMIT 1
+  `);
+  function hasLiveTwin(accountId, message) {
+    const ts = Number(message.ts);
+    return Boolean(liveTwinStatement.get(String(accountId), String(message.threadId), Number(message.threadType),
+      message.isSelf ? 1 : 0, ts - TWIN_WINDOW_MS, ts + TWIN_WINDOW_MS));
+  }
+
+  // Xoá các bản sao legacy-hermes đã lỡ nhập mà có bản live song sinh. Tin legacy không có bản live (vd. lúc sidecar
+  // không chạy) được giữ. Chạy lại không xoá thêm.
+  function pruneLegacyOverlap(accountId) {
+    const result = db.prepare(`
+      DELETE FROM messages
+      WHERE account_id = ? AND source = 'legacy-hermes' AND EXISTS (
+        SELECT 1 FROM messages l
+        WHERE l.account_id = messages.account_id AND l.thread_id = messages.thread_id AND l.thread_type = messages.thread_type
+          AND l.is_self = messages.is_self AND l.source = 'live'
+          AND l.timestamp_ms BETWEEN messages.timestamp_ms - ${TWIN_WINDOW_MS} AND messages.timestamp_ms + ${TWIN_WINDOW_MS}
+      )
+    `).run(String(accountId));
+    return Number(result.changes);
+  }
+
   function insertMessages(accountId, messages, source = 'backfill') {
     db.exec('BEGIN IMMEDIATE');
     let inserted = 0;
@@ -525,6 +554,8 @@ export function openZaloStore({ path, retentionDays = 365, now = Date.now } = {}
   return {
     upsertMessage,
     insertMessages,
+    hasLiveTwin,
+    pruneLegacyOverlap,
     getHistory,
     getRange,
     searchHistory,

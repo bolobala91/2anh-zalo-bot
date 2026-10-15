@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.43.1] — 2026-10-15
+
+### Sửa
+
+- **Câu trả lời của bot hiện hai lần trong Phiên chat** (một bản thường, một bản còn mã màu `[green]…[/green]`): mỗi lần khởi động, bộ nhập lịch sử Hermes cũ chép lại cả những câu trả lời sidecar đã tự ghi. Nay bộ nhập bỏ qua tin đã có bản sidecar ghi (cùng hội thoại, cùng chiều gửi, lệch dưới 3 phút) và dọn các bản trùng đã lỡ nhập; tin Hermes không có bản sidecar (vd. lúc sidecar không chạy) vẫn được giữ.
+
 ## [2.43.0] — 2026-10-15
 
 ### Thêm — Phiên chat kiểu Zalo (bước 3)

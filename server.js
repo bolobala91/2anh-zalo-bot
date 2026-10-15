@@ -145,7 +145,7 @@ function activateZaloRuntime() {
         accountId: String(loginInfo?.user_id || loginInfo?.userId || ''),
         retentionDays: Number(process.env.ZALO_HISTORY_RETENTION_DAYS) || 365,
       });
-      console.log(`[history] legacy import: ${migration.inserted} mới, ${migration.skipped} đã có`);
+      console.log(`[history] legacy import: ${migration.inserted} mới, ${migration.skipped} đã có hoặc sau mốc live, dọn ${migration.pruned} bản trùng`);
     } catch (error) {
       runtimeHealth.recordError('legacy_history_import_failed', error?.message || error);
       console.error('[history] legacy import failed:', error?.message || error);

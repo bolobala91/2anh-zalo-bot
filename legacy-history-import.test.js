@@ -55,7 +55,7 @@ test('legacy import keeps real Zalo dialogue and excludes internal or undelivere
     sourcePath, store, accountId: 'bot', now: () => 1_788_100_000_000,
   });
 
-  assert.deepEqual(result, { scanned: 2, inserted: 2, skipped: 0 });
+  assert.deepEqual(result, { scanned: 2, inserted: 2, skipped: 0, pruned: 0 });
   const history = store.getHistory('bot', 'g1', 1, 10);
   assert.deepEqual(history.map((message) => message.text), ['đọc file này', 'Bản trả lời đã giao']);
   assert.equal(history[0].senderName, 'Anh');
@@ -65,7 +65,7 @@ test('legacy import keeps real Zalo dialogue and excludes internal or undelivere
 
   assert.deepEqual(
     importLegacyHermesHistory({ sourcePath, store, accountId: 'bot', now: () => 1_788_100_000_000 }),
-    { scanned: 2, inserted: 0, skipped: 2 },
+    { scanned: 2, inserted: 0, skipped: 2, pruned: 0 },
   );
 });
 
@@ -105,7 +105,35 @@ test('legacy import applies the 365-day retention boundary', (t) => {
   });
 
   assert.deepEqual(importLegacyHermesHistory({ sourcePath, store, accountId: 'bot', now: () => nowMs }), {
-    scanned: 0, inserted: 0, skipped: 0,
+    scanned: 0, inserted: 0, skipped: 0, pruned: 0,
   });
   assert.equal(store.getHealth().messageCount, 0);
+});
+
+test('legacy import bỏ bản sao của tin sidecar đã ghi (live song sinh, lệch < 3 phút); dọn bản trùng đã lỡ nhập', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'zalo-legacy-overlap-'));
+  const sourcePath = join(dir, 'state.db');
+  const source = legacyDatabase(sourcePath);
+  const insert = source.prepare('INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?)');
+  const deliver = source.prepare(`INSERT INTO delivery_obligations VALUES ('zalo', 'delivered', 'agent:main:zalo:group:g1', 'g1', ?)`);
+  insert.run(1, 's1', 'assistant', 'Trả lời từ trước khi có sidecar', null, 1_787_000_000); deliver.run('Trả lời từ trước khi có sidecar');
+  insert.run(2, 's1', 'assistant', 'Dạ lời giải [green]sin x = 1/2[/green]', null, 1_788_000_102); deliver.run('Dạ lời giải [green]sin x = 1/2[/green]');
+  // Sidecar không ghi được tin này (vd. lúc sidecar ngừng chạy): không có bản live trong 3 phút → phải giữ.
+  insert.run(3, 's1', 'assistant', 'Tin lúc sidecar không chạy', null, 1_788_000_600); deliver.run('Tin lúc sidecar không chạy');
+  source.close();
+  const store = openZaloStore({ path: join(dir, 'zalo.sqlite') });
+  t.after(() => { store.close(); rmSync(dir, { recursive: true, force: true }); });
+  const live = (text, ts) => ({ threadId: 'g1', threadType: 1, msgId: `m${ts}`, cliMsgId: `c${ts}`, senderUid: 'bot', senderName: '', text, msgType: 'webchat', ts, isSelf: true });
+  store.insertMessages('bot', [live('Tin đầu tiên sidecar ghi', 1_788_000_050_000), live('Dạ lời giải sin x = 1/2', 1_788_000_100_000)], 'live');
+  // Bản sao legacy đã lỡ chép từ trước (lần khởi động cũ): nằm sau tin live đầu tiên của hội thoại.
+  store.insertMessages('bot', [{ ...live('Bản sao [green]cũ[/green]', 1_788_000_101_000), msgId: null, cliMsgId: null, msgType: 'legacy-hermes' }], 'legacy-hermes');
+
+  const result = importLegacyHermesHistory({ sourcePath, store, accountId: 'bot', now: () => 1_788_100_000_000 });
+  assert.equal(result.inserted, 2, 'chỉ nhập tin chưa có bản live');
+  assert.equal(result.pruned, 1, 'dọn bản sao legacy nằm trong khoảng đã có tin live');
+  assert.equal(store.pruneLegacyOverlap('bot'), 0, 'chạy lại không xoá thêm');
+  const db = new DatabaseSync(join(dir, 'zalo.sqlite'), { readOnly: true });
+  const texts = db.prepare("SELECT text FROM messages WHERE thread_id = 'g1'").all().map((r) => r.text);
+  db.close();
+  assert.deepEqual(texts.sort(), ['Dạ lời giải sin x = 1/2', 'Tin lúc sidecar không chạy', 'Trả lời từ trước khi có sidecar', 'Tin đầu tiên sidecar ghi'].sort());
 });
