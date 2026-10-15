@@ -467,7 +467,7 @@ function rememberInfo(open) {
   try { localStorage.setItem(INFO_KEY, open ? 'open' : 'closed'); } catch { /* chế độ riêng tư */ }
 }
 
-function Thread({ conv, onBack, onPinned }) {
+function Thread({ conv, onBack, onPinned, folders = null, onFolders }) {
   const [reply, setReply] = useState(null); // tin đang trả lời
   const [active, setActive] = useState(null); // id tin đang mở nút thao tác (bấm giữ)
   const [mentionReq, setMentionReq] = useState(null); // { name, msg, n } — chèn @Tên vào ô soạn
@@ -718,7 +718,7 @@ function Thread({ conv, onBack, onPinned }) {
     ${side === 'search' ? html`<${ThreadSearch} conv=${conv} onJump=${jumpTo} onClose=${() => closeSide('search')} />` : null}
     ${side === 'perms' ? html`<${PermsPanel} conv=${conv} onClose=${() => closeSide('perms')} />` : null}
     ${side === 'media' ? html`<${MediaPanel} key=${mediaTab} conv=${conv} initialTab=${mediaTab} onClose=${() => closeSide('media')} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
-    ${side === 'info' ? html`<${InfoPanel} conv=${conv} info=${info} board=${board} reminders=${reminders} pinned=${pinned} pinBusy=${pinBusy} onPin=${togglePin} onJump=${(ref) => ref && jumpTo(ref)} statsText=${stats} onClose=${toggleInfo} onTool=${(name) => setSide(name)}
+    ${side === 'info' ? html`<${InfoPanel} conv=${conv} info=${info} board=${board} reminders=${reminders} pinned=${pinned} pinBusy=${pinBusy} onPin=${togglePin} onJump=${(ref) => ref && jumpTo(ref)} statsText=${stats} onClose=${toggleInfo} onTool=${(name) => setSide(name)} folders=${folders} onFolders=${onFolders}
       onOpen=${(tab) => { setMediaTab(tab); setSide('media'); }} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
     ${lightbox ? html`<${Lightbox} items=${lightbox.items} index=${lightbox.index}
       onIndex=${(index) => setLightbox((cur) => ({ ...cur, index }))} onClose=${() => setLightbox(null)} />` : null}`;
@@ -742,6 +742,7 @@ export function Chats() {
     } catch { return null; }
   });
   const [folders, setFolders] = useState([]);
+  const [foldersLoaded, setFoldersLoaded] = useState(false); // chưa đọc được Phân quyền thì không hiện ô Thư mục
   const [folderFilter, setFolderFilter] = useState('all');
   const searchSeq = useRef(0); // bỏ kết quả về muộn của lần tìm đã bị thay hoặc huỷ
 
@@ -764,7 +765,7 @@ export function Chats() {
   // Thư mục (nhóm + người) từ Phân quyền Bot — chỉ để lọc và tô màu; không đọc được thì danh sách vẫn như cũ.
   useEffect(() => {
     let alive = true;
-    const load = () => api('/api/permissions').then((r) => { if (alive) setFolders(r.folders || []); }, () => {});
+    const load = () => api('/api/permissions').then((r) => { if (alive) { setFolders(r.folders || []); setFoldersLoaded(true); } }, () => {});
     load();
     const t = setInterval(load, 60_000);
     return () => { alive = false; clearInterval(t); };
@@ -830,7 +831,8 @@ export function Chats() {
       </section>
       <section class="card chat-thread" aria-label="Tin nhắn">
         ${selected
-          ? html`<${Thread} key=${keyOf(selected)} conv=${selected} onBack=${() => setSelected(null)} onPinned=${() => setList((cur) => {
+          ? html`<${Thread} key=${keyOf(selected)} conv=${selected} folders=${foldersLoaded ? folders : null} onFolders=${(r) => setFolders(r.folders || [])}
+            onBack=${() => setSelected(null)} onPinned=${() => setList((cur) => {
               // Ghim/bỏ ghim: đổi ngay trong danh sách (đã ghim lên đầu), không chờ lượt làm mới 10 giây.
               const next = (cur || []).map((c) => (keyOf(c) === keyOf(selected) ? { ...c, pinned: !c.pinned } : c));
               return [...next.filter((c) => c.pinned), ...next.filter((c) => !c.pinned)];

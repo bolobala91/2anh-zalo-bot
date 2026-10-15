@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.49.0] — 2026-10-16
+
+### Thêm — Xếp thư mục ngay trong Phiên chat
+
+- **Phiên chat › bảng Thông tin** (nhóm hoặc nhắn riêng) có ô **Thư mục**: chọn thư mục là xếp ngay, chọn **Chưa xếp** là bỏ khỏi thư mục, chọn **＋ Thư mục mới…** để tạo rồi xếp vào. Không phải sang Phân quyền Bot nữa.
+- Nhóm/người vừa xếp theo ngay cài đặt và quy tắc riêng của thư mục; nhãn thư mục và bộ lọc ở danh sách hội thoại cập nhật luôn.
+
 ## [2.48.0] — 2026-10-16
 
 ### Thêm — Chuyển hàng loạt vào thư mục

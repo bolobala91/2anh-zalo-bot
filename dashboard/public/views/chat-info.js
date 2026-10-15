@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, fmtTime } from '../ui.js';
 import { FileBadge, Thumb, useProxiedImage } from './chat-media.js';
+import { FolderAssign } from './move-to-folder.js';
 
 const AVATAR_TINTS = 10; // .av-0 … .av-9 trong style.css (CSP: không dùng style nội tuyến)
 
@@ -117,7 +118,7 @@ function Section({ title, state, onAll, empty, children }) {
  * Bảng "Thông tin hội thoại" (giống cột phải của Zalo). onOpen(tab) mở bảng Ảnh/Video · Tệp · Link ở đúng tab;
  * onTool('perms' | 'search') mở Phân quyền / Tìm tin nhắn ngay trong cột này.
  */
-export function InfoPanel({ conv, info, board, reminders, pinned, pinBusy, onPin, statsText, onClose, onOpen, onTool, onOpenPhoto, onJump }) {
+export function InfoPanel({ conv, info, board, reminders, pinned, pinBusy, onPin, statsText, onClose, onOpen, onTool, onOpenPhoto, onJump, folders = null, onFolders }) {
   const group = conv.threadType === 1;
   const photos = useRecent(conv, 'photo');
   const files = useRecent(conv, 'file');
@@ -143,6 +144,7 @@ export function InfoPanel({ conv, info, board, reminders, pinned, pinBusy, onPin
         <button type="button" class="info-act" onClick=${() => onTool('search')}><span class="info-act-ico"><${Icon} name="search" size=${18} /></span>Tìm tin nhắn</button>
         <button type="button" class="info-act" onClick=${() => onOpen('photo')}><span class="info-act-ico"><${Icon} name="image" size=${18} /></span>Ảnh, tệp, link</button>
       </div>
+      ${folders ? html`<${FolderAssign} key=${`${conv.threadType}:${conv.threadId}`} conv=${conv} folders=${folders} onChanged=${onFolders} />` : null}
       <${Bulletin} board=${board} reminders=${reminders} group=${group} onJump=${onJump} />
       <${Section} title="Ảnh/Video" state=${photos} onAll=${() => onOpen('photo')} empty="Chưa có ảnh hay video nào.">
         <ul class="media-grid info-grid">${(photos?.items || []).map((x) => html`<li key=${x.id}>

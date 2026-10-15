@@ -26,6 +26,59 @@ export const addPeopleToFolder = (fid, people) => api(`/api/permissions/folders/
 });
 
 /**
+ * Thư mục của MỘT hội thoại (Phiên chat › Thông tin): nhóm theo id nhóm, nhắn riêng theo UID người. Chọn thư mục là
+ * chuyển ngay; "Chưa xếp" là bỏ khỏi thư mục hiện tại; "＋ Thư mục mới…" gõ tên rồi Lưu. `onChanged(state)` nhận
+ * trạng thái phân quyền mới (danh sách thư mục cập nhật).
+ */
+export function FolderAssign({ conv, folders, onChanged }) {
+  const group = conv.threadType === 1;
+  const id = String(conv.threadId);
+  const current = (folders || []).find((f) => (group ? (f.groups || []).includes(id) : (f.people || []).some((p) => p.uid === id))) || null;
+  const [choice, setChoice] = useState(null); // null = theo thư mục hiện tại
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState({});
+  const value = choice ?? current?.id ?? '';
+  async function apply(target, newName = '') {
+    setBusy(true); setMsg({});
+    try {
+      let state;
+      if (!target) {
+        if (!current) return;
+        const base = `/api/permissions/folders/${encodeURIComponent(current.id)}`;
+        state = group
+          ? await api(`${base}/members`, { method: 'PUT', body: { groups: current.groups.filter((g) => g !== id) } })
+          : await api(`${base}/people`, { method: 'PUT', body: { people: current.people.filter((p) => p.uid !== id) } });
+        setMsg({ ok: `Đã bỏ khỏi thư mục "${current.name}".` });
+      } else {
+        const { id: fid, state: created } = await resolveFolder(target, newName);
+        state = group
+          ? await addGroupsToFolder((created || { folders }).folders, fid, [id])
+          : await addPeopleToFolder(fid, [{ uid: id, name: conv.name || '' }]);
+        setMsg({ ok: `Đã xếp vào thư mục "${state.folders.find((f) => f.id === fid)?.name || ''}".` });
+      }
+      setChoice(null); setName('');
+      onChanged(state);
+    } catch (err) { setMsg({ error: err.message }); } finally { setBusy(false); }
+  }
+  return html`<div class="folder-assign">
+    <label class="folder-select" for="conv-folder"><span class="small muted">Thư mục</span>
+      <select id="conv-folder" value=${value} disabled=${busy}
+        onChange=${(e) => { const v = e.currentTarget.value; setMsg({}); if (v === NEW_FOLDER) setChoice(v); else { setChoice(null); if (v !== (current?.id ?? '')) apply(v); } }}>
+        <option value="">Chưa xếp</option>
+        ${(folders || []).map((f) => html`<option key=${f.id} value=${f.id}>${f.name}</option>`)}
+        <option value=${NEW_FOLDER}>＋ Thư mục mới…</option>
+      </select></label>
+    ${value === NEW_FOLDER ? html`<div class="row">
+      <label for="conv-folder-name" class="sr-only">Tên thư mục mới</label>
+      <input id="conv-folder-name" maxlength="60" placeholder="Tên thư mục mới" value=${name} disabled=${busy} onInput=${(e) => setName(e.currentTarget.value)} />
+      <button type="button" class="btn btn-primary btn-sm" disabled=${busy || !name.trim()} onClick=${() => apply(NEW_FOLDER, name.trim())}>Tạo và xếp vào</button>
+    </div>` : null}
+    <${Live} error=${msg.error} ok=${msg.ok} />
+  </div>`;
+}
+
+/**
  * Ô chọn thư mục + nút chuyển. `onMove(fid, created)` thực hiện việc chuyển (created: trạng thái sau khi tạo thư mục
  * mới, hoặc null) và trả thông báo thành công; lỗi ném ra được hiện tại chỗ.
  */
