@@ -17,6 +17,7 @@ import { installFileLog } from './file-log.js';
 import { createQrLogin } from './qr-login.js';
 import { createControlRouter } from './control-api.js';
 import { createZaloDirectory } from './zalo-directory.js';
+import { dashboardLoginUrl } from './dashboard-link.js';
 import { createGroupDirectory } from './group-directory.js';
 import { createDmRules, permissionsFileFromEnv } from './dm-rules.js';
 
@@ -120,7 +121,9 @@ Mã có hiệu lực 5 phút. Đừng đưa mã này cho ai.`,
   // `api` đổi khi đăng nhập lại — đọc qua hàm, không chụp giá trị lúc khởi động.
   directory: createZaloDirectory({ getApi: () => api, acquire: acquireSendQuota, audit: auditDashboardAction }),
 }));
-app.use(express.static(join(__dirname, 'public')));
+// Trang quét QR cũ ở cổng này đã bỏ: đăng nhập Zalo nằm ở dashboard (mục Tài khoản Zalo). Ai mở nhầm cổng sidecar
+// thì chuyển thẳng tới đó. Cổng này giờ chỉ còn /control (dashboard gọi) và /api/status, /api/health (kiểm tra).
+app.get(['/', '/index.html'], (req, res) => res.redirect(302, dashboardLoginUrl(process.env, req.hostname)));
 app.use('/api', (req, res, next) => {
   if (req.method !== 'POST' || req.get('X-Zalo-Dashboard') === '1') return next();
   return res.status(403).json({ ok: false, error: 'Yêu cầu dashboard không hợp lệ' });
@@ -257,19 +260,6 @@ if (reconnectResult) {
   console.log('[boot] chưa có phiên — cần quét QR');
 }
 
-// --- QR Login ---
-app.post('/api/qr/start', async (req, res) => {
-  if (status === 'logged-in' && api && !zaloSessionStale()) return res.json({ ok: true, user: loginInfo });
-  try {
-    await qrLogin.start(); // phiên đã chết thì dỡ trước, rồi mở QR mới
-    const user = await qrLogin.waitForLogin();
-    res.json({ ok: true, user });
-  } catch (err) {
-    console.error('[auth] loginQR error:', err);
-    res.status(500).json({ ok: false, error: String(err?.message || err) });
-  }
-});
-
 // --- Status ---
 app.get('/api/status', (req, res) => {
   res.json({
@@ -296,11 +286,6 @@ async function logoutZalo() {
   await clearSession();
   broadcast({ type: 'logout' });
 }
-
-app.post('/api/logout', async (req, res) => {
-  await logoutZalo();
-  res.json({ ok: true });
-});
 
 const PORT = Number(process.env.ZCA_PORT) || 3872;
 

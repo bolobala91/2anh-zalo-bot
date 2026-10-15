@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.45.0] — 2026-10-15
+
+### Đổi — bỏ trang quét QR cũ ở cổng 3872
+
+- Đăng nhập Zalo (quét QR) chỉ còn ở dashboard, mục **Tài khoản Zalo**. Mở nhầm `http://…:3872` sẽ được chuyển thẳng tới trang đó (ưu tiên `ZALO_DASHBOARD_URL`, không có thì cùng máy, cổng 3880).
+- Bỏ trang `public/index.html` và hai API riêng của nó (`/api/qr/start`, `/api/logout`). Cổng 3872 vẫn chạy cho dashboard gọi vào (`/control`, `/api/status`, `/api/health`); cổng 3873 vẫn là đường nối trợ lý ↔ Zalo.
+- Lời nhắn cuối bộ cài và README hướng dẫn quét QR ở dashboard.
+
 ## [2.44.1] — 2026-10-15
 
 ### Thêm

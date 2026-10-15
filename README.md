@@ -259,7 +259,7 @@ Nhắn riêng vẫn chỉ dành cho chủ (`ZALO_DM_POLICY=owner-only`). Một t
 
 Công cụ công khai còn bị **khoá phạm vi**: người ngoài truyền `thread_id` của nhóm khác sẽ bị từ chối, chỉ tác động được lên đúng cuộc trò chuyện họ đang tham gia. Ngữ cảnh lượt tin lưu bằng `contextvars` — gateway xử lý nhiều lượt song song, biến thường sẽ lẫn người này sang người kia.
 
-**Trang quét QR** tại `http://127.0.0.1:3872` — chỉ dùng lúc đăng nhập lần đầu và khi phiên hết hạn. Không có trang quản trị: mọi thao tác đều ra lệnh cho agent.
+**Quét QR đăng nhập Zalo** ở dashboard (`http://127.0.0.1:3880`, mục **Tài khoản Zalo**) — lúc đăng nhập lần đầu và khi phiên hết hạn. Cổng `3872` của sidecar không còn trang web: mở nhầm sẽ được chuyển sang dashboard.
 
 ### Giữ tài khoản không bị khoá
 
@@ -329,8 +329,8 @@ npm start
 
 ### Kết nối Zalo
 
-1. Mở `http://127.0.0.1:3872`
-2. Bấm **Tạo QR**, quét bằng Zalo trên điện thoại *(dùng tài khoản phụ)*
+1. Mở dashboard (`http://127.0.0.1:3880`, hoặc link thiết lập bộ cài in ra) → mục **Tài khoản Zalo**
+2. Bấm tạo QR, quét bằng Zalo trên điện thoại *(dùng tài khoản phụ)*
 3. Từ Zalo cá nhân của bạn, nhắn riêng `/sethome` cho tài khoản vừa quét
    → bot trả về UID của bạn (lệnh này **chưa** cấp quyền chủ)
 4. Thêm `ZALO_ALLOWED_USERS=<UID vừa nhận>` vào `.env` **của Hermes**

@@ -26,7 +26,7 @@ try {
     // Trí nhớ dài hạn (spec §19.10): chỉ in cách bật, không bao giờ tự bật.
     if (result.memory) console.log(`\n${result.memory}`);
   }
-  console.log('\nCài đặt hoàn tất. Chạy `npm start`, mở http://127.0.0.1:3872 để quét QR, rồi xác lập UID chủ nhân theo README.');
+  console.log('\nCài đặt hoàn tất. Mở dashboard (link thiết lập ở trên, hoặc http://127.0.0.1:3880) → mục Tài khoản Zalo để quét QR, rồi xác lập UID chủ nhân theo README.');
   console.log('Sau khi đăng nhập, khởi động hoặc khởi động lại Hermes gateway theo cách máy này đang quản lý dịch vụ.');
 } catch (error) {
   console.error(`[FAIL] ${error?.message || error}`);

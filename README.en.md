@@ -134,8 +134,8 @@ Without `--vieneu-tts`, the installer does not download, configure, or alter TTS
 npm start
 ```
 
-1. Open `http://127.0.0.1:3872`.
-2. Create and scan the QR code with the secondary Zalo account.
+1. Open the dashboard (`http://127.0.0.1:3880`, or the setup link printed by the installer) → **Tài khoản Zalo** (Zalo account).
+2. Create and scan the QR code with the secondary Zalo account. (Port 3872 no longer serves a web page; it redirects to the dashboard.)
 3. From the owner's personal Zalo account, send `/sethome` as a direct message to the secondary account. The bot replies with your UID — this does **not** grant owner rights yet.
 4. Add `ZALO_ALLOWED_USERS=<that UID>` to the **Hermes** `.env`.
 5. Restart the sidecar (`npm start`), then start or restart the Hermes gateway using the service manager used by that installation.
