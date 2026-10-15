@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.44.1] — 2026-10-15
+
+### Thêm
+
+- Thẻ **lời mời kết bạn ở trang Tổng quan** cũng có ô "Xếp người được đồng ý vào" như trang Liên hệ (dùng chung lựa chọn đã nhớ): bấm Đồng ý là xếp luôn vào thư mục.
+- Ô chọn thư mục gọn lại, không kéo dài hết chiều ngang.
+
 ## [2.44.0] — 2026-10-15
 
 ### Thêm — xếp người vào thư mục ngay ở trang Liên hệ

@@ -3,6 +3,7 @@ import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Live, PageHead, Spinner, fmtTime } from '../ui.js';
 import { FolderChip, folderIndex, folderOfThread } from './folder-ui.js';
+import { addToFolder, FolderSelect, lastFolder, rememberFolder } from './contacts.js';
 
 export function zaloCard(s) {
   if (s.sidecar === 'down') return { kind: 'danger', state: 'Kết nối Zalo đang tắt — hệ thống sẽ tự bật lại trong ít phút' };
@@ -150,18 +151,29 @@ function Card({ title, icon, tint, href, hrefText, extra = '', children }) {
   </section>`;
 }
 
-function Requests({ list, onDone }) {
+function Requests({ list, onDone, folders = [] }) {
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState({});
+  const [folder, setFolderRaw] = useState(lastFolder);
+  const setFolder = (v) => { setFolderRaw(v); rememberFolder(v); };
+  const target = folders.find((f) => f.id === folder) || null;
   async function answer(r, accept) {
     if (!accept && !confirm(`Từ chối lời mời kết bạn của ${r.name || 'người này'}?`)) return;
     setBusy(r.uid); setMsg({});
-    try { await api(`/api/contacts/requests/${r.uid}`, { method: 'POST', body: { accept } }); setMsg({ ok: accept ? `Đã đồng ý kết bạn với ${r.name || 'người này'}.` : 'Đã từ chối.' }); onDone(); }
-    catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
+    try {
+      await api(`/api/contacts/requests/${r.uid}`, { method: 'POST', body: { accept } });
+      // Đồng ý xong thì xếp luôn vào thư mục đã chọn; lỗi xếp không làm hỏng việc kết bạn đã xong.
+      let filed = '';
+      if (accept && target) {
+        try { await addToFolder(target.id, [r]); filed = ` Đã xếp vào thư mục ${target.name}.`; } catch (e) { filed = ` Chưa xếp được vào thư mục ${target.name}: ${e.message}`; }
+      }
+      setMsg({ ok: accept ? `Đã đồng ý kết bạn với ${r.name || 'người này'}.${filed}` : 'Đã từ chối.' }); onDone();
+    } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
   }
-  return html`<ul class="ov-requests">${list.map((r) => html`<li key=${r.uid}>
+  return html`${folders.length ? html`<${FolderSelect} id="ov-req-folder" folders=${folders} value=${target ? folder : ''} onChange=${setFolder} label="Xếp người được đồng ý vào" />` : null}
+    <ul class="ov-requests">${list.map((r) => html`<li key=${r.uid}>
       <span class="ov-req-name"><strong>${r.name || 'Chưa rõ tên'}</strong>${r.message ? html`<small class="muted">Có lời nhắn — xem ở Liên hệ</small>` : null}</span>
-      <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== ''} onClick=${() => answer(r, true)}>Đồng ý</button>
+      <button type="button" class="btn btn-primary btn-sm" disabled=${busy !== ''} onClick=${() => answer(r, true)}>Đồng ý${target ? ` → ${target.name}` : ''}</button>
       <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => answer(r, false)}>Từ chối</button>
     </li>`)}</ul><${Live} error=${msg.error} ok=${msg.ok} />`;
 }
@@ -257,7 +269,7 @@ export function Overview({ me, status: s }) {
       ${items.length ? html`<ul class="ov-items">${items.map((it, i) => html`<li key=${i} class=${`is-${it.kind}`}>
           ${it.href ? html`<a href=${it.href}>${it.text} <${Icon} name="next" size=${14} /></a>` : html`<span>${it.text}</span>`}
           ${it.action === 'restart' ? html`<button class="btn btn-secondary btn-sm" disabled=${busy} onClick=${restart}><${Icon} name="refresh" size=${14} /> ${busy ? 'Đang gửi lệnh…' : 'Khởi động lại trợ lý'}</button>` : null}
-          ${it.requests ? html`<${Requests} list=${requests} onDone=${reloadReqs} />` : null}
+          ${it.requests ? html`<${Requests} list=${requests} folders=${perms?.folders || []} onDone=${reloadReqs} />` : null}
         </li>`)}</ul>` : html`<p class="muted small">Bot đang chạy bình thường, không có lời mời hay lỗi nào cần xử lý.</p>`}
       <${Live} error=${msg.error} ok=${msg.ok} />
     </section>

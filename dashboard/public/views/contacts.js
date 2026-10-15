@@ -6,8 +6,8 @@ import { BulkBar, flip, stillPicked } from './multi-pick.js';
 import { FolderChip, folderIndex } from './folder-ui.js';
 
 const FOLDER_KEY = 'zd:friend-folder';
-const lastFolder = () => { try { return localStorage.getItem(FOLDER_KEY) || ''; } catch { return ''; } };
-const rememberFolder = (id) => { try { localStorage.setItem(FOLDER_KEY, id); } catch { /* chế độ riêng tư */ } };
+export const lastFolder = () => { try { return localStorage.getItem(FOLDER_KEY) || ''; } catch { return ''; } };
+export const rememberFolder = (id) => { try { localStorage.setItem(FOLDER_KEY, id); } catch { /* chế độ riêng tư */ } };
 
 /** Thêm người vào một thư mục của Phân quyền Bot (người đang ở thư mục khác được chuyển sang). */
 export const addToFolder = (fid, people) => api(`/api/permissions/folders/${encodeURIComponent(fid)}/people/add`, {
@@ -15,7 +15,7 @@ export const addToFolder = (fid, people) => api(`/api/permissions/folders/${enco
 });
 
 /** Ô chọn thư mục ("Không xếp" = để như cũ). */
-function FolderSelect({ id, folders, value, onChange, label, emptyLabel = 'Không xếp vào thư mục' }) {
+export function FolderSelect({ id, folders, value, onChange, label, emptyLabel = 'Không xếp vào thư mục' }) {
   return html`<label class="folder-select" for=${id}><span class="small muted">${label}</span>
     <select id=${id} value=${value} onChange=${(e) => onChange(e.currentTarget.value)}>
       <option value="">${emptyLabel}</option>

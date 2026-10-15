@@ -1505,5 +1505,5 @@ button.board-item:disabled { cursor: default; }
 .conv-pin { flex: none; display: inline-flex; color: var(--muted); margin-left: 4px; }
 /* Liên hệ: chọn thư mục khi đồng ý kết bạn / chuyển nhiều người. */
 .folder-select { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
-.folder-select select { min-width: 180px; max-width: 100%; }
+.folder-select select { width: auto; min-width: 220px; max-width: min(360px, 100%); }
 .bulk-bar .folder-select { margin: 0; }
