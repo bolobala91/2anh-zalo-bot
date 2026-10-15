@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { html, fmtTime, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
 import { BulkBar, flip, stillPicked } from './multi-pick.js';
 import { FolderChip, folderIndex } from './folder-ui.js';
+import { MoveToFolder } from './move-to-folder.js';
 
 const FOLDER_KEY = 'zd:friend-folder';
 export const lastFolder = () => { try { return localStorage.getItem(FOLDER_KEY) || ''; } catch { return ''; } };
@@ -130,23 +131,16 @@ export function Contacts() {
   const [error, setError] = useState('');
   const [folders, setFolders] = useState([]);
   const [picked, setPicked] = useState(() => new Set());
-  const [moveTo, setMoveTo] = useState(lastFolder);
-  const [moveMsg, setMoveMsg] = useState({});
-  const [moving, setMoving] = useState(false);
   const loadFolders = () => api('/api/permissions').then((r) => setFolders(r.folders || []), () => {});
   useEffect(() => { loadFolders(); }, []);
   const index = folderIndex(folders);
-  async function move() {
-    const target = folders.find((f) => f.id === moveTo);
+  // Chuyển người đã tích vào thư mục có sẵn hoặc thư mục mới (người đang ở thư mục khác được chuyển sang).
+  async function move(fid) {
     const people = (data?.contacts || []).filter((c) => picked.has(c.uid));
-    if (!target || !people.length) return;
-    setMoving(true); setMoveMsg({});
-    try {
-      await addToFolder(target.id, people);
-      rememberFolder(target.id);
-      setMoveMsg({ ok: `Đã chuyển ${people.length} người vào thư mục ${target.name}.` });
-      setPicked(new Set()); await loadFolders();
-    } catch (e) { setMoveMsg({ error: e.message }); } finally { setMoving(false); }
+    const r = await addToFolder(fid, people);
+    rememberFolder(fid);
+    setFolders(r.folders || []); setPicked(new Set());
+    return `Đã chuyển ${people.length} người vào thư mục ${(r.folders || []).find((f) => f.id === fid)?.name || ''}.`;
   }
   const load = (fresh = false) => {
     const params = new URLSearchParams({ kind, q, ...(fresh ? { fresh: '1' } : {}) });
@@ -171,15 +165,13 @@ export function Contacts() {
       ${errs.map((e) => html`<${Notice} kind="warn">${e}<//>`)}
       ${!data && !error ? html`<${Spinner} />` : null}
       ${data && !data.contacts.length ? html`<p class="muted">Không có ai khớp.</p>` : null}
-      <${Live} error=${moveMsg.error} ok=${moveMsg.ok} />
-      ${data?.contacts?.length && folders.length ? html`<${BulkBar} shown=${data.contacts} picked=${new Set(stillPicked(picked, data.contacts))} onPick=${setPicked} unit="người">
-        <${FolderSelect} id="move-folder" folders=${folders} value=${folders.some((f) => f.id === moveTo) ? moveTo : ''} onChange=${setMoveTo} label="Chuyển vào" emptyLabel="Chọn thư mục…" />
-        <button type="button" class="btn btn-primary btn-sm" disabled=${moving || !folders.some((f) => f.id === moveTo)} onClick=${move}>${moving ? 'Đang chuyển…' : 'Chuyển'}</button>
+      ${data?.contacts?.length ? html`<${BulkBar} shown=${data.contacts} picked=${new Set(stillPicked(picked, data.contacts))} onPick=${setPicked} unit="người">
+        <${MoveToFolder} id="move-folder" folders=${folders} initial=${lastFolder()} count=${stillPicked(picked, data.contacts).length} unit="người" onMove=${move} />
       <//>` : null}
       <ul class="row-list">
         ${(data?.contacts || []).map((c) => html`<li key=${c.uid} class="row-item">
-          ${folders.length ? html`<input type="checkbox" class="bulk-check" checked=${picked.has(c.uid)} disabled=${moving}
-            aria-label=${`Chọn ${c.name || 'người này'}`} onChange=${() => setPicked(flip(picked, c.uid))} />` : null}
+          <input type="checkbox" class="bulk-check" checked=${picked.has(c.uid)}
+            aria-label=${`Chọn ${c.name || 'người này'}`} onChange=${() => setPicked(flip(picked, c.uid))} />
           <span class="avatar avatar-sm" aria-hidden="true">${(c.name || '?').slice(0, 1).toUpperCase()}</span>
           <span class="row-main"><strong>${c.name || 'Chưa rõ tên'}</strong>
             ${c.profile?.note ? html`<small class="muted">${c.profile.note}</small>` : null}</span>

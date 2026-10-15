@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import { html } from '../ui.js';
 import { knownNames } from './dm-permissions.js';
 import { BulkList, MultiPick } from './multi-pick.js';
+import { MoveToFolder, addPeopleToFolder } from './move-to-folder.js';
 
 const UID = /^[1-9]\d{14,21}$/;
 
@@ -15,7 +16,7 @@ export function peopleElsewhere(folders, fid) {
   return out;
 }
 
-export function FolderPeople({ folder, folders, admin, busy, run, base }) {
+export function FolderPeople({ folder, folders, admin, busy, run, base, onSaved }) {
   const [people, setPeople] = useState(folder.people || []);
   const [known, setKnown] = useState([]);
   const [users, setUsers] = useState([]);
@@ -48,7 +49,16 @@ export function FolderPeople({ folder, folders, admin, busy, run, base }) {
     <p class="muted small">Người trong thư mục <strong>được nhắn riêng với bot</strong> và dùng đúng các tính năng của thư mục (bên dưới) khi nhắn riêng. Muốn chỉnh riêng một người thì vào Nhắn riêng › Danh sách người. Mỗi người thuộc một thư mục.</p>
     <${BulkList} id="fp-have" label="Người trong thư mục" action="Bỏ khỏi thư mục"
       items=${people.map((p) => ({ uid: p.uid, name: nameOf(p), note: elsewhere.has(p.uid) ? `· sẽ chuyển từ "${elsewhere.get(p.uid)}"` : '' }))}
-      onRemove=${(uids) => setPeople(people.filter((x) => !uids.includes(x.uid)))} />
+      onRemove=${(uids) => setPeople(people.filter((x) => !uids.includes(x.uid)))}
+      extra=${(sel, clear) => html`<${MoveToFolder} id="fp-move" folders=${folders} exclude=${folder.id} count=${sel.length} unit="người"
+        disabled=${dirty || busy !== ''}
+        onMove=${async (fid) => {
+          const moving = people.filter((p) => sel.includes(p.uid)).map((p) => ({ uid: p.uid, name: nameOf(p) === 'Chưa rõ tên' ? '' : nameOf(p) }));
+          const r = await addPeopleToFolder(fid, moving);
+          onSaved(r); clear();
+          return `Đã chuyển ${moving.length} người sang thư mục "${r.folders.find((f) => f.id === fid)?.name || ''}".`;
+        }} />`} />
+    ${dirty ? html`<p class="muted small">Lưu danh sách người trước khi chuyển sang thư mục khác.</p>` : null}
     <h4 class="multi-pick-head">Thêm người</h4>
     <${MultiPick} id="fp-pick" options=${options} label="Chọn người đã biết"
       onAdd=${(list) => { setPeople([...people, ...list.map((o) => ({ uid: o.uid, name: o.name || '' }))]); setError(''); }} />

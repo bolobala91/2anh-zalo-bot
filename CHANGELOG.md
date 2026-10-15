@@ -2,6 +2,15 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.48.0] — 2026-10-16
+
+### Thêm — Chuyển hàng loạt vào thư mục
+
+- **Phân quyền Bot › Nhóm › Chọn nhiều**: tích nhiều nhóm → mục **Chuyển vào thư mục** → chọn thư mục có sẵn hoặc **＋ Thư mục mới…** (gõ tên, tạo rồi chuyển luôn). Nhóm đang ở thư mục khác được chuyển sang; phần chỉnh riêng của từng nhóm giữ nguyên.
+- **Phân quyền Bot › Thư mục › Người trong thư mục**: tích nhiều người → **Chuyển vào** thư mục khác (hoặc thư mục mới).
+- **Liên hệ**: ô chuyển hàng loạt có thêm **＋ Thư mục mới…**; ô chọn người hiện cả khi chưa có thư mục nào.
+- Chuyển nhóm/người vào thư mục là họ theo ngay cài đặt và **quy tắc riêng** của thư mục đó (vd. thư mục KHKT).
+
 ## [2.47.0] — 2026-10-16
 
 ### Thêm — Quy tắc riêng cho từng thư mục

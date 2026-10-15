@@ -6,6 +6,7 @@ import { html, Icon, Live, Notice, PageHead, SaveBar, Spinner, Toggle, onText } 
 import { fold } from '../fold.js';
 import { DmEditor, dmBadge } from './dm-permissions.js';
 import { FolderPeople } from './folder-people.js';
+import { MoveToFolder, addGroupsToFolder } from './move-to-folder.js';
 import { BulkBar, flip, stillPicked, toggleAll } from './multi-pick.js';
 import { FolderChip, FolderColorPicker, FolderFilter, colorOf, inFolderFilter } from './folder-ui.js';
 import { StudioBox, applyPolicy, lockedByPolicy, parseQuota, studioComplete } from './studio-box.js';
@@ -211,7 +212,7 @@ export const bulkCount = (patch) => ['active', 'replyOnlyTagged'].filter((k) => 
   + Object.keys(patch.features || {}).length + Object.keys(patch.studio || {}).length;
 
 /** Bảng bên phải ở chế độ "Chọn nhiều": áp một thay đổi cho mọi nhóm đã chọn. */
-function BulkGroups({ picked, list, features, studioFeatures, studioPolicy, onSaved, onBack, onDirty }) {
+function BulkGroups({ picked, list, features, studioFeatures, studioPolicy, folders = [], onSaved, onBack, onDirty }) {
   const [choices, setChoices] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({});
@@ -243,6 +244,16 @@ function BulkGroups({ picked, list, features, studioFeatures, studioPolicy, onSa
     <p class="muted small perm-note">${picked.length
       ? `${names.slice(0, 5).join(', ')}${names.length > 5 ? ` và ${names.length - 5} nhóm khác` : ''}. Chỉ mục chọn Bật/Tắt được đổi; mục "Giữ nguyên" giữ cài đặt riêng của từng nhóm.`
       : 'Tích chọn nhóm ở danh sách bên trái.'}</p>
+    <fieldset class="perm-box">
+      <legend>Chuyển vào thư mục</legend>
+      <p class="muted small">Nhóm theo cài đặt và quy tắc riêng của thư mục mới; nhóm đang ở thư mục khác được chuyển sang. Phần chỉnh riêng của từng nhóm giữ nguyên.</p>
+      <${MoveToFolder} id="bulk-move" folders=${folders} count=${picked.length} unit="nhóm"
+        onMove=${async (fid, created) => {
+          const r = await addGroupsToFolder((created || { folders }).folders, fid, picked);
+          onSaved(r);
+          return `Đã chuyển ${picked.length} nhóm vào thư mục "${r.folders.find((f) => f.id === fid)?.name || ''}".`;
+        }} />
+    </fieldset>
     <fieldset class="perm-box">
       <legend>Cách bot trả lời</legend>
       <div class="perm-grid">${row('active', 'Hoạt động')}${row('replyOnlyTagged', 'Chỉ trả lời khi được tag')}</div>
@@ -327,7 +338,7 @@ function FolderEditor({ folder, perms, list, admin, onSaved, onBack, onDirty, on
         <button type="button" class="btn btn-ghost btn-sm" disabled=${busy !== '' || !membersDirty} onClick=${() => setPicked(new Set(folder.groups))}>Hoàn tác</button>
       </div>
     </details>
-    <${FolderPeople} folder=${folder} folders=${perms.folders} admin=${admin} busy=${busy} run=${run} base=${base} />
+    <${FolderPeople} folder=${folder} folders=${perms.folders} admin=${admin} busy=${busy} run=${run} base=${base} onSaved=${onSaved} />
     <details class="perm-box" open=${!!folder.rules}>
       <summary><span>Quy tắc riêng của thư mục</span><span class="muted perm-box-sum">· ${folder.rules ? 'đang dùng' : 'chưa đặt'}${rulesDirty ? ' (chưa lưu)' : ''}</span></summary>
       <p class="muted small">Bot làm theo các quy tắc này khi trả lời trong nhóm thuộc thư mục, và khi người trong thư mục nhắn riêng. Nơi khác không bị ảnh hưởng. Mỗi quy tắc một dòng là dễ đọc nhất.</p>
@@ -530,7 +541,7 @@ export function Permissions({ me }) {
       <section class="card perm-edit" aria-label=${selected === DM_KEY ? 'Quyền nhắn riêng' : selected === QUOTA_KEY ? 'Hạn mức xưởng' : selected === CALL_KEY ? 'Cách gọi bot' : selectedFolder ? 'Thư mục nhóm' : bulkPane ? 'Chỉnh nhiều nhóm' : 'Quyền của nhóm'}>
         ${bulkPane
           ? html`<${BulkGroups} key=${BULK_KEY} picked=${picked} list=${list} features=${perms.features} studioFeatures=${perms.studioFeatures || []}
-              studioPolicy=${perms.studioPolicy} onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => setSelected(null)} />`
+              studioPolicy=${perms.studioPolicy} folders=${perms.folders} onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => setSelected(null)} />`
           : selectedFolder
           ? html`<${FolderEditor} key=${selected} folder=${selectedFolder} perms=${perms} list=${list} admin=${me?.role === 'admin'}
               onSaved=${(r) => setPerms(r)} onDirty=${setDirty} onBack=${() => choose(null)} onDeleted=${() => { setDirty(false); setSelected(null); }} />`

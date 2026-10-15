@@ -56,7 +56,7 @@ export function BulkBar({ shown, picked, onPick, filtered = false, unit = 'ngư�
  * Danh sách đang có (người trong thư mục…): cuộn được, lọc theo tên, tích chọn rồi bỏ hàng loạt.
  * `items`: [{ uid, name, note }] — `onRemove(uids)`.
  */
-export function BulkList({ id, items, onRemove, label = 'Danh sách', unit = 'người', empty = 'Chưa có ai.', action = 'Bỏ' }) {
+export function BulkList({ id, items, onRemove, label = 'Danh sách', unit = 'người', empty = 'Chưa có ai.', action = 'Bỏ', extra = null }) {
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState(() => new Set());
   if (!items.length) return html`<p class="muted small">${empty}</p>`;
@@ -80,6 +80,7 @@ export function BulkList({ id, items, onRemove, label = 'Danh sách', unit = 'ng
     </ul>
     <button type="button" class="btn btn-danger-outline btn-sm" disabled=${!sel.length}
       onClick=${() => { onRemove(sel); setPicked(new Set()); }}>${sel.length ? `${action} ${sel.length} ${unit} đã chọn` : `Tích chọn để ${action.toLowerCase()} hàng loạt`}</button>
+    ${extra ? extra(sel, () => setPicked(new Set())) : null}
   </div>`;
 }
 
