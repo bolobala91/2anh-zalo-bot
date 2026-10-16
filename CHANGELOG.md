@@ -2,6 +2,12 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.51.2] — 2026-10-17
+
+### Sửa — Danh sách Kết nối MCP
+
+- Mỗi kết nối đã thêm hiện **tên và mô tả tiếng Việt** (theo danh mục, vd. "Wolfram|Alpha — Tính toán toán, lý, hoá…", "trivago — Tìm khách sạn, so sánh giá…") để dễ nhớ kết nối nào làm gì; tên gốc hiện nhỏ bên cạnh. Kết nối thêm theo địa chỉ riêng ghi rõ là kết nối riêng.
+
 ## [2.51.1] — 2026-10-17
 
 ### Sửa — Hộp "Công cụ" của Kết nối MCP

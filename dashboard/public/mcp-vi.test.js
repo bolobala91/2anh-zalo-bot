@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MCP_GROUPS, accessNote, filterCatalog, viEntry } from './mcp-vi.js';
+import { MCP_GROUPS, accessNote, filterCatalog, viEntry, viServer } from './mcp-vi.js';
 import { fold } from './fold.js';
 import { editBody, usesOwnerAccount } from './views/mcp.js';
 
@@ -45,4 +45,12 @@ test('hộp Sửa: chỉ gửi trường đổi; khoá trống = giữ; xoá th�
   assert.equal(usesOwnerAccount(s), true);
   assert.equal(usesOwnerAccount({ auth: 'none', keys: [] }), false);
   assert.equal(usesOwnerAccount({ auth: 'none', keys: ['NOTION_TOKEN'] }), true, 'khoá trong env cũng là của chủ bot');
+});
+
+test('kết nối đã thêm: tên + mô tả tiếng Việt theo danh mục; kết nối riêng → null', () => {
+  assert.equal(viServer('trivago').title, 'trivago');
+  assert.match(viServer('trivago').desc, /khách sạn/);
+  assert.match(viServer('kiwi').desc, /chuyến bay/);
+  assert.equal(viServer('rag'), null);
+  assert.equal(viServer('__proto__'), null);
 });

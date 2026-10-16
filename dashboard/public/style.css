@@ -1559,3 +1559,4 @@ button.board-item:disabled { cursor: default; }
 .mcp-tool input { margin-top: 2px; }
 .mcp-tool-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .mcp-tool-text strong { font-weight: 600; }
+.mcp-desc { color: var(--text); margin: 2px 0; }

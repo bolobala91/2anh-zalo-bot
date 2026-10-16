@@ -82,9 +82,15 @@ const VI = {
   'prisma-postgres': ['Prisma Postgres', 'Tạo và quản lý cơ sở dữ liệu Prisma Postgres.', ['lap-trinh', 'du-lieu']],
 };
 
+/** Tên + mô tả tiếng Việt của một kết nối đã thêm (theo tên trong danh mục); kết nối riêng (thêm theo địa chỉ) → null. */
+export function viServer(name) {
+  const v = Object.hasOwn(VI, name) ? VI[name] : null;
+  return v ? { title: v[0], desc: v[1] } : null;
+}
+
 /** Bản tiếng Việt của một mục danh mục (giữ mô tả gốc nếu chưa dịch). */
 export function viEntry(e) {
-  const v = VI[e.name];
+  const v = Object.hasOwn(VI, e.name) ? VI[e.name] : null;
   return { ...e, title: v?.[0] || e.name, descVi: v?.[1] || e.description, groups: v?.[2] || ['khac'], pick: Boolean(v?.[2]?.includes('goi-y')) };
 }
 

@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import { html, Dialog, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
 import { fold } from '../fold.js';
 import { RestartBanner } from './restart-banner.js';
-import { MCP_GROUPS, accessNote, filterCatalog, viEntry } from '../mcp-vi.js';
+import { MCP_GROUPS, accessNote, filterCatalog, viEntry, viServer } from '../mcp-vi.js';
 
 /** Màu nhãn trạng thái. */
 export function mcpKind(status) {
@@ -276,7 +276,9 @@ export function Mcp() {
       ${!list && !msg.error ? html`<${Spinner} />` : null}
       ${list && !list.length ? html`<p class="muted">Trợ lý chưa có kết nối MCP nào. Bấm Thêm kết nối để chọn từ danh mục.</p>` : null}
       <ul class="row-list">${(list || []).map((s) => html`<li key=${s.name} class="row-item mcp-row">
-        <span class="row-main"><strong>${s.name}</strong><small class="muted mono">${s.transport === 'http' ? s.target : `lệnh: ${s.target}`}</small>
+        <span class="row-main"><strong>${viServer(s.name)?.title || s.name}${viServer(s.name) && viServer(s.name).title.toLowerCase() !== s.name.toLowerCase() ? html` <small class="muted mono">${s.name}</small>` : null}</strong>
+          <small class="mcp-desc">${viServer(s.name)?.desc || 'Kết nối riêng (thêm theo địa chỉ) — chưa có mô tả trong danh mục.'}</small>
+          <small class="muted mono">${s.transport === 'http' ? s.target : `lệnh: ${s.target}`}</small>
           <small class="muted">${s.auth !== 'none' ? AUTH_LABEL[s.auth] : 'Không cần đăng nhập'}${s.toolsOff ? ` · tắt ${s.toolsOff} công cụ` : ''}${s.toolsOnly !== null ? ` · chỉ dùng ${s.toolsOnly} công cụ` : ''}${s.timeout ? ` · chờ tối đa ${s.timeout} giây` : ''}</small>
           <label class="mcp-who small"><span>Ai được dùng</span>
             <select value=${s.publicToMembers ? 'members' : 'owner'} disabled=${busy !== '' || Boolean(s.publicVia)} onChange=${(e) => setMembers(s, e.currentTarget.value === 'members')}>
