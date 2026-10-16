@@ -275,28 +275,30 @@ export function Mcp() {
       <${Live} error=${msg.error} ok=${msg.ok} />
       ${!list && !msg.error ? html`<${Spinner} />` : null}
       ${list && !list.length ? html`<p class="muted">Trợ lý chưa có kết nối MCP nào. Bấm Thêm kết nối để chọn từ danh mục.</p>` : null}
-      <ul class="row-list">${(list || []).map((s) => html`<li key=${s.name} class="row-item mcp-row">
-        <span class="row-main"><strong>${viServer(s.name)?.title || s.name}${viServer(s.name) && viServer(s.name).title.toLowerCase() !== s.name.toLowerCase() ? html` <small class="muted mono">${s.name}</small>` : null}</strong>
-          <small class="mcp-desc">${viServer(s.name)?.desc || 'Kết nối riêng (thêm theo địa chỉ) — chưa có mô tả trong danh mục.'}</small>
-          <small class="muted mono">${s.transport === 'http' ? s.target : `lệnh: ${s.target}`}</small>
-          <small class="muted">${s.auth !== 'none' ? AUTH_LABEL[s.auth] : 'Không cần đăng nhập'}${s.toolsOff ? ` · tắt ${s.toolsOff} công cụ` : ''}${s.toolsOnly !== null ? ` · chỉ dùng ${s.toolsOnly} công cụ` : ''}${s.timeout ? ` · chờ tối đa ${s.timeout} giây` : ''}</small>
-          <label class="mcp-who small"><span>Ai được dùng</span>
-            <select value=${s.publicToMembers ? 'members' : 'owner'} disabled=${busy !== '' || Boolean(s.publicVia)} onChange=${(e) => setMembers(s, e.currentTarget.value === 'members')}>
-              <option value="owner">Chỉ chủ nhân</option><option value="members">Thành viên</option></select></label>
-          ${s.publicVia ? html`<small class="muted">Đang mở theo mẫu "${s.publicVia}" ở trang Cấu hình — đổi ở đó.</small>`
-            : s.publicToMembers && usesOwnerAccount(s) ? html`<small class="mcp-access is-warn">Thành viên đang dùng tài khoản của bạn qua kết nối này.</small>` : null}
-          ${tests[s.name] === 'busy' ? html`<small class="muted">Đang kết nối thử…</small>` : tests[s.name] ? html`<small class=${`ai-result ${tests[s.name].connected ? 'is-ok' : 'is-bad'}`}>${testText(tests[s.name])}</small>` : null}</span>
-        <span class=${`badge badge-${mcpKind(s.status)}`}>${s.status}</span>
-        <span class="key-actions">
+      <ul class="mcp-grid">${(list || []).map((s) => { const vi = viServer(s.name); return html`<li key=${s.name} class=${`mcp-card${s.enabled ? '' : ' is-off'}`}>
+        <div class="mcp-card-head">
+          <span class="mcp-card-title"><strong>${vi?.title || s.name}</strong>${vi && vi.title.toLowerCase() !== s.name.toLowerCase() ? html` <small class="muted mono">${s.name}</small>` : null}</span>
+          <span class=${`badge badge-${mcpKind(s.status)} mcp-status`} title=${s.status}>${s.status.split(" — ")[0]}</span>
+        </div>
+        <p class="mcp-desc">${vi?.desc || 'Kết nối riêng (thêm theo địa chỉ) — chưa có mô tả trong danh mục.'}</p>
+        <p class="muted small mcp-meta"><span class="mono">${s.transport === 'http' ? s.target : `lệnh: ${s.target}`}</span><br />
+          ${s.auth !== 'none' ? AUTH_LABEL[s.auth] : 'Không cần đăng nhập'}${s.toolsOff ? ` · tắt ${s.toolsOff} công cụ` : ''}${s.toolsOnly !== null ? ` · chỉ dùng ${s.toolsOnly} công cụ` : ''}${s.timeout ? ` · chờ tối đa ${s.timeout} giây` : ''}</p>
+        <label class="mcp-who small"><span>Ai được dùng</span>
+          <select value=${s.publicToMembers ? 'members' : 'owner'} disabled=${busy !== '' || Boolean(s.publicVia)} onChange=${(e) => setMembers(s, e.currentTarget.value === 'members')}>
+            <option value="owner">Chỉ chủ nhân</option><option value="members">Thành viên</option></select></label>
+        ${s.publicVia ? html`<small class="muted">Đang mở theo mẫu "${s.publicVia}" ở trang Cấu hình — đổi ở đó.</small>`
+          : s.publicToMembers && usesOwnerAccount(s) ? html`<small class="mcp-access is-warn">Thành viên đang dùng tài khoản của bạn qua kết nối này.</small>` : null}
+        ${tests[s.name] === 'busy' ? html`<small class="muted">Đang kết nối thử…</small>` : tests[s.name] ? html`<small class=${`ai-result ${tests[s.name].connected ? 'is-ok' : 'is-bad'}`}>${testText(tests[s.name])}</small>` : null}
+        <div class="mcp-card-actions">
           ${data.manage ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== '' || tests[s.name] === 'busy'} onClick=${() => test(s)}>Kiểm tra</button>
             <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => setDialog({ kind: 'tools', server: s })}>Công cụ</button>
             <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => setDialog({ kind: 'edit', server: s })}>Sửa</button>
             ${someToolsOff(s) ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => allToolsOn(s)}>Bật hết công cụ</button>` : null}
             ${s.auth === 'oauth' ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => setDialog({ kind: 'login', server: s })}>Đăng nhập</button>` : null}` : null}
           <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => toggle(s)}>${s.enabled ? 'Tắt' : 'Bật'}</button>
-          ${data.manage ? html`<button type="button" class="btn btn-ghost btn-sm" aria-label=${`Gỡ kết nối ${s.name}`} disabled=${busy !== ''} onClick=${() => remove(s)}><${Icon} name="close" size=${14} /></button>` : null}
-        </span>
-      </li>`)}</ul>
+          ${data.manage ? html`<button type="button" class="btn btn-ghost btn-sm mcp-remove" aria-label=${`Gỡ kết nối ${s.name}`} title="Gỡ kết nối" disabled=${busy !== ''} onClick=${() => remove(s)}><${Icon} name="close" size=${14} /></button>` : null}
+        </div>
+      </li>`; })}</ul>
     </section>
     ${dialog?.kind === 'add' ? html`<${AddDialog} onClose=${() => setDialog(null)} onAdded=${(text, loginName) => {
       done(text);

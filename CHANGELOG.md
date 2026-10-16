@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.51.3] — 2026-10-17
+
+### Sửa — Kết nối MCP gọn hơn
+
+- Mỗi kết nối nằm trong **một ô riêng** (2–3 ô một hàng trên máy tính, một cột trên điện thoại): tên và trạng thái ở đầu, mô tả tiếng Việt, địa chỉ, cách đăng nhập, ô **Ai được dùng**, các nút ở chân ô. Kết nối đang tắt hiện mờ.
+- Nhãn trạng thái rút gọn ("Máy ngoài", "Đang mở"…); rê chuột để xem câu đầy đủ.
+
 ## [2.51.2] — 2026-10-17
 
 ### Sửa — Danh sách Kết nối MCP
