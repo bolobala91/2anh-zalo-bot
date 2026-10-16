@@ -25,7 +25,7 @@ import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
 import { createRestartFlags } from './lib/restart-flags.js';
 import { createBrandStore } from './lib/brand.js';
-import { readEnvKey, SETTINGS_ENV_KEYS } from './lib/env-file.js';
+import { readEnvKey, writeEnvKey, SETTINGS_ENV_KEYS } from './lib/env-file.js';
 import { createSecondBrain } from './lib/second-brain.js';
 import { createLearnedMemory, readProvider } from './lib/learned-memory.js';
 import { createPeopleStore } from './lib/people-store.js';
@@ -145,7 +145,8 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     soul: createSoul({ hermesHome: paths.hermesHome, historyDir: paths.soulHistoryDir }),
     toolsManifestFile: paths.toolsManifestFile,
     agentTrace: createAgentTrace({ dbPath: paths.hermesStateDb }),
-    mcpServers: createMcpServers({ configFile: paths.hermesConfigFile, publicMcp: () => readEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP') }),
+    mcpServers: createMcpServers({ configFile: paths.hermesConfigFile, publicMcp: () => readEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP'),
+      writePublicMcp: (v) => writeEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP', v) }),
     hermesAdmin,
     // Ảnh/tệp gửi tay từ Phiên chat đặt tạm ở đây; kết nối Zalo chỉ nhận tệp trong đúng thư mục này.
     outboxDir: join(paths.dataDir, 'outbox'),

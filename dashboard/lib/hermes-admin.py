@@ -640,6 +640,94 @@ def mcp_add(args):
     return {"name": name, "auth": auth}
 
 
+ENV_REF = re.compile(r"\$\{([A-Z][A-Z0-9_]{1,63})\}")
+TIMEOUT_RANGE = {"timeout": (10, 3600), "connect_timeout": (5, 600)}
+
+
+def _key_refs(cfg):
+    """Tên biến .env mà kết nối dùng làm khoá: các `${TÊN}` trong headers/env. Biến ZALO_/HERMES_ không bao giờ là khoá."""
+    refs = {}
+    for block in ("headers", "env"):
+        values = cfg.get(block) if isinstance(cfg.get(block), dict) else {}
+        for field, value in values.items():
+            for ref in ENV_REF.findall(str(value)):
+                if not ref.startswith(("ZALO_", "HERMES_")):
+                    refs[ref] = refs.get(ref) or (block == "headers" and str(field).lower() == "authorization"
+                                                  and str(value).lstrip().lower().startswith("bearer "))
+    return refs  # tên → True nếu là khoá "Bearer …" (bỏ chữ Bearer người dùng lỡ dán kèm)
+
+
+def mcp_edit(args):
+    """Sửa kết nối đã có: địa chỉ (chỉ kiểu http), khoá trong .env (chỉ biến mà kết nối đang dùng), thời gian chờ.
+    Không bao giờ trả lại giá trị khoá."""
+    from urllib.parse import urlparse
+    from hermes_cli.config import save_env_value
+    from hermes_cli.mcp_config import _save_mcp_server, _strip_bearer_prefix
+    name, cfg = need_mcp(args)
+    cfg = dict(cfg)
+    changed, relogin = [], False
+    url = args.get("url")
+    if url is not None and str(url).strip() != str(cfg.get("url") or ""):
+        if not cfg.get("url"):
+            raise Refusal("Kết nối này chạy bằng lệnh trên máy chủ — không có địa chỉ để sửa.")
+        url = str(url).strip()
+        try:
+            u = urlparse(url)
+            host, _port = u.hostname, u.port
+        except ValueError:
+            raise Refusal("Địa chỉ phải dạng https://…")
+        if u.scheme not in ("https", "http") or not host or len(url) > 500 or re.search(r"\s", url):
+            raise Refusal("Địa chỉ phải dạng https://…")
+        if u.scheme == "http" and u.hostname not in LOOPBACK:
+            raise Refusal("Địa chỉ ngoài máy phải dùng https://.")
+        relogin = cfg.get("auth") == "oauth" and urlparse(str(cfg["url"])).hostname != host
+        cfg["url"] = url
+        changed.append("địa chỉ")
+    keys = args.get("keys") or {}
+    if not isinstance(keys, dict):
+        raise Refusal("Thông tin khoá không hợp lệ.")
+    refs = _key_refs(cfg)
+    for key, value in keys.items():
+        if key not in refs:
+            raise Refusal(f"Kết nối này không dùng khoá {key}.")
+        value = str(value or "").strip()
+        if not value:
+            continue  # để trống = giữ khoá cũ
+        if refs[key]:
+            value = _strip_bearer_prefix(value)
+        if not value or len(value) > 4096 or re.search(r"[\x00-\x1f\x7f]", value):
+            raise Refusal("Khoá không hợp lệ — dán lại đúng khoá của dịch vụ.")
+        save_env_value(key, value)
+        changed.append("khoá")
+    for field, (lo, hi) in TIMEOUT_RANGE.items():
+        if field not in args:
+            continue
+        raw = args.get(field)
+        if raw in (None, ""):
+            if field in cfg:
+                cfg.pop(field)
+                changed.append("thời gian chờ")
+            continue
+        try:
+            seconds = int(raw)
+        except (TypeError, ValueError):
+            raise Refusal("Thời gian chờ phải là số giây.")
+        if not lo <= seconds <= hi:
+            raise Refusal(f"Thời gian chờ phải từ {lo} đến {hi} giây.")
+        if cfg.get(field) != seconds:
+            cfg[field] = seconds
+            changed.append("thời gian chờ")
+    if cfg != (_mcp_servers().get(name) or {}) and not _save_mcp_server(name, cfg):
+        raise Refusal("Hermes từ chối cấu hình này.")
+    if relogin:
+        try:
+            from tools.mcp_oauth import remove_oauth_tokens
+            remove_oauth_tokens(name)
+        except Exception:
+            pass
+    return {"name": name, "changed": sorted(set(changed)), "relogin": relogin}
+
+
 def _tool_enabled(tool, tools_cfg):
     from fnmatch import fnmatchcase
     if not isinstance(tools_cfg, dict):
@@ -903,6 +991,7 @@ COMMANDS = {
     "mcp.catalog": mcp_catalog,
     "mcp.install": mcp_install,
     "mcp.add": mcp_add,
+    "mcp.edit": mcp_edit,
     "mcp.test": mcp_test,
     "mcp.tools": mcp_tools,
     "mcp.remove": mcp_remove,

@@ -189,6 +189,30 @@ class HelperEndToEndTest(unittest.TestCase):
         self.assertNotIn("noi-bo", read(os.path.join(self.home, "config.yaml")))
         self.assertEqual(self.run_cmd("mcp.install", {"name": "khong-co-trong-danh-muc"}).get("user"), True)
 
+    def test_mcp_edit_url_key_timeout(self):
+        self.assertTrue(self.run_cmd("mcp.add", {"name": "co-khoa", "url": "https://mcp.example/x", "auth": "bearer", "token": "tok-cu-123456"})["ok"])
+        key = "MCP_CO_KHOA_API_KEY"
+        r = self.run_cmd("mcp.edit", {"name": "co-khoa", "keys": {key: "Bearer tok-moi-987654"}, "timeout": 120, "url": "https://mcp.example/v2"})
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["changed"], sorted(["khoá", "thời gian chờ", "địa chỉ"]))
+        self.assertNotIn("tok-moi", json.dumps(r), "không bao giờ trả lại khoá")
+        env = read(os.path.join(self.home, ".env"))
+        self.assertIn("tok-moi-987654", env)
+        self.assertNotIn("Bearer tok-moi", env, "bỏ chữ Bearer dán kèm")
+        cfg = read(os.path.join(self.home, "config.yaml"))
+        self.assertNotIn("tok-moi", cfg)
+        self.assertIn("https://mcp.example/v2", cfg)
+        self.assertRegex(cfg, r"timeout: 120")
+        self.assertTrue(self.run_cmd("mcp.edit", {"name": "co-khoa", "keys": {key: ""}})["ok"], "để trống = giữ khoá")
+        self.assertIn("tok-moi-987654", read(os.path.join(self.home, ".env")))
+        self.assertTrue(self.run_cmd("mcp.edit", {"name": "co-khoa", "timeout": ""})["ok"])
+        self.assertNotRegex(read(os.path.join(self.home, "config.yaml")), r"\btimeout: 120")
+        for bad in ({"keys": {"OPENAI_API_KEY": "x" * 20}}, {"keys": {"ZALO_ALLOWED_USERS": "1"}}, {"timeout": 5},
+                    {"connect_timeout": 9999}, {"timeout": "abc"}, {"url": "http://evil.example/mcp"}, {"url": "file:///etc/passwd"}):
+            r = self.run_cmd("mcp.edit", {"name": "co-khoa", **bad})
+            self.assertEqual((r["ok"], r.get("user")), (False, True), bad)
+        self.assertEqual(self.run_cmd("mcp.edit", {"name": "khong-co", "timeout": 30}).get("user"), True)
+
     def test_backup_roundtrip_and_forged_archives_rejected(self):
         home = self.home
         write(os.path.join(home, ".env"), "TAVILY_API_KEY=cu\n")

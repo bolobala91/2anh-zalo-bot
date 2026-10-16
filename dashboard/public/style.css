@@ -1546,3 +1546,12 @@ button.board-item:disabled { cursor: default; }
 .role-owner { background: #fef3c7; color: #92400e; }
 .role-admin { background: var(--brand-soft); color: var(--brand-dark); }
 .role-bot { background: #ede9fe; color: #5b21b6; }
+
+/* Kết nối MCP: Ai được dùng, danh mục tiếng Việt */
+.mcp-who { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; align-self: flex-start; }
+.mcp-who > span { white-space: nowrap; }
+.mcp-who select { width: auto; min-width: 0; max-width: 180px; padding: 4px 8px; }
+.mcp-access.is-ok { color: var(--ok); }
+.mcp-access.is-warn { color: #854d0e; }
+.mcp-groups { flex-wrap: wrap; }
+.mcp-pick { margin-left: 6px; padding: 1px 8px; font-size: 12px; vertical-align: 1px; }

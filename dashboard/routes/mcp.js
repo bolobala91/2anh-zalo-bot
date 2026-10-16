@@ -31,6 +31,14 @@ export function mcpRoutes({ mcpServers, hermesAdmin, restartFlags, activity, con
       res.json(await list());
     } catch (err) { fail(res, err); }
   });
+  // "Ai được dùng": ghi ZALO_PUBLIC_MCP — plugin đọc lại ngay, không cần khởi động lại trợ lý.
+  r.put('/admin/mcp/:name/members', ...guard, async (req, res) => {
+    try {
+      const open = req.body?.open;
+      if (mcpServers.setMembers(req.params.name, open)) log(req, open ? 'mcp_members_open' : 'mcp_members_close', req.params.name);
+      res.json(await list());
+    } catch (err) { fail(res, err, 'Chưa lưu được ai được dùng kết nối này.'); }
+  });
   if (!hermesAdmin) return r;
 
   r.get('/admin/mcp-catalog', ...guard, async (req, res) => {
@@ -50,6 +58,17 @@ export function mcpRoutes({ mcpServers, hermesAdmin, restartFlags, activity, con
       changed(req, 'mcp_add', out.name);
       res.json({ ...(await list()), added: strip(out) });
     } catch (err) { fail(res, err, 'Chưa thêm được kết nối.'); }
+  });
+  // Sửa: địa chỉ, khoá (chỉ ghi, không bao giờ đọc ra), thời gian chờ. Chỉ chuyển đúng các trường được phép.
+  r.put('/admin/mcp/:name/edit', ...guard, async (req, res) => {
+    try {
+      const b = req.body || {};
+      const args = { name: req.params.name };
+      for (const k of ['url', 'keys', 'timeout', 'connect_timeout']) if (k in b) args[k] = b[k];
+      const out = await hermesAdmin.write('mcp.edit', args);
+      if (out.changed?.length) changed(req, 'mcp_edit', `${out.name}: ${out.changed.join(', ')}`);
+      res.json({ ...(await list()), edited: strip(out) });
+    } catch (err) { fail(res, err, 'Chưa lưu được thay đổi của kết nối.'); }
   });
   r.post('/admin/mcp/:name/test', ...guard, async (req, res) => {
     try { res.json({ ok: true, ...strip(await hermesAdmin.read('mcp.test', { name: req.params.name }, { timeoutMs: 60_000 })) }); } catch (err) { fail(res, err, 'Chưa kiểm tra được kết nối.'); }
