@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.51.1] — 2026-10-17
+
+### Sửa — Hộp "Công cụ" của Kết nối MCP
+
+- Tên và mô tả công cụ (do dịch vụ bên ngoài gửi, thường tiếng Anh) được **dịch sang tiếng Việt** bằng model AI chính của bot: hiện tên dễ hiểu, mô tả một câu và tên gốc nhỏ bên dưới. Mỗi công cụ chỉ dịch một lần rồi lưu đệm; AI lỗi thì vẫn hiện bản gốc.
+- Sửa bố cục: ô tích nằm cạnh tên công cụ, không còn bị đẩy lên trên và lệch giữa.
+
 ## [2.51.0] — 2026-10-17
 
 ### Thêm — Kết nối MCP dễ dùng hơn

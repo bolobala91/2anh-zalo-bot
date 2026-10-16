@@ -1555,3 +1555,7 @@ button.board-item:disabled { cursor: default; }
 .mcp-access.is-warn { color: #854d0e; }
 .mcp-groups { flex-wrap: wrap; }
 .mcp-pick { margin-left: 6px; padding: 1px 8px; font-size: 12px; vertical-align: 1px; }
+.check.mcp-tool { flex: 1 1 auto; align-items: flex-start; gap: 12px; font-weight: 400; min-width: 0; }
+.mcp-tool input { margin-top: 2px; }
+.mcp-tool-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mcp-tool-text strong { font-weight: 600; }

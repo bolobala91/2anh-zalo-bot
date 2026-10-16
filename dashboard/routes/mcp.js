@@ -9,7 +9,7 @@ import { requireAuth, requireRole } from '../lib/http-guards.js';
 const FLOW_TTL_MS = 6 * 60_000;
 const page = (title, text) => `<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px"><h1 style="font-size:1.3rem">${title}</h1><p>${text}</p></body></html>`;
 
-export function mcpRoutes({ mcpServers, hermesAdmin, restartFlags, activity, config }) {
+export function mcpRoutes({ mcpServers, hermesAdmin, mcpToolVi, restartFlags, activity, config }) {
   const r = express.Router();
   const guard = [requireAuth, requireRole('admin')];
   const fail = (res, err, fallback = 'Chưa đọc/ghi được config.yaml — thử lại, nếu vẫn lỗi hãy báo người cài đặt.') => {
@@ -69,6 +69,13 @@ export function mcpRoutes({ mcpServers, hermesAdmin, restartFlags, activity, con
       if (out.changed?.length) changed(req, 'mcp_edit', `${out.name}: ${out.changed.join(', ')}`);
       res.json({ ...(await list()), edited: strip(out) });
     } catch (err) { fail(res, err, 'Chưa lưu được thay đổi của kết nối.'); }
+  });
+  // Tên + mô tả tiếng Việt cho công cụ (hộp "Công cụ"): dịch một lần rồi đệm; lỗi thì trang giữ bản gốc.
+  r.post('/admin/mcp-tools-vi', ...guard, async (req, res) => {
+    const tools = req.body?.tools;
+    if (!Array.isArray(tools) || tools.length > 100) return res.status(400).json({ ok: false, error: 'Danh sách công cụ không hợp lệ.' });
+    if (!mcpToolVi) return res.json({ ok: true, vi: {} });
+    try { res.json({ ok: true, vi: await mcpToolVi.describe(tools) }); } catch { res.json({ ok: true, vi: {} }); }
   });
   r.post('/admin/mcp/:name/test', ...guard, async (req, res) => {
     try { res.json({ ok: true, ...strip(await hermesAdmin.read('mcp.test', { name: req.params.name }, { timeoutMs: 60_000 })) }); } catch (err) { fail(res, err, 'Chưa kiểm tra được kết nối.'); }

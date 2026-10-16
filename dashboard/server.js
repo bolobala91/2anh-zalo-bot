@@ -46,6 +46,7 @@ import { createBotUses } from './lib/bot-uses.js';
 import { createAiEvents } from './lib/ai-events.js';
 import { createAgentTrace } from './lib/agent-trace.js';
 import { createMcpServers } from './lib/mcp-servers.js';
+import { createMcpToolVi } from './lib/mcp-tool-vi.js';
 import { createSettings } from './lib/settings.js';
 import { createOwnersStore } from './lib/owners.js';
 import { createServiceChecker } from './lib/services.js';
@@ -148,6 +149,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     mcpServers: createMcpServers({ configFile: paths.hermesConfigFile, publicMcp: () => readEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP'),
       writePublicMcp: (v) => writeEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP', v) }),
     hermesAdmin,
+    mcpToolVi: createMcpToolVi({ configFile: paths.hermesConfigFile, cacheFile: join(paths.hermesHome, 'zalo', 'mcp-tool-vi.json') }),
     // Ảnh/tệp gửi tay từ Phiên chat đặt tạm ở đây; kết nối Zalo chỉ nhận tệp trong đúng thư mục này.
     outboxDir: join(paths.dataDir, 'outbox'),
     // Cách gọi bot: cùng tệp plugin đọc (ZALO_CALL_WORDS_FILE trong .env Hermes thắng).

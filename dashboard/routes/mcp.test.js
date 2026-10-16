@@ -122,3 +122,21 @@ test('Kết nối MCP: Ai được dùng ghi ZALO_PUBLIC_MCP (không cần khở
   assert.ok(!JSON.stringify(deps.activity.list()).includes('bi-mat'), 'Nhật ký không ghi khoá');
   assert.deepEqual(deps.restartFlags.get().assistant.reasons, ['Kết nối MCP: rag: khoá']);
 });
+
+test('Kết nối MCP: Việt hoá công cụ — chỉ Quản trị, kiểm danh sách, dịch lỗi thì trả rỗng', async (t) => {
+  const deps = makeDeps(t);
+  writeFileSync(join(deps.dir, 'config.yaml'), 'mcp_servers:\n  rag:\n    url: http://127.0.0.1:9998/mcp\n');
+  deps.mcpServers = createMcpServers({ configFile: join(deps.dir, 'config.yaml'), probe: async () => true });
+  deps.hermesAdmin = fakeAdmin();
+  let fail = false;
+  deps.mcpToolVi = { describe: async (tools) => { if (fail) throw new Error('x'); return { [tools[0].name]: { label: 'Tìm tài liệu', desc: 'Tìm trong kho.' } }; } };
+  const { call } = await startApp(t, deps);
+  const owner = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  assert.equal((await call('/api/admin/mcp-tools-vi', { method: 'POST', cookie: owner, body: { tools: [] } })).status, 403);
+  const admin = await loginAs(t, deps, call);
+  assert.equal((await call('/api/admin/mcp-tools-vi', { method: 'POST', cookie: admin, body: { tools: 'x' } })).status, 400);
+  const ok = await call('/api/admin/mcp-tools-vi', { method: 'POST', cookie: admin, body: { tools: [{ name: 'search', description: 'Search docs' }] } });
+  assert.deepEqual(ok.json.vi, { search: { label: 'Tìm tài liệu', desc: 'Tìm trong kho.' } });
+  fail = true;
+  assert.deepEqual((await call('/api/admin/mcp-tools-vi', { method: 'POST', cookie: admin, body: { tools: [{ name: 'a', description: '' }] } })).json.vi, {});
+});

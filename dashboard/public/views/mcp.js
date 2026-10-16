@@ -87,9 +87,19 @@ function ToolsDialog({ server, onSaved, onClose }) {
   const [off, setOff] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [vi, setVi] = useState(null); // { [tên công cụ]: { label, desc } } — null: đang dịch
   useEffect(() => {
+    let alive = true;
     api(`/api/admin/mcp/${encodeURIComponent(server.name)}/test`, { method: 'POST' })
-      .then((t) => { setTest(t); setOff(new Set(t.tools.filter((x) => !x.enabled).map((x) => x.name))); }).catch((e) => setError(e.message));
+      .then((t) => {
+        if (!alive) return;
+        setTest(t); setOff(new Set(t.tools.filter((x) => !x.enabled).map((x) => x.name)));
+        if (!t.tools.length) { setVi({}); return; }
+        // Hiện bản gốc ngay; bản tiếng Việt (dịch một lần, có đệm) thay vào khi xong.
+        api('/api/admin/mcp-tools-vi', { method: 'POST', body: { tools: t.tools.slice(0, 100).map((x) => ({ name: x.name, description: x.description })) } })
+          .then((r) => alive && setVi(r.vi || {}), () => alive && setVi({}));
+      }).catch((e) => alive && setError(e.message));
+    return () => { alive = false; };
   }, [server.name]);
   const flip = (n, on) => setOff((s) => { const d = new Set(s); if (on) d.delete(n); else d.add(n); return d; });
   async function save() {
@@ -102,9 +112,12 @@ function ToolsDialog({ server, onSaved, onClose }) {
       ${test ? html`<p class=${`ai-result ${test.connected ? 'is-ok' : 'is-bad'}`}>${testText(test)}</p>` : null}
       ${test?.tools?.length ? html`<div class="toolbar"><button type="button" class="btn btn-ghost btn-sm" onClick=${() => setOff(new Set())}>Bật hết</button>
           <button type="button" class="btn btn-ghost btn-sm" onClick=${() => setOff(new Set(test.tools.map((x) => x.name)))}>Tắt hết</button></div>
-        <ul class="row-list">${test.tools.map((t) => html`<li key=${t.name} class="row-item">
-          <label class="check row-main"><input type="checkbox" checked=${!off.has(t.name)} onChange=${(e) => flip(t.name, e.currentTarget.checked)} />
-            <span><strong class="mono">${t.name}</strong><small class="clamp-2">${t.description}</small></span></label></li>`)}</ul>` : null}
+        ${vi === null ? html`<p class="muted small">Đang dịch mô tả sang tiếng Việt…</p>` : null}
+        <ul class="row-list">${test.tools.map((t) => { const v = vi?.[t.name]; return html`<li key=${t.name} class="row-item">
+          <label class="check mcp-tool"><input type="checkbox" checked=${!off.has(t.name)} onChange=${(e) => flip(t.name, e.currentTarget.checked)} />
+            <span class="mcp-tool-text"><strong>${v?.label || t.name}</strong>
+              <small class="clamp-2">${v?.desc || t.description}</small>
+              ${v ? html`<small class="muted mono">${t.name}</small>` : null}</span></label></li>`; })}</ul>` : null}
       <${Live} error=${error} />
       ${test?.tools?.length ? html`<div class="dialog-actions"><button type="button" class="btn btn-primary" disabled=${busy} onClick=${save}>${busy ? 'Đang lưu…' : 'Lưu lựa chọn'}</button></div>` : null}
     </div>
