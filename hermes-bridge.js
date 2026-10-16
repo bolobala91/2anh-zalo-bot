@@ -65,6 +65,7 @@ export async function fetchGroupMembers(api, groupId) {
   const profiles = lookup.length ? (await api.getGroupMembersInfo(lookup))?.profiles || {} : {};
   return {
     total: memberIds.length,
+    creatorId: group.creatorId ? String(group.creatorId) : '',
     adminIds,
     members: lookup.map((id) => ({
       id,

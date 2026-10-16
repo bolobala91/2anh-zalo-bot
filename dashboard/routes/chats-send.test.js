@@ -188,6 +188,47 @@ test('nhóm cộng đồng: Zalo chỉ trả trưởng/phó → gộp thêm ngư
   assert.deepEqual(off.json.members.map((m) => m.uid), ['7770001', '7770002', '7770003']);
 });
 
+test('bảng Thành viên (?full=1): trưởng/phó nhóm, đánh dấu bot, ảnh đại diện; số Zalo liệt kê tách khỏi tổng', async (t) => {
+  const deps = makeDeps(t);
+  seedHistory(deps, { messages: [
+    chatMsg({ threadId: '400', threadType: 1, senderUid: '8880004', senderName: 'Hà (chỉ có trong lịch sử)', ts: 1_000 }),
+  ] });
+  deps.sidecar.groupMembers = async () => ({
+    total: 5, creatorId: '8880001', adminIds: ['8880001', '8880002'],
+    members: [{ id: '8880001', displayName: 'Cô Lan' }, { id: '8880002', displayName: 'Thầy Minh' }, { id: '8880003', displayName: 'An' }],
+  });
+  deps.sidecar.avatars = async (uids) => (uids.includes('8880003') ? { 8880003: 'https://s120-ava-talk.zadn.vn/a.jpg' } : {});
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const full = (await call('/api/chats/400/members?full=1', { cookie })).json;
+  assert.equal(full.total, 5);
+  assert.equal(full.listed, 3);
+  const by = Object.fromEntries(full.members.map((m) => [m.name, m]));
+  assert.equal(by['Cô Lan'].role, 'owner');
+  assert.equal(by['Thầy Minh'].role, 'admin');
+  assert.equal(by.An.role, undefined);
+  assert.equal(by.An.avatar, 'https://s120-ava-talk.zadn.vn/a.jpg');
+  assert.ok(by['Hà (chỉ có trong lịch sử)'], 'người từng nhắn vẫn có trong danh sách');
+  // Ô gợi ý @ (không ?full) giữ dạng gọn: chỉ uid + tên.
+  const lite = (await call('/api/chats/400/members', { cookie })).json;
+  assert.deepEqual(Object.keys(lite.members[0]).sort(), ['name', 'uid']);
+});
+
+test('bảng Thành viên đánh dấu chính bot theo UID tài khoản ghi lịch sử', async (t) => {
+  const deps = makeDeps(t);
+  seedHistory(deps, { messages: [chatMsg({ threadId: '401', threadType: 1, senderUid: '8880009', senderName: 'Nam', ts: 1_000 }),
+    chatMsg({ threadId: '401', threadType: 1, senderUid: '8880010', senderName: 'Người đã rời nhóm', ts: 2_000 })] });
+  const self = String(deps.store.selfUid());
+  deps.sidecar.groupMembers = async () => ({ total: 2, members: [{ id: self, displayName: 'Lăng Tiêu' }, { id: '8880009', displayName: 'Nam' }] });
+  const { call } = await startApp(t, deps);
+  const cookie = await loginAs(t, deps, call, { username: 'khach', role: 'owner' });
+  const full = (await call('/api/chats/401/members?full=1', { cookie })).json;
+  assert.equal(full.members.find((m) => m.uid === self).self, true);
+  assert.equal(full.members.find((m) => m.uid === '8880009').self, undefined);
+  assert.equal(full.members.length, 2, 'Zalo trả đủ danh sách → bỏ người chỉ còn trong lịch sử (đã rời nhóm)');
+  assert.ok((await call('/api/chats/401/members', { cookie })).json.members.some((m) => m.uid === '8880010'), 'ô gợi ý @ vẫn giữ');
+});
+
 test('nhắc tên (@): vị trí phải đúng "@…" trong nội dung; nhắc theo tin thì máy chủ tự tra UID; chỉ trong nhóm', async (t) => {
   const deps = makeDeps(t);
   seedHistory(deps, { messages: [

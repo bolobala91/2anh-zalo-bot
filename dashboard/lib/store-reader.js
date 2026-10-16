@@ -426,6 +426,8 @@ export function createStoreReader({
      * Người từng nhắn trong nhóm (kể cả tin đã thu hồi), mới nhắn trước, kèm tên gần nhất — bù cho danh sách thành viên
      * Zalo giấu (nhóm cộng đồng chỉ trả trưởng/phó khi bot không phải quản trị).
      */
+    /** UID Zalo của chính bot (tài khoản ghi lịch sử) — để đánh dấu bot trong danh sách thành viên. */
+    selfUid: () => account(),
     groupSenders(threadId, limit = 500) {
       const acc = account();
       if (!acc) return [];

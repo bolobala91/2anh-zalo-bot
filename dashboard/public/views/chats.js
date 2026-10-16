@@ -8,6 +8,7 @@ import { classifyMedia } from '../media.js';
 import { FileCard, Lightbox, MediaPanel, Thumb, VideoCard } from './chat-media.js';
 import { PermsIcon, PermsPanel, permsTint } from './chat-perms.js';
 import { Avatar, InfoPanel } from './chat-info.js';
+import { MembersPanel } from './chat-members.js';
 import { FolderChip, FolderFilter, folderIndex, folderOfThread, inFolderFilter } from './folder-ui.js';
 
 export { markMatches };
@@ -496,7 +497,7 @@ function Thread({ conv, onBack, onPinned, folders = null, onFolders }) {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadingNewer, setLoadingNewer] = useState(false);
   const [error, setError] = useState('');
-  // Bảng bên phải: 'info' (Thông tin hội thoại, mở sẵn trên màn rộng) | 'search' | 'media' | 'perms'.
+  // Bảng bên phải: 'info' (Thông tin hội thoại, mở sẵn trên màn rộng) | 'search' | 'media' | 'perms' | 'members'.
   const [keepInfo, setKeepInfo] = useState(infoPreferred);
   const [side, setSide] = useState(() => (infoPreferred() ? 'info' : null));
   const [mediaTab, setMediaTab] = useState('photo');
@@ -657,7 +658,7 @@ function Thread({ conv, onBack, onPinned, folders = null, onFolders }) {
 
   const back = keepInfo ? 'info' : null;
   const toggle = (name) => setSide((cur) => (cur === name ? back : name));
-  const toggles = { search: useRef(null), info: useRef(null), perms: useRef(null) };
+  const toggles = { search: useRef(null), info: useRef(null), perms: useRef(null), members: useRef(null) };
   // Đóng bảng thì về bảng Thông tin (nếu đang ghim mở) và trả tiêu điểm về nút đã mở nó.
   const closeSide = (name) => { setSide(back); setTimeout(() => (toggles[name] || toggles.info).current?.focus(), 0); };
   function toggleInfo() {
@@ -672,8 +673,10 @@ function Thread({ conv, onBack, onPinned, folders = null, onFolders }) {
       <${Avatar} name=${conv.name} group=${group} url=${info?.avatar || ''} />
       <div class="chat-head-main">
         <h2 title=${conv.name}>${conv.name}</h2>
-        <p class="muted small chat-head-sub" title=${stats || undefined}>${group ? 'Nhóm' : 'Nhắn riêng'}${group && info?.members
-          ? html` · <${Icon} name="users" size=${14} /> ${new Intl.NumberFormat('vi-VN').format(info.members)} thành viên` : stats ? html` · <span>${stats}</span>` : null}</p>
+        <p class="muted small chat-head-sub" title=${stats || undefined}>${group ? 'Nhóm' : 'Nhắn riêng'}${group
+          ? html` · <button type="button" ref=${toggles.members} class="head-members" aria-pressed=${side === 'members' ? 'true' : 'false'} onClick=${() => toggle('members')}
+              title="Xem danh sách thành viên"><${Icon} name="users" size=${14} /> ${info?.members ? `${new Intl.NumberFormat('vi-VN').format(info.members)} thành viên` : 'Thành viên'}</button>`
+          : stats ? html` · <span>${stats}</span>` : null}</p>
       </div>
       <div class="chat-head-tools">
       <button type="button" ref=${toggles.search} class=${`btn btn-ghost btn-sm head-tool${side === 'search' ? ' active' : ''}`} aria-pressed=${side === 'search' ? 'true' : 'false'}
@@ -717,6 +720,7 @@ function Thread({ conv, onBack, onPinned, folders = null, onFolders }) {
     <${Compose} conv=${conv} onSent=${() => kick.current()} reply=${reply} onClearReply=${() => setReply(null)} mentionReq=${mentionReq} />
     ${side === 'search' ? html`<${ThreadSearch} conv=${conv} onJump=${jumpTo} onClose=${() => closeSide('search')} />` : null}
     ${side === 'perms' ? html`<${PermsPanel} conv=${conv} onClose=${() => closeSide('perms')} />` : null}
+    ${side === 'members' && group ? html`<${MembersPanel} conv=${conv} onClose=${() => closeSide('members')} />` : null}
     ${side === 'media' ? html`<${MediaPanel} key=${mediaTab} conv=${conv} initialTab=${mediaTab} onClose=${() => closeSide('media')} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}
     ${side === 'info' ? html`<${InfoPanel} conv=${conv} info=${info} board=${board} reminders=${reminders} pinned=${pinned} pinBusy=${pinBusy} onPin=${togglePin} onJump=${(ref) => ref && jumpTo(ref)} statsText=${stats} onClose=${toggleInfo} onTool=${(name) => setSide(name)} folders=${folders} onFolders=${onFolders}
       onOpen=${(tab) => { setMediaTab(tab); setSide('media'); }} onOpenPhoto=${(items, index) => setLightbox({ items, index })} />` : null}

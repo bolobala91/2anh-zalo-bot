@@ -1145,3 +1145,13 @@ test('phiên chat kiểu Zalo: gộp cụm tin theo người gửi, dải ngày,
   assert.equal(initialOf(''), '?');
   assert.equal(tintOf('An'), tintOf('An'), 'cùng tên cùng màu');
 });
+
+test('Thành viên nhóm: trưởng → phó → bot → theo tên; lọc theo tên không dấu', async () => {
+  const { sortMembers, filterMembers } = await import('./views/chat-members.js');
+  const list = [{ uid: '1', name: 'Bình' }, { uid: '2', name: 'An', role: 'admin' }, { uid: '3', name: 'Lăng Tiêu', self: true },
+    { uid: '4', name: 'Cô Lan', role: 'owner' }, { uid: '5', name: 'Ánh' }];
+  assert.deepEqual(sortMembers(list).map((m) => m.uid), ['4', '2', '3', '5', '1']);
+  assert.deepEqual(filterMembers(list, 'lang tieu').map((m) => m.uid), ['3']);
+  assert.deepEqual(filterMembers(list, '  ').length, 5, 'ô trống → cả danh sách');
+  assert.equal(list[0].name, 'Bình', 'không đổi danh sách gốc');
+});

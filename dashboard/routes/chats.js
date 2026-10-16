@@ -188,8 +188,23 @@ export function chatRoutes({ store, sidecar, threadNames, agentTrace = null, out
     try { zalo = await sidecar.groupMembers(req.params.threadId); } catch (err) { if (!senders.length) return failSidecar(res, err); }
     const byUid = new Map();
     for (const m of zalo.members) if (m.displayName) byUid.set(String(m.id), { uid: String(m.id), name: String(m.displayName) });
+    const listed = byUid.size;
     for (const s of senders) if (!byUid.has(s.uid)) byUid.set(s.uid, s);
-    res.json({ ok: true, total: Math.max(zalo.total || 0, byUid.size), members: [...byUid.values()] });
+    // Bảng Thành viên (?full=1): vai trò trưởng/phó, đánh dấu bot, ảnh đại diện. Ô gợi ý @ chỉ cần uid + tên.
+    if (req.query.full === '1') {
+      // Zalo đã trả đủ danh sách → người chỉ có trong lịch sử là người đã rời nhóm: không liệt kê.
+      if (zalo.total > 0 && listed >= zalo.total) for (const uid of [...byUid.keys()].slice(listed)) byUid.delete(uid);
+      const admins = new Set((zalo.adminIds || []).map(String));
+      let self = '';
+      try { self = String(store.selfUid?.() || ''); } catch { /* không biết UID bot thì thôi đánh dấu */ }
+      const urls = await softly(() => sidecar.avatars([...byUid.keys()].slice(0, 200)));
+      for (const m of byUid.values()) {
+        if (m.uid === String(zalo.creatorId || '')) m.role = 'owner'; else if (admins.has(m.uid)) m.role = 'admin';
+        if (m.uid === self) m.self = true;
+        if (urls[m.uid]) m.avatar = urls[m.uid];
+      }
+    }
+    res.json({ ok: true, total: Math.max(zalo.total || 0, byUid.size), listed, members: [...byUid.values()] });
   });
 
   // Gửi ảnh/tệp dưới tên bot (dán ảnh, kéo thả, nút đính kèm ở Phiên chat): thân nhị phân + X-File-Name, ?type=0|1.

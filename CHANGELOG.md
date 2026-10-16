@@ -2,6 +2,14 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.50.0] — 2026-10-16
+
+### Thêm — Danh sách thành viên nhóm trong Phiên chat
+
+- **Phiên chat**: bấm số thành viên ở đầu khung chat, hoặc dòng **Thành viên nhóm** trong bảng Thông tin, là mở danh sách thành viên ở cột phải giống Zalo: ảnh đại diện, tên, nhãn **Trưởng nhóm / Phó nhóm / Bot**, tìm theo tên không cần gõ dấu.
+- Nhóm cộng đồng mà Zalo chỉ cho xem trưởng, phó nhóm: danh sách gộp thêm những người từng nhắn trong nhóm và ghi rõ Zalo cho xem bao nhiêu người.
+- Nhóm thường: danh sách khớp đúng Zalo, không liệt kê người đã rời nhóm.
+
 ## [2.49.0] — 2026-10-16
 
 ### Thêm — Xếp thư mục ngay trong Phiên chat
