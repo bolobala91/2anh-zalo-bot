@@ -2014,6 +2014,175 @@ class StudioToolTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ledger.Ledger().used_today(MEMBER), 2)
 
 
+
+# ---------------------------------------------------------------- video: hỏi phong cách → kịch bản → duyệt → dựng
+from plugins.zalo_tools.studio import drafts as drafts_module, script_view  # noqa: E402
+
+VIDEO_MD = ("---\ntieu-de: Axit và bazơ\nmon: Hoá\nlop: 11\nphong-cach: ngan\nloat: 2ANH AI\n---\n\n"
+            "## Cảnh 1\nloai: tieu-de\nchu: Axit hay ((bazơ))?\nphu: 30 giây\nloi: Chanh chua, xà phòng trơn.\n\n"
+            "## Cảnh 2\nloai: so-sanh\ntieu-de: Axit và bazơ\ntrai: Axit\nphai: Bazơ\ny-trai: Vị ==chua==\n"
+            "y-phai: Vị chát\nloi: Axit chua, bazơ chát.\n")
+
+
+class VideoPlanTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="zalo-plan-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.perm = self.tmp / "permissions.json"
+        self.enterContext(patch.dict(os.environ, {"ZALO_PERMISSIONS_FILE": str(self.perm),
+                                                  "ZALO_STUDIO_USAGE_FILE": str(self.tmp / "usage.json"),
+                                                  "ZALO_ALLOWED_USERS": OWNER}))
+        self.submitted, self.drafting, self.sent, self.notified = [], [], [], []
+        self.enterContext(patch.object(zalo_tools, "_STUDIO", None))
+        self.enterContext(patch.object(jobs.Studio, "submit", lambda studio, job: self.submitted.append(job) or 1))
+        self.enterContext(patch.object(jobs.Studio, "submit_draft",
+                                       lambda studio, job, **kw: self.drafting.append((job, kw))))
+
+        async def fake_invoke(method, args, *a, **kw):
+            self.sent.append((method, args))
+            return json.dumps({"success": True})
+
+        async def fake_notify(job, text):
+            self.notified.append(text)
+
+        self.enterContext(patch.object(zalo_tools, "_invoke", fake_invoke))
+        self.enterContext(patch.object(zalo_tools, "_studio_notify", fake_notify))
+        self.addCleanup(zalo_tools.bind_turn, None)
+
+    def turn(self, uid=OWNER, owner=True, thread=GROUP):
+        zalo_tools.bind_turn({"sender_uid": uid, "sender_name": "Lan", "thread_id": thread, "is_group": True,
+                              "is_owner": owner, "text": "làm video"})
+
+    async def call(self, **args):
+        return json.loads(await zalo_tools.zalo_studio({"kind": "video", **args}))
+
+    def waits(self):
+        return [args[0]["msg"] for method, args in self.sent if method == "sendMessage"]
+
+    async def test_video_asks_style_then_plans_then_builds_the_approved_script(self):
+        self.turn()
+        self.assertIn("phong cách", (await self.call(action="plan", brief="Video axit bazơ lớp 11"))["error"])
+        self.assertIn("duyệt kịch bản", (await self.call(brief="Video axit bazơ lớp 11"))["error"])
+        self.assertEqual((self.drafting, self.submitted), ([], []))
+        planned = await self.call(action="plan", brief="Video axit bazơ lớp 11", options={"kieu": "ngan"})
+        self.assertTrue(planned["success"], planned)
+        plan_id = planned["result"]["plan_id"]
+        self.assertIn("1–2 phút", self.waits()[-1])
+        job, kw = self.drafting[-1]
+        self.assertEqual((job.options, kw["previous"], kw["feedback"]), ({"kieu": "ngan"}, "", ""))
+        await kw["done"](job, VIDEO_MD)                 # luồng nền viết xong → lưu + gửi kịch bản
+        self.assertIn("KỊCH BẢN VIDEO", self.notified[-1])
+        self.assertIn(plan_id, self.notified[-1])
+        self.turn(uid=MEMBER, owner=False)
+        self.assertFalse((await self.call(plan_id=plan_id))["success"], "kịch bản của người khác")
+        self.turn()
+        made = await self.call(plan_id=plan_id)
+        self.assertTrue(made["success"], made)
+        self.assertEqual((self.submitted[-1].script, self.submitted[-1].options), (VIDEO_MD, {"kieu": "ngan"}))
+        self.assertIn("5–15 phút", self.waits()[-1])
+        zalo_tools._STUDIO._pending.clear()
+        self.assertIn("duyệt kịch bản", (await self.call(plan_id=plan_id))["error"], "dùng một lần")
+
+    async def test_revision_sends_previous_script_and_feedback(self):
+        self.turn()
+        first = await self.call(action="plan", brief="Video axit bazơ lớp 11", options={"kieu": "vox"})
+        job, kw = self.drafting[-1]
+        await kw["done"](job, VIDEO_MD)
+        again = await self.call(action="plan", plan_id=first["result"]["plan_id"], feedback="thêm cảnh câu hỏi")
+        self.assertTrue(again["success"], again)
+        job, kw = self.drafting[-1]
+        self.assertEqual((job.options["kieu"], kw["previous"], kw["feedback"]), ("vox", VIDEO_MD, "thêm cảnh câu hỏi"))
+        self.assertIn("sửa", self.waits()[-1])
+
+    async def test_members_get_a_daily_draft_limit_and_quota_is_checked_before_drafting(self):
+        self.perm.write_text(json.dumps({"version": 1, "defaults": {"features": {"studioVideo": True}},
+                                         "studio": {"quota": 3}}), encoding="utf-8")
+        with patch.object(gp, "VIDEO_BLOCKED", False), patch.object(gp, "sandbox_mode", lambda: "systemd"):
+            self.turn(uid=MEMBER, owner=False)
+            for _ in range(drafts_module.MAX_DRAFTS_PER_DAY):
+                self.assertTrue((await self.call(action="plan", brief="Video quang hợp lớp 6", options={"kieu": "ngan"}))["success"])
+            self.assertIn("kịch bản", (await self.call(action="plan", brief="Video quang hợp lớp 6",
+                                                       options={"kieu": "ngan"}))["error"])
+
+    async def test_lecture_video_needs_confirmation_and_other_kinds_get_a_wait_message(self):
+        self.turn()
+        bad = json.loads(await zalo_tools.zalo_studio({"kind": "video_bai_giang", "brief": "Bài giảng hô hấp lớp 8"}))
+        self.assertIn("confirmed=true", bad["error"])
+        ok = json.loads(await zalo_tools.zalo_studio({"kind": "video_bai_giang", "brief": "Bài giảng hô hấp lớp 8",
+                                                      "confirmed": True}))
+        self.assertTrue(ok["success"], ok)
+        self.assertIn("15–30 phút", self.waits()[-1])
+        zalo_tools._STUDIO._pending.clear()
+        self.assertTrue(json.loads(await zalo_tools.zalo_studio({"kind": "giao_an", "brief": "Giáo án Toán 10 bài 1"}))["success"])
+        self.assertIn("2–5 phút", self.waits()[-1])
+        self.assertIn("chỉ video", json.loads(await zalo_tools.zalo_studio(
+            {"kind": "giao_an", "brief": "Giáo án Toán 10 bài 1", "action": "plan"}))["error"])
+
+    def test_script_view_shows_style_frame_scenes_and_the_code(self):
+        text = script_view.render(validate.check_video(VIDEO_MD, LIB), "kb-1234abcd", "5–15")
+        self.assertIn("video ngắn mạng xã hội", text)
+        self.assertIn("dọc 9:16", text)
+        self.assertIn("Cảnh 2 · So sánh", text)
+        self.assertIn("Axit: Vị chua", text)
+        self.assertNotIn("==", text)
+        self.assertIn("kb-1234abcd", text)
+        self.assertLessEqual(len(script_view.render(VIDEO_MD + "loi: " + "x" * 9000 + "\n", "kb-1", "5–15")),
+                             script_view.MAX_MESSAGE)
+
+    async def test_draft_repairs_once_and_estimates(self):
+        llm = FakeLlm("không phải kịch bản", VIDEO_MD)
+        where = recipes.Places(studio=self.tmp, python=Path(sys.executable), skills=None, node=None)
+        (self.tmp / "tools" / "vi").mkdir(parents=True)
+        out = await jobs.draft(make_job("video", kieu="ngan"), llm, where)
+        self.assertIn("phong-cach: ngan", out)
+        self.assertIn("do-phan-giai: 720", out)
+        self.assertEqual(len(llm.calls), 2)
+        self.assertEqual((jobs.estimate_minutes("video", {"kieu": "vox"}), jobs.estimate_minutes("video", {"kieu": "ngan"}),
+                          jobs.estimate_minutes("slide")), ("10–25", "5–15", "5–15"))
+
+    async def test_drafts_are_scoped_to_person_and_chat(self):
+        store = drafts_module.Drafts(self.tmp / "d.json")
+        store.save("kb-1", {"uid": MEMBER, "thread_id": GROUP, "text": "x", "options": {}, "brief": "b"})
+        self.assertIsNotNone(store.get("kb-1", uid=MEMBER, thread_id=GROUP))
+        self.assertIsNone(store.get("kb-1", uid=OWNER, thread_id=GROUP))
+        self.assertIsNone(store.get("kb-1", uid=MEMBER, thread_id="khac"))
+        self.assertEqual(store.latest(uid=MEMBER, thread_id=GROUP)["id"], "kb-1")
+        store.drop("kb-1")
+        self.assertIsNone(store.get("kb-1", uid=MEMBER, thread_id=GROUP))
+
+
+class MediaWaitTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.sent = []
+
+        async def fake_invoke(method, args, *a, **kw):
+            self.sent.append((method, args))
+            return json.dumps({"success": True})
+
+        self.enterContext(patch.object(zalo_tools, "_invoke", fake_invoke))
+        zalo_tools.bind_turn({"sender_uid": OWNER, "sender_name": "Chủ", "thread_id": GROUP, "is_group": True,
+                              "is_owner": True, "text": "vẽ"})
+        self.addCleanup(zalo_tools.bind_turn, None)
+
+    async def test_ai_video_needs_style_and_confirmation_first(self):
+        out = json.loads(await zalo_tools.zalo_media({"kind": "video", "prompt": "mèo bay qua cầu vồng"}))
+        self.assertIn("phong cách", out["error"])
+        out = json.loads(await zalo_tools.zalo_media({"kind": "video", "prompt": "mèo bay", "style": "hoạt hình 3D"}))
+        self.assertIn("confirmed=true", out["error"])
+        self.assertEqual(self.sent, [])
+
+    async def test_image_sends_a_wait_message_before_drawing(self):
+        from plugins.zalo_tools import media_engines
+
+        def boom(*a, **kw):
+            self.assertTrue(self.sent, "tin báo chờ phải đi trước khi vẽ")
+            raise media_engines.EngineError("hết tiền")
+
+        with patch.object(media_engines, "draw", boom):
+            out = json.loads(await zalo_tools.zalo_media({"kind": "image", "prompt": "con mèo"}))
+        self.assertFalse(out["success"])
+        self.assertIn("chờ khoảng 1 phút", self.sent[0][1][0]["msg"])
+
 class RestartSafetyTest(unittest.TestCase):
     """Review cuối GĐ6: policy ghi lúc nạp plugin, DNS trong hộp cát, gateway khởi động lại giữa việc."""
 

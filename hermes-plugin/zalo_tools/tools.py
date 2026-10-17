@@ -482,6 +482,13 @@ async def zalo_media(args: Dict[str, Any], **_kw) -> str:
         return _err("kind phải là image hoặc video")
     if not prompt:
         return _err("cần mô tả (prompt)")
+    style = " ".join(str(args.get("style") or "").split())[:200]
+    if kind == "video" and (not style or not args.get("confirmed")):
+        return _err("video AI cần người dùng chốt trước: HỎI phong cách (điện ảnh, hoạt hình 3D, anime, phim tài liệu, "
+                    "quảng cáo…), rồi viết kịch bản ngắn (cảnh, góc máy, chuyển động, thời lượng, khổ) gửi họ xác nhận; "
+                    "họ đồng ý rồi gọi lại với style=<phong cách> và confirmed=true")
+    if style:
+        prompt = f"{prompt} Style: {style}."[:2000]
     thread_id, thread_kind, err = _scoped_thread({})
     if err:
         return err
@@ -496,6 +503,7 @@ async def zalo_media(args: Dict[str, Any], **_kw) -> str:
             what = "ảnh" if kind == "image" else "video"
             return _err(f"hôm nay người này đã dùng hết {limit} {what} AI — mai thử lại, hoặc nhờ chủ bot nâng hạn mức")
     if kind == "image":
+        await _send_wait(turn, "🎨 Bot đang vẽ ảnh, bạn chờ khoảng 1 phút nhé.")
         try:
             got = await asyncio.to_thread(media_engines.draw, prompt, aspect=str(args.get("aspect") or "square"), refs=refs)
         except media_engines.EngineError as exc:
@@ -515,7 +523,8 @@ async def zalo_media(args: Dict[str, Any], **_kw) -> str:
         if not sent.get("success"):
             return _err(f"vẽ xong nhưng chưa gửi được ảnh: {sent.get('error')}")
         note = f" (nguồn ưu tiên lỗi nên đã dùng {media_engines.ENGINE_LABELS[got['engine']]})" if got["fallbacks"] else ""
-        return _ok(f"Đã vẽ và gửi ảnh vào cuộc trò chuyện{note}. Đừng gửi lại ảnh; chỉ nói một câu ngắn nếu cần.")
+        return _ok(f"Đã vẽ và gửi ảnh vào cuộc trò chuyện{note} (bot đã tự nhắn báo chờ trước khi vẽ). Đừng gửi lại "
+                   "ảnh; chỉ nói một câu ngắn nếu cần.")
     try:
         job = await asyncio.to_thread(media_engines.submit_video, prompt, seconds=args.get("seconds"),
                                       aspect=str(args.get("aspect") or "9:16"), refs=refs)
@@ -525,8 +534,10 @@ async def zalo_media(args: Dict[str, Any], **_kw) -> str:
         return _err(f"chưa tạo được video: {exc}")
     from agent.video_gen_provider import save_bytes_video
     media_engines.start_background(dict(turn), job, prompt, save_bytes_video)
-    return _ok(f"Đã gửi yêu cầu tạo video {job['seconds']} giây. Video thường mất 2–20 phút; xong hệ thống TỰ GỬI vào "
-               "cuộc trò chuyện này. Báo người hỏi chờ; đừng gọi lại công cụ này.")
+    await _send_wait(turn, f"🎬 Bot đã nhận yêu cầu tạo video AI {job['seconds']} giây. Bạn chờ khoảng 3–15 phút nhé — "
+                           "bot vẫn đang chạy, xong sẽ tự gửi video vào đây.")
+    return _ok(f"Đã gửi yêu cầu tạo video {job['seconds']} giây; bot ĐÃ tự nhắn người dùng chờ 3–15 phút. Xong hệ thống "
+               "TỰ GỬI vào cuộc trò chuyện này. Đừng nhắn lại lời chờ; đừng gọi lại công cụ này.")
 
 
 # =====================================================================
@@ -840,9 +851,27 @@ def studio_turn_note(sender_uid: str, thread_id: str, is_group: bool) -> Optiona
     return " ".join(notes)
 
 
+VIDEO_STYLE_CHOICES = ("viết tay trên bảng (viet-tay); cắt dán giấy (cat-dan); Vox có ảnh minh hoạ AI (vox); "
+                       "video ngắn mạng xã hội nền neon, khổ dọc cho TikTok/Reels (ngan)")
+
+
+async def _send_wait(turn: Dict[str, Any], text: str) -> None:
+    """Tin báo chờ gửi NGAY (không đợi mô hình nói), để người dùng biết bot vẫn đang làm. Lỗi gửi thì bỏ qua."""
+    try:
+        await _invoke("sendMessage", [{"msg": text}, str(turn.get("thread_id") or ""),
+                                      THREAD_GROUP if turn.get("is_group") else THREAD_USER])
+    except Exception as exc:
+        logger.info("[zalo] không gửi được tin báo chờ: %s", exc)
+
+
 async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
-    """Nhận một việc cho xưởng; tệp làm xong bot tự gửi vào đúng cuộc trò chuyện này."""
-    from .studio import jobs, recipes
+    """Nhận một việc cho xưởng; tệp làm xong bot tự gửi vào đúng cuộc trò chuyện này.
+
+    Video (``kind=video``) đi hai bước: ``action=plan`` viết kịch bản và gửi người dùng duyệt (phải có
+    ``options.kieu`` — phong cách đã hỏi người dùng), ``action=make`` kèm ``plan_id`` mới dựng đúng kịch bản đã duyệt.
+    ``video_bai_giang`` cần ``confirmed=true`` (đã hỏi kiểu bài và chốt dàn ý với người dùng)."""
+    from .studio import drafts as drafts_module
+    from .studio import jobs, recipes, script_view
 
     turn = _turn() or {}
     if not turn.get("thread_id") or not turn.get("sender_uid"):
@@ -851,20 +880,16 @@ async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
     recipe = recipes.RECIPES.get(kind)
     if recipe is None:
         return _err(f"`kind` phải là một trong: {', '.join(recipes.RECIPES)}")
-    brief = str(args.get("brief") or "").strip()
-    if len(brief) < 10:
-        return _err("cần `brief`: chép đủ yêu cầu của người dùng (chủ đề, môn, lớp, số lượng, yêu cầu riêng)")
+    action = str(args.get("action") or "make")
+    if action not in ("plan", "make"):
+        return _err("`action` là plan (viết kịch bản video để duyệt) hoặc make (làm sản phẩm)")
+    if action == "plan" and kind != "video":
+        return _err("chỉ video giải thích (kind=video) có bước lên kịch bản; loại khác gọi action=make")
     raw_options = args.get("options")
     if raw_options is None:
         raw_options = {}
     if not isinstance(raw_options, dict):
         return _err("`options` phải là một object, ví dụ {\"loai\": \"bai-giang\"}")
-    options: Dict[str, str] = {}
-    for key, allowed in recipe.options.items():
-        value = str(raw_options.get(key) or allowed[0])
-        if value not in allowed:
-            return _err(f"`options.{key}` phải là một trong: {', '.join(allowed)}")
-        options[key] = value
     as_owner = _acting_as_owner(turn)
     quota: Optional[int] = None
     if not as_owner:
@@ -874,14 +899,74 @@ async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
             return _err(f"chủ bot chưa bật tính năng {label} cho {'nhóm này' if turn.get('is_group') else 'người này'} — "
                         "nói ngắn gọn với người hỏi, đừng thử cách khác")
         quota = rules["quota"]
+    store = drafts_module.Drafts()
+    uid, thread = str(turn.get("sender_uid")), str(turn.get("thread_id"))
     captured = {key: turn.get(key) for key in ("sender_uid", "sender_name", "thread_id", "is_group")}
     captured["is_owner"] = as_owner
-    job = jobs.Job(id=jobs.new_job_id(), kind=kind, brief=brief[:8000], options=options, turn=captured)
     studio = _studio()
+    script = ""
+
+    if kind == "video" and action == "plan":
+        previous = None
+        if args.get("plan_id"):
+            previous = store.get(str(args["plan_id"]), uid=uid, thread_id=thread)
+            if previous is None:
+                return _err("không thấy kịch bản này (hết hạn 48 giờ hoặc của người khác) — viết kịch bản mới")
+        kieu = str(raw_options.get("kieu") or (previous or {}).get("options", {}).get("kieu") or "")
+        if kieu not in recipe.options["kieu"]:
+            return _err("chưa biết phong cách video — HỎI người dùng muốn phong cách nào trong: " + VIDEO_STYLE_CHOICES +
+                        "; kèm khổ (dọc/ngang) và giọng (nữ/nam) nếu chưa rõ. Có câu trả lời rồi gọi lại action=plan với "
+                        "options.kieu.")
+        brief = str(args.get("brief") or (previous or {}).get("brief") or "").strip()
+        if len(brief) < 10:
+            return _err("cần `brief`: chép đủ yêu cầu của người dùng (chủ đề, môn, lớp, khổ, giọng, ý muốn có)")
+        if quota is not None and max(0, quota - studio.ledger.used_today(uid)) <= 0:
+            return _err(f"hôm nay người này đã dùng hết {quota} lượt xưởng — hẹn mai nhé")
+        if not store.take_slot(uid, owner=as_owner):
+            return _err(f"hôm nay người này đã nhờ viết {drafts_module.MAX_DRAFTS_PER_DAY} kịch bản — chốt một bản hoặc mai thử lại")
+        feedback = str(args.get("feedback") or "").strip()[:2000]
+        job = jobs.Job(id=jobs.new_job_id(), kind=kind, brief=brief[:8000], options={"kieu": kieu}, turn=captured)
+        draft_id = drafts_module.new_draft_id()
+        minutes = jobs.estimate_minutes(kind, job.options)
+
+        async def done(job_: jobs.Job, text: str) -> None:
+            store.save(draft_id, {"uid": uid, "thread_id": thread, "kind": kind, "options": job_.options,
+                                  "brief": job_.brief, "text": text})
+            await _studio_notify(job_, script_view.render(text, draft_id, minutes))
+
+        await _send_wait(turn, f"✍️ Bot đang {'sửa' if previous else 'viết'} kịch bản video, chờ khoảng 1–2 phút nhé. "
+                               "Xong bot gửi kịch bản để bạn duyệt trước khi dựng.")
+        studio.submit_draft(job, feedback=feedback, previous=(previous or {}).get("text", ""), done=done)
+        return _ok({"status": "drafting", "plan_id": draft_id,
+                    "note": ("Bot ĐÃ tự nhắn người dùng chờ 1–2 phút; kịch bản sẽ tự gửi kèm mã "
+                             f"{draft_id}. Đừng nhắn lại lời chờ, đừng tự viết kịch bản. Khi người dùng đồng ý → gọi "
+                             f"zalo_studio action=make kind=video plan_id={draft_id}. Muốn sửa → action=plan, "
+                             f"plan_id={draft_id}, feedback=<điều cần sửa>.")})
+
+    if kind == "video":
+        draft = store.get(str(args.get("plan_id") or ""), uid=uid, thread_id=thread) if args.get("plan_id") else None
+        if draft is None:
+            return _err("video phải qua bước duyệt kịch bản: hỏi phong cách → zalo_studio action=plan → gửi kịch bản → "
+                        "người dùng đồng ý → action=make kèm plan_id. Thiếu hoặc sai plan_id.")
+        options, brief, script = dict(draft["options"]), draft["brief"], draft["text"]
+    else:
+        if kind == "video_bai_giang" and not args.get("confirmed"):
+            return _err("video bài giảng cần người dùng chốt trước: hỏi kiểu bài (options.loai) và gửi dàn ý (các trang, ý "
+                        "giảng chính, thời lượng) để họ đồng ý; có đồng ý rồi gọi lại với confirmed=true")
+        brief = str(args.get("brief") or "").strip()
+        if len(brief) < 10:
+            return _err("cần `brief`: chép đủ yêu cầu của người dùng (chủ đề, môn, lớp, số lượng, yêu cầu riêng)")
+        options = {}
+        for key, allowed in recipe.options.items():
+            value = str(raw_options.get(key) or allowed[0])
+            if value not in allowed:
+                return _err(f"`options.{key}` phải là một trong: {', '.join(allowed)}")
+            options[key] = value
+    job = jobs.Job(id=jobs.new_job_id(), kind=kind, brief=brief[:8000], options=options, turn=captured, script=script)
     if studio.pending_for(job.uid):
         return _err("người này đang có một việc ở xưởng chưa xong — chờ bot gửi xong rồi nhờ tiếp")
     left = studio.ledger.take(job_id=job.id, uid=job.uid, name=str(turn.get("sender_name") or ""), kind=kind,
-                              thread_id=str(turn.get("thread_id")), is_group=bool(turn.get("is_group")), quota=quota)
+                              thread_id=thread, is_group=bool(turn.get("is_group")), quota=quota)
     if left == -1:
         return _err(f"hôm nay người này đã dùng hết {quota} lượt xưởng — hẹn mai nhé")
     try:
@@ -890,12 +975,15 @@ async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
         # Việc chưa chạy (hàng đầy ngay lúc nhận): trả lượt, không tính vào trần trả lượt trong ngày.
         studio.ledger.finish(job.id, "refunded", error=str(exc), capped=False)
         return _err(str(exc))
-    minutes = {"video": "10–30", "slide": "5–15"}.get(kind, "2–5")
+    if kind == "video":
+        store.drop(str(args.get("plan_id")))
+    minutes = jobs.estimate_minutes(kind, options)
+    queue = f" (đang xếp thứ {position}, có thể lâu hơn)" if position > 1 else ""
+    await _send_wait(turn, f"⏳ Bot đã nhận việc làm {recipe.label}. Bạn chờ khoảng {minutes} phút{queue} nhé — bot vẫn "
+                           "đang chạy, xong sẽ tự gửi tệp vào đây.")
     return _ok({"status": "queued", "job_id": job.id, "position": position, "quota_left": left,
-                "note": (f"Đã nhận việc {recipe.label}. Báo người dùng: bot đang làm, khoảng {minutes} phút "
-                         f"(đang xếp thứ {position}), xong sẽ tự gửi tệp vào đây. Không gọi lại cho cùng yêu cầu.")})
-
-
+                "note": (f"Đã nhận việc {recipe.label}; bot ĐÃ tự nhắn người dùng chờ khoảng {minutes} phút. "
+                         "Đừng nhắn lại lời chờ; xong sẽ tự gửi tệp. Không gọi lại cho cùng yêu cầu.")})
 
 
 async def zalo_send_voice(args: Dict[str, Any], **_kw) -> str:
@@ -3205,9 +3293,11 @@ TOOLS = [
         "Xưởng tạo sản phẩm của 2Anh Studio: nhờ máy chủ làm slide PowerPoint đẹp (có ảnh minh hoạ), giáo án 5512, "
         "văn bản hành chính NĐ30 / văn bản Đoàn / văn bản Đảng, đề kiểm tra, đề KHTN tiếng Anh, SKKN, trò chơi "
         "(trắc nghiệm, ghép đôi, ô chữ, vòng quay, thẻ lật, đếm ngược), thí nghiệm ảo, video giải thích (viết tay, "
-        "cắt dán, Vox có ảnh AI) và video bài giảng từ slide — rồi tự gửi tệp vào cuộc trò chuyện này sau vài phút. "
-        "Gọi MỘT lần cho một yêu cầu, khi đã đủ thông tin. Công cụ trả lời ngay là đã nhận việc; báo người dùng chờ, "
-        "đừng gọi lại. Bị từ chối (chưa bật, hết lượt) thì nói đúng lý do, không tự làm bằng cách khác.",
+        "cắt dán, Vox có ảnh AI, video ngắn mạng xã hội nền neon) và video bài giảng từ slide — rồi tự gửi tệp vào "
+        "cuộc trò chuyện này sau vài phút. Bot TỰ nhắn người dùng lời báo chờ; đừng lặp lại. VIDEO (kind=video) đi hai "
+        "bước: (1) hỏi người dùng phong cách → action=plan (bot viết và gửi kịch bản kèm mã) → (2) người dùng đồng ý → "
+        "action=make kèm plan_id; muốn sửa → action=plan với plan_id và feedback. Loại khác: gọi MỘT lần action=make khi "
+        "đủ thông tin. Bị từ chối (chưa bật, hết lượt) thì nói đúng lý do, không tự làm bằng cách khác.",
         {
             "kind": {"type": "string", "enum": ["slide", "giao_an", "van_ban", "van_ban_doan", "van_ban_dang",
                                                 "de_kiem_tra", "de_tieng_anh", "skkn", "tro_choi", "thi_nghiem",
@@ -3221,18 +3311,27 @@ TOOLS = [
                                                     "poster-mang-xa-hoi", "tap-huan-workshop", "quiz", "matching",
                                                     "crossword", "spinwheel", "flashcard", "timer"],
                          "description": "slide / video_bai_giang: kiểu bài; tro_choi: loại trò chơi."},
-                "kieu": {"type": "string", "enum": ["viet-tay", "cat-dan", "vox"],
-                         "description": "Chỉ với video: phong cách (vox có ảnh AI/ảnh web)."}},
+                "kieu": {"type": "string", "enum": ["viet-tay", "cat-dan", "vox", "ngan"],
+                         "description": "Chỉ với video: phong cách người dùng đã chọn — viet-tay (viết tay trên bảng), "
+                                        "cat-dan (cắt dán giấy), vox (ảnh minh hoạ AI), ngan (video ngắn mạng xã hội "
+                                        "nền neon, khổ dọc; hợp giải thích nhanh, so sánh A–B, tin từ link)."}},
                         "additionalProperties": False},
+            "action": {"type": "string", "enum": ["plan", "make"],
+                       "description": "plan: chỉ video — viết kịch bản gửi người dùng duyệt. make (mặc định): làm sản phẩm."},
+            "plan_id": {"type": "string", "description": "Mã kịch bản (kb-…) bot đã gửi: make để dựng đúng bản đã duyệt; "
+                                                         "plan để sửa bản đó."},
+            "feedback": {"type": "string", "description": "Chỉ plan khi sửa: người dùng muốn sửa gì trong kịch bản."},
+            "confirmed": {"type": "boolean", "description": "Chỉ video_bai_giang: người dùng đã chốt kiểu bài và dàn ý."},
         },
-        ["kind", "brief"],
+        ["kind"],
     ), zalo_studio, TOOLSET_PUBLIC),
 
     ("zalo_media", "🎨", _schema(
         "zalo_media",
-        "Vẽ ảnh AI hoặc tạo video AI ngắn theo mô tả, rồi gửi vào cuộc trò chuyện này. kind=image: vẽ (hoặc sửa theo "
-        "ảnh mẫu trong `images`) và gửi ngay. kind=video: chạy nền 2–20 phút, xong tự gửi — báo người hỏi chờ, đừng gọi "
-        "lại. Gọi MỘT lần cho một yêu cầu. Bị từ chối (chưa bật, hết lượt trong ngày) thì nói đúng lý do, không tự làm "
+        "Vẽ ảnh AI hoặc tạo video AI ngắn theo mô tả, rồi gửi vào cuộc trò chuyện này. Bot TỰ nhắn lời báo chờ. "
+        "kind=image: vẽ (hoặc sửa theo ảnh mẫu trong `images`) và gửi ngay. kind=video: TRƯỚC KHI gọi, hỏi người dùng "
+        "phong cách rồi gửi kịch bản ngắn (cảnh, góc máy, chuyển động, thời lượng, khổ) để họ xác nhận; đồng ý rồi mới "
+        "gọi với `style` và confirmed=true; chạy nền 3–15 phút, xong tự gửi. Gọi MỘT lần cho một yêu cầu. Bị từ chối (chưa bật, hết lượt trong ngày) thì nói đúng lý do, không tự làm "
         "bằng cách khác.",
         {
             "kind": {"type": "string", "enum": ["image", "video"]},
@@ -3241,6 +3340,8 @@ TOOLS = [
             "seconds": {"type": "integer", "description": "Chỉ video: độ dài giây (bỏ trống = theo cài đặt)."},
             "images": {"type": "array", "items": {"type": "string"}, "maxItems": 4,
                        "description": "Ảnh mẫu (đường dẫn ảnh người dùng vừa gửi, hoặc link https): ảnh sửa theo mẫu; video lấy làm khung đầu."},
+            "style": {"type": "string", "description": "Phong cách người dùng đã chọn (bắt buộc với video): điện ảnh, hoạt hình 3D, anime…"},
+            "confirmed": {"type": "boolean", "description": "Chỉ video: người dùng đã xác nhận kịch bản."},
         },
         ["kind", "prompt"],
     ), zalo_media, TOOLSET_PUBLIC),

@@ -75,6 +75,7 @@ class Job:
     options: Dict[str, str]
     turn: Dict[str, Any]          # danh tính chụp lúc nhận việc — nơi gửi trả, không lấy từ mô hình
     created: float = field(default_factory=time.time)
+    script: str = ""              # video: kịch bản người dùng đã duyệt (bước lên kịch bản) — dựng đúng bản này
 
     @property
     def uid(self) -> str:
@@ -343,7 +344,7 @@ class Builder:
                         add_csp(self.job_dir, page)
             return files
 
-        return await self.with_repair(attempt, await self.write())
+        return await self.with_repair(attempt, self.job.script or await self.write())
 
     async def vox_images(self, extra: Sequence[Optional[Path]], extra_env: Optional[Dict[str, str]]) -> None:
         """Video Vox: 2Anh Studio LẬP KẾ HOẠCH ảnh (trong hộp cát, không mạng) → plugin vẽ/tải đúng các ảnh đó ở
@@ -656,6 +657,39 @@ async def produce(job: Job, llm: Any, job_dir: Path, where: Optional[recipes.Pla
     return Outcome(files=files, notes=builder.notes, usage=builder.usage, images=builder.images_used)
 
 
+def estimate_minutes(kind: str, options: Optional[Dict[str, str]] = None) -> str:
+    """Khoảng phút chờ để báo người dùng (thực đo trên hai máy, hàng đợi trống)."""
+    if kind == "video":
+        return "10–25" if (options or {}).get("kieu") == "vox" else "5–15"
+    return {"video_bai_giang": "15–30", "slide": "5–15"}.get(kind, "2–5")
+
+
+DRAFT_DEADLINE = 600
+
+
+async def draft(job: Job, llm: Any, where: Optional[recipes.Places] = None, *, feedback: str = "",
+                previous: str = "") -> str:
+    """Bước lên kịch bản của video: AI viết ``video.md`` (hoặc sửa bản trước theo ý người dùng), kiểm ngữ pháp của
+    xưởng, sai thì nhờ viết lại đúng một lần. Không dựng gì, không chạy bộ dựng. Trả bản đã kiểm."""
+    where = where or recipes.places()
+    reason = recipes.missing(job.recipe, where)
+    if reason:
+        raise StudioError(reason, refund=True)
+    builder = Builder(job, llm, where, sandbox.work_root() / job.id)
+    library = validate.library_ids(where.studio) if where.studio else set()
+    repair = (previous, f"Người dùng muốn sửa kịch bản như sau (giữ phần không được nhắc tới): {feedback}") if previous else None
+    try:
+        text = await builder.write(repair=repair)
+        try:
+            return validate.check_video(text, library)
+        except validate.SourceError as exc:
+            return validate.check_video(await builder.write(repair=(text, str(exc))), library)
+    except author.BudgetExceeded:
+        raise StudioError("kịch bản dùng quá trần token nên đã dừng", refund=False) from None
+    except validate.SourceError as exc:
+        raise StudioError(f"chưa viết được kịch bản đúng mẫu ({exc})", refund=False) from None
+
+
 # ---------------------------------------------------------------------- hàng đợi
 Deliver = Callable[[Job, List[Path], str], Awaitable[bool]]
 Notify = Callable[[Job, str], Awaitable[None]]
@@ -803,6 +837,28 @@ class Studio:
                 timer.start()
             else:
                 shutil.rmtree(job_dir, ignore_errors=True)
+
+    def submit_draft(self, job: Job, *, feedback: str, previous: str,
+                     done: Callable[[Job, str], Awaitable[None]]) -> None:
+        """Viết kịch bản ở luồng nền của xưởng (không chiếm chỗ dựng); xong gọi ``done(job, video_md)``, hỏng thì báo
+        người nhờ. Không ném ra ngoài."""
+        async def run() -> None:
+            try:
+                llm = self.llm()
+                if llm is None:
+                    raise StudioError("Hermes trên máy chủ chưa hỗ trợ xưởng (thiếu ctx.llm)", refund=True)
+                text = await asyncio.wait_for(draft(job, llm, feedback=feedback, previous=previous), timeout=DRAFT_DEADLINE)
+                await done(job, text)
+            except Exception as exc:
+                if isinstance(exc, (StudioError, asyncio.TimeoutError)):
+                    said = public_message(str(exc)) if isinstance(exc, StudioError) else "viết kịch bản quá lâu"
+                    logger.info("[zalo] xưởng %s: kịch bản hỏng: %s", job.id, exc)
+                else:
+                    logger.exception("[zalo] xưởng %s: kịch bản hỏng bất ngờ: %s", job.id, exc)
+                    said = "xưởng gặp lỗi bên trong"
+                await self._safe_notify(job, f"Xin lỗi {job.name}, chưa viết được kịch bản video: {said}. Nhờ lại sau ít phút nhé.")
+
+        asyncio.run_coroutine_threadsafe(run(), self._ensure_loop())
 
     async def _safe_notify(self, job: Job, text: str) -> None:
         try:

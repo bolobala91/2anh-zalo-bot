@@ -97,7 +97,7 @@ def check_thi_nghiem(text: str, library: Set[str]) -> str:
 
 
 _VIDEO_META_BANNED = {"nhac-nen", "nguon-nhac"}
-VIDEO_STYLES = ("viet-tay", "cat-dan", "vox")
+VIDEO_STYLES = ("viet-tay", "cat-dan", "vox", "ngan")
 _IMAGE_REQUEST = re.compile(r"^(ve|tim):\s*\S")
 _PATHISH = re.compile(r"[\\/]|\.\.|https?:|file:|www\.", re.I)
 
@@ -121,14 +121,14 @@ def _nhip(value: str) -> None:
 
 
 def check_video(text: str, library: Set[str], max_seconds: int = MAX_VIDEO_SECONDS) -> str:
-    """Video viết tay / cắt dán / Vox; ảnh chỉ ở dạng xin; trả bản đã ép ``do-phan-giai: 720``."""
+    """Video viết tay / cắt dán / Vox / video ngắn; ảnh chỉ ở dạng xin; trả bản đã ép ``do-phan-giai: 720``."""
     text = clean_text(text)
     meta, head, body = front_matter(text)
     for key in _VIDEO_META_BANNED & set(meta):
         raise SourceError(f"xưởng chưa hỗ trợ `{key}` (nhạc nền) — bỏ dòng đó")
     style = meta.get("phong-cach", "viet-tay")
     if style not in VIDEO_STYLES:
-        raise SourceError("`phong-cach` là viet-tay, cat-dan hoặc vox")
+        raise SourceError("`phong-cach` là viet-tay, cat-dan, vox hoặc ngan")
     character = meta.get("nhan-vat", "khong")
     if character not in ("khong", "nguoi-que"):
         _image_request("nhan-vat", character)

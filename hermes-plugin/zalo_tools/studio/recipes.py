@@ -118,8 +118,12 @@ RECIPES: Dict[str, Recipe] = {r.kind: r for r in (
     Recipe("video", "studioVideo", "video giải thích (MP4)", "video.md", "studio_cli",
            script="tools/vi/video_ma.py", args=("{project}",), outputs=(".mp4",), timeout=1800, network=True,
            max_tokens=200_000, deadline=3_600,
-           options={"kieu": ("viet-tay", "cat-dan", "vox")},
+           options={"kieu": ("viet-tay", "cat-dan", "vox", "ngan")},
            extra_guides={
+               # Video ngắn mạng xã hội (2Anh Studio vi.17): công thức giải thích / so sánh A–B / tin từ link.
+               "ngan": (("studio", ("docs/vi/tro-ly/video-ngan.md",)),
+                        ("studio", ("docs/vi/tham-khao/video-viet-tay.md", "docs/vi/tro-ly/video-viet-tay.md")),
+                        ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md"))),
                "vox": (("studio", ("docs/vi/tro-ly/video-giai-thich.md",)), ("studio", ("docs/vi/tro-ly/nhip-vox.md",))),
                "viet-tay": (("studio", ("docs/vi/tham-khao/video-viet-tay.md", "docs/vi/tro-ly/video-viet-tay.md")),
                             ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md"))),

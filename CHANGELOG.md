@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.52.0] — 2026-10-18
+
+### Thêm — Video: hỏi phong cách, duyệt kịch bản rồi mới dựng
+
+- **Video giải thích của xưởng đi ba bước:** bot hỏi phong cách (viết tay trên bảng, cắt dán giấy, Vox có ảnh AI, **video ngắn mạng xã hội nền neon**), viết kịch bản và gửi vào Zalo để người dùng duyệt: phong cách, khổ, giọng, thời lượng ước tính, từng cảnh "trên hình có gì" và lời đọc, kèm mã `kb-…`. Người dùng đồng ý thì bot mới dựng, đúng bản đã duyệt; muốn sửa thì nói điều cần sửa, bot viết lại từ bản cũ. Kịch bản giữ 48 giờ, chỉ người đã nhờ ở đúng cuộc trò chuyện đó dùng được; người không phải chủ nhân viết tối đa 5 kịch bản mỗi ngày.
+- **Phong cách video ngắn mạng xã hội** (`ngan`, cần 2Anh Studio 6.3.2-vi.17): khổ dọc 9:16 cho TikTok, Reels; ba công thức kịch bản: giải thích nhanh (hook → vấn đề → giải pháp → kêu gọi), so sánh hai khái niệm dễ nhầm, tin nhanh từ một link bài báo.
+- **Video bài giảng từ slide:** bot hỏi kiểu bài và chốt dàn ý với người dùng trước khi làm.
+- **Video AI** (`zalo_media`): bot hỏi phong cách (điện ảnh, hoạt hình 3D, anime…), gửi kịch bản ngắn để người dùng xác nhận rồi mới tạo.
+- **Tin báo chờ tự động:** khi nhận việc vẽ ảnh, tạo video, làm sản phẩm xưởng hay viết kịch bản, bot nhắn ngay "bạn chờ khoảng N phút nhé" (ảnh ~1 phút, video ngắn/viết tay 5–15 phút, Vox 10–25 phút, video bài giảng 15–30 phút, video AI 3–15 phút; có hàng đợi thì báo vị trí), không phụ thuộc mô hình có nhớ nói hay không.
+
 ## [2.51.3] — 2026-10-17
 
 ### Sửa — Kết nối MCP gọn hơn

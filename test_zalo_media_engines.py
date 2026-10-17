@@ -344,8 +344,11 @@ class MediaToolTest(Base):
             out = self.call(member, {"kind": "image", "prompt": "con gà"})
         self.assertFalse(out["success"])
         self.assertIn("đã dùng hết 2 ảnh", out["error"])
-        self.assertEqual([m for m, _ in self.sent], ["sendMessage", "sendMessage"])
-        self.assertEqual(self.sent[0][1][1], "g1", "gửi vào đúng nhóm đang hỏi")
+        self.assertEqual([m for m, _ in self.sent], ["sendMessage"] * 4)
+        # Mỗi lần vẽ: tin báo chờ (chỉ chữ) đi trước, rồi tới ảnh.
+        self.assertEqual([bool(args[0].get("attachments")) for _, args in self.sent], [False, True, False, True])
+        self.assertIn("chờ khoảng 1 phút", self.sent[0][1][0]["msg"])
+        self.assertEqual({args[1] for _, args in self.sent}, {"g1"}, "gửi vào đúng nhóm đang hỏi")
 
     def test_failed_draw_gives_the_turn_back_and_refs_are_fenced(self):
         member = {"sender_uid": "u6", "thread_id": "g1", "is_group": True, "is_owner": False}

@@ -35,7 +35,7 @@ export const STUDIO_FEATURES = [
   { key: 'studioSlides', label: 'Slide PowerPoint', hint: 'Bài giảng, báo cáo, hoạt động Đoàn, poster, tập huấn — tệp .pptx làm bằng 2Anh Studio, có ảnh AI/ảnh web' },
   { key: 'studioDocs', label: 'Văn bản và giáo án', hint: 'Giáo án 5512, văn bản hành chính Nghị định 30, văn bản Đoàn, văn bản Đảng — tệp Word' },
   { key: 'studioExams', label: 'Đề thi, SKKN, trò chơi, thí nghiệm ảo', hint: 'Đề kiểm tra, đề KHTN tiếng Anh, sáng kiến kinh nghiệm, trò chơi (trắc nghiệm, ghép đôi, ô chữ, vòng quay, thẻ lật, đếm ngược), thí nghiệm ảo' },
-  { key: 'studioVideo', label: 'Video', hint: 'Video giải thích (viết tay, cắt dán, Vox có ảnh AI) và video bài giảng từ slide, tối đa 3 phút, 720p. Máy chủ chạy nặng vài phút mỗi video' },
+  { key: 'studioVideo', label: 'Video', hint: 'Video giải thích (viết tay, cắt dán, Vox có ảnh AI, video ngắn mạng xã hội nền neon) và video bài giảng từ slide, tối đa 3 phút, 720p. Bot hỏi phong cách và gửi kịch bản để duyệt trước khi dựng. Máy chủ chạy nặng vài phút mỗi video' },
   { key: 'studioImage', label: 'Vẽ ảnh AI', hint: 'Nhờ bot vẽ hoặc sửa ảnh theo mô tả — dùng nguồn ở Khoá API & Model › Tạo ảnh & video, tốn tiền mỗi ảnh' },
   { key: 'studioAIVideo', label: 'Tạo video AI', hint: 'Nhờ bot tạo video ngắn từ mô tả hoặc ảnh (Stali, vài nghìn đồng mỗi video); xong bot tự gửi vào cuộc trò chuyện' },
 ];
