@@ -506,7 +506,7 @@ Trang **Tổng quan** có thẻ "Tin nhắn hôm nay" (số tin nhận và gửi
 Mục **Phân quyền Bot** chọn bot được làm gì trong từng nhóm. Bên trái là **Mặc định cho nhóm mới** và danh sách nhóm bot đang ở. Nhóm chỉnh riêng chỉ giữ những mục khác mặc định; mục còn lại đi theo Mặc định. Bên phải là:
 
 - **Hoạt động** — tắt thì bot không trả lời thành viên trong nhóm đó (vẫn đọc tin để hiểu ngữ cảnh khi chủ nhân hỏi). Việc hẹn giờ do thành viên tạo không còn gửi tin chữ vào nhóm đang tắt; muốn dừng hẳn, nhờ chủ nhân xoá việc đó. Việc hẹn giờ chủ nhân tạo vẫn gửi bình thường.
-- **Chỉ trả lời khi được tag** — tắt thì bot trả lời mọi tin trong nhóm. Khi chưa lưu lần nào, mục Mặc định hiện đúng cờ `ZALO_GROUP_REPLY_ONLY_TAGGED` bot đang dùng (đọc từ `.env` và `config.yaml` của Hermes); lần Lưu đầu tiên ghi giá trị đó vào Mặc định.
+- **Chỉ trả lời khi được tag** — khi context gate tắt, tắt nút này thì bot trả lời mọi tin trong nhóm. Khi context gate bật, mọi tin nhóm hợp lệ đều qua model nhận diện bên dưới, kể cả tag hoặc reply bot. Khi chưa lưu lần nào, mục Mặc định hiện đúng cờ `ZALO_GROUP_REPLY_ONLY_TAGGED` bot đang dùng (đọc từ `.env` và `config.yaml` của Hermes); lần Lưu đầu tiên ghi giá trị đó vào Mặc định.
 - Mười tính năng: Tra cứu web, Gửi và tạo tệp, Tin nhắn thoại, Nhắc hẹn, Hẹn giờ cho nhóm, Kho tài liệu, Sổ người quen, Tra cứu học thuật, Video, **Tra lịch sử trò chuyện** (mặc định bật: thành viên chỉ tra được chính nhóm/DM đang nói, tối đa 30 ngày, 40 tin, 20 lần/giờ). Gửi nhãn dán, gửi liên kết và xem thành viên nhóm luôn bật.
 
 Bấm **Lưu** là bot áp dụng ngay, không cần khởi động lại. Thành viên nhờ việc thuộc tính năng đang tắt thì bot trả lời rằng nhóm chưa bật tính năng đó. **Chủ nhân bot luôn dùng được mọi thứ**, kể cả trong nhóm đang tắt. Tắt "Hẹn giờ cho nhóm" chỉ chặn tạo việc mới — việc đã tạo vẫn chạy và vẫn xem, xoá được. Tin nhắn riêng không theo bảng này.
@@ -703,6 +703,53 @@ HERMES_HOME=/root/.hermes node --test dashboard/lib/config-yaml.test.js
 ---
 
 ## Cấu hình
+
+### Context gate cho nhóm
+
+Mặc định tắt để giữ hành vi cũ. Bật bằng `ZALO_CONTEXT_GATE_ENABLED=true` trong `.env` **của profile chạy bot**. Model nhận diện đọc mọi tin nhóm hợp lệ, kể cả tag đúng UID, cách gọi của chủ nhân và reply bot, rồi quyết định có cho qua hay không. Không tự bỏ qua vì chưa có hội thoại mở, đổi người hoặc quá 5 phút. Tin bot tự gửi, tin trùng/rỗng và tin bị quyền hoặc ignore list chặn vẫn được loại trước. Khi gate bật, quy tắc này áp dụng với cả hai giá trị `replyOnlyTagged` của nhóm; ignore list được kiểm trước, kể cả UID chủ nhân.
+
+| Biến | Mặc định |
+|---|---|
+| `ZALO_CONTEXT_GATE_BASE_URL` | `https://9router.bolamarketing.com/v1` |
+| `ZALO_CONTEXT_GATE_MODEL` | `openrouter/typesafe/jev-1.13` |
+| `ZALO_CONTEXT_GATE_CLASSIFIER` | `configured` giữ base/model/key-env hiện tại; hoặc `jev-9router`, `jev-openrouter`, `gemma-26b`, `gemma-31b`, `gemini-9router`, `gemini-cli` |
+| `ZALO_CONTEXT_GATE_KEY_ENV` | `NINEROUTER_API_KEY` (tên biến chứa khóa, không phải khóa) |
+| `ZALO_CONTEXT_GATE_THRESHOLD` | `0.72`, từ 0 đến 1 |
+| `ZALO_CONTEXT_GATE_FALLBACK_ENABLED` | `false`; bật để thử Gemma khi Jev lỗi |
+| `ZALO_CONTEXT_GATE_FALLBACK_MODEL` | `google/gemma-4-26b-a4b-it:free` |
+| `ZALO_CONTEXT_GATE_OPENROUTER_FALLBACK_ENABLED` | `false`; bật để dùng Jev OpenRouter sau khi Gemma lỗi |
+
+Để dùng OpenRouter, đổi cả base URL thành `https://openrouter.ai/api/v1`, key-env thành `OPENROUTER_API_KEY` và model thành `typesafe/jev-1.14`, `google/gemma-4-31b-it:free` hoặc `google/gemma-4-26b-a4b-it:free`. Dùng lại khóa OpenRouter đã lưu trong `.env` của chính profile; plugin không mượn khóa từ profile khác hoặc model chính. Không ghi giá trị khóa vào `extra`.
+
+Khi bật fallback, thứ tự là **Jev 1.13 9router → Gemma → Jev 1.14 OpenRouter** (tầng cuối cần bật riêng). Chỉ lỗi/timeout/xác suất sai mới chuyển sang tầng tiếp theo; kết quả hợp lệ dưới ngưỡng dừng ngay và bỏ qua tin. Tổng hạn vẫn 8 giây: khi có ba tầng, hai tầng đầu tối đa 3 giây/tầng, tầng cuối dùng thời gian còn lại. Nếu tắt tầng cuối, Jev có tối đa 5 giây rồi Gemma dùng thời gian còn lại. Tất cả tầng lỗi thì tin mơ hồ bị IGNORE; ngoại lệ dự phòng chỉ dành cho tag đúng UID bot hoặc reply trực tiếp bot như mô tả dưới đây. Nếu dùng Jev OpenRouter làm model chính thì không thử lại nó ở tầng cuối; Gemma làm model chính cũng không retry chính nó.
+
+**Tự chỉnh trên dashboard:** vào **Cấu hình → Ngữ cảnh nhóm**, bật/tắt gate, nhập ngưỡng 0–1, chọn Gemma 26B/31B, bật dự phòng và Jev OpenRouter cuối. Bấm **Lưu**, rồi **Khởi động lại ngay** ở dải vàng. Các mục gate chỉ yêu cầu restart trợ lý của đúng profile, không restart sidecar. Giao diện không hiển thị hoặc sửa API key. Dashboard lấy profile từ `HERMES_HOME` trong `.env` của repo bot để tránh môi trường kế thừa trỏ nhầm về default.
+
+Mục **Model nhận diện chính** cho phép chọn riêng Jev, Gemma hoặc Gemini; chỉ tác động lớp phân loại. Gemini chỉ hỗ trợ `gemini/gemini-3.8-flash` qua `https://9router.bolamarketing.com/v1` với `NINEROUTER_API_KEY`, hoặc `gemini-3.8-flash-high` qua `https://cli.bolamarketing.com/v1` với `OPENAI_API_KEY` của profile. Cả hai dùng `/chat/completions`, JSON xác suất, không tools/session. Không có tuyến Gemini/OpenRouter. Hai tuyến Gemini cũng có thể chọn ở **Model dự phòng** khi Jev là chính. Gemini/Gemma làm chính thì lỗi sẽ IGNORE, không mở chuỗi fallback; ngưỡng và tổng hạn thời gian cũ được giữ. Khi giao diện đang mở từ bản cũ, tải lại trang để nạp menu mới.
+
+**Xem quyết định:** quản trị viên mở **Phiên chat → chọn nhóm → Lọc ngữ cảnh**. Bảng bên phải cập nhật mỗi 5 giây, hiện tối đa 100 quyết định gần nhất của nhóm/tài khoản hiện tại: cho qua bộ lọc hoặc bỏ qua, lý do, xác suất/ngưỡng, model và thời gian từng bước fallback. Có bộ lọc Bỏ qua/Có lỗi phân loại và nút nhảy tới tin gốc khi tin còn trong lịch sử. “Cho qua bộ lọc” chưa bảo đảm agent đã gửi câu trả lời. Nút **Đúng/Sai** lưu đánh giá local; bấm lại để bỏ đánh giá, chưa tự thay đổi luật hoặc huấn luyện model.
+
+**Theo dõi model:** mục **Lọc ngữ cảnh** trên thanh bên (`#/context-gate`) thống kê các nhóm của tài khoản bot hiện tại: lượt gọi, phản hồi hợp lệ/lỗi, timeout, độ trễ trung bình/P95, đúng trên số đã chấm, trả lời nhầm và bỏ sót. Mỗi lần fallback được tính cho đúng model/provider đã gọi. Chất lượng chỉ tính trên các quyết định có đánh giá thủ công; thành công HTTP/JSON không được coi là phân loại đúng. Các model có thể nhận tập tin khác nhau vì fallback, nên đây chưa phải benchmark cùng mẫu. Chỉ tính nhật ký còn lưu, không tự gọi thêm model. Đánh giá tối đa 5.000 mục được lưu ở `<HERMES_HOME>/zalo/context-gate-feedback.json`, không chứa nội dung tin hay thông tin xác thực.
+
+Nhật ký có cấu trúc được lưu local ở `<HERMES_HOME>/zalo/context-gate-events.jsonl` và bản xoay `.jsonl.1`, mỗi tệp tối đa 512 KiB. Chỉ lưu ID liên kết và metadata quyết định; không lưu chữ tin nhắn, prompt, phản hồi API thô hoặc khóa. Có cả quyết định theo luật, không chỉ các lần gọi model. Lỗi ghi nhật ký không thay đổi quyết định hay làm hỏng lượt xử lý; log cũ thiếu ID không được đoán để gắn vào tin. Tin do sidecar loại trước khi tới adapter không xuất hiện ở bảng này.
+
+**Nâng cấp khi có tùy chỉnh:** cập nhật Zalo bot từ dashboard kiểm tra các sửa đổi Git chưa commit và dừng nếu có. Bộ cài thay toàn bộ thư mục plugin runtime bằng bản trong repo; cài đè một bản phát hành sạch có thể mất tùy chỉnh dù `.env` còn nguyên. Giữ bản sao source và patch local, ghép thay đổi vào bản mới rồi kiểm thử trước khi cài lại. Cập nhật Hermes core giữ plugin dưới `<HERMES_HOME>/plugins`, nhưng vẫn cần kiểm tra tương thích.
+
+Jev gọi `/systemone`, đọc `answers.should_respond.noul`. Gemma/Gemini gọi `/chat/completions`, chỉ nhận JSON `{"should_respond": 0.0}` với số hợp lệ; điểm do model tự đánh giá không chứng minh độ chính xác thực tế. Request không có tools hoặc session; phản hồi phân loại không bao giờ được gửi cho người dùng. Khi fallback tắt, timeout 6 giây, HTTP lỗi hoặc JSON sai đều bỏ qua tin. Khi toàn bộ dịch vụ phân loại lỗi, chỉ tag đúng UID bot hoặc reply trực tiếp bot được cho qua theo luật dự phòng; gọi tên bằng chữ dù khớp call word vẫn bị bỏ qua khi không phân loại được. Khi có kết quả model hợp lệ thì dùng kết quả đó, kể cả tin có tag/reply.
+
+Chỉ gửi tối đa 8 tin gần nhất (500 ký tự/tin; tin hiện tại 1000), thay UID/tên người bằng mã tạm, loại URL và mẫu thông tin bí mật phổ biến; không gửi tệp, nội dung trích từ tài liệu hay metadata gốc. Nội dung chat còn lại vẫn được gửi tới nhà cung cấp phân loại. Rolling context nằm trong RAM, giữ cả tin bị bỏ qua và phản hồi bot gửi thành công có liên kết tới tin inbound đã nhận. Model thấy mã tạm của người nói, tuổi tin và người mà bot đang trả lời. Cron, thông báo dashboard, tin trung gian và gửi thất bại không được ghi thành phản hồi hội thoại của bot. Không đọc lịch sử trước lúc gateway khởi động lại.
+
+**Phân biệt tên trùng:** tên/call word khớp chữ chỉ là tín hiệu, không phải xác nhận danh tính. Adapter đọc danh sách thành viên bằng quyền của người gửi trong đúng nhóm, đệm local tối đa 10 phút; chỉ gửi cờ có người trùng tên và danh sách có đầy đủ hay chưa, không gửi toàn bộ danh sách thành viên. Lần đầu chờ tối đa 1 giây, lần đọc chậm tiếp tục ở nền tối đa 8 giây. Nếu chưa có đủ danh sách, model không được suy ra tên là duy nhất. UID tag/reply và ngữ cảnh được dùng để phân biệt; không đủ bằng chứng thì IGNORE.
+
+**Đổi `.env` của gate hoặc khóa cần khởi động lại gateway đúng profile.** Watcher hiện chỉ cập nhật `HOT_KEYS` trong `live_settings.py`; các biến gate không nằm trong danh sách đó, và scope của Hermes có thể giữ giá trị cũ dù `os.environ` đổi. `platforms.zalo.extra.context_gate_*` có ưu tiên cao hơn biến môi trường. Không cần restart sidecar khi chỉ thay Python plugin.
+
+Kiểm thử transport thật với dữ liệu giả bằng Python của Hermes (có mã Hermes trên `PYTHONPATH`):
+
+```bash
+python scripts/smoke-context-gate.py --profile-home "D:/Hermes/profiles/my-bot"
+```
+
+Thêm `--provider openrouter-jev`, `--provider gemma-31b` hoặc `--provider gemma-26b` để kiểm tra OpenRouter; `--provider gemini-9router` hoặc `--provider gemini-cli` để kiểm tra hai tuyến Gemini. Thêm `--plugin-dir` trỏ tới bản runtime để kiểm tra đúng file đã triển khai. Script chỉ in endpoint, model, xác suất và kết quả; không gửi tin Zalo, không thay cấu hình. Bộ test offline nằm trong `test_zalo_context_gate.py` và `test_zalo_adapter.ZaloContextGateFlowTest`, được đưa vào `npm run test:py`.
 
 ### Cấu hình nằm ở đâu
 

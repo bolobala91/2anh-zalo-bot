@@ -60,15 +60,25 @@ test('Windows có hermes.exe: stop rồi mới chạy lại, không dùng Hermes
   assert.ok(!JSON.stringify(f.execs).includes('vbs') && !JSON.stringify(f.spawned).includes('vbs'));
 });
 
-test('Windows không có hermes.exe: dùng "hermes"; stop lỗi vẫn chạy tiếp', async () => {
+test('Windows stop lỗi: báo lỗi và không khởi chạy thêm gateway', async () => {
   const f = fakes({ exeExists: false, stopFails: true });
   const warn = console.warn; console.warn = () => {};
   try {
-    await makeRestartAssistant({ platform: 'win32', hermesHome: 'C:/h', spawnImpl: f.spawnImpl, execImpl: f.execImpl, existsImpl: f.existsImpl })();
+    await assert.rejects(makeRestartAssistant({ platform: 'win32', hermesHome: 'C:/h', spawnImpl: f.spawnImpl, execImpl: f.execImpl, existsImpl: f.existsImpl })(), /dừng/);
   } finally { console.warn = warn; }
   assert.equal(f.execs[0][0], 'hermes');
-  assert.equal(f.spawned[0][0], 'hermes');
-  assert.deepEqual(f.spawned[0][1], ['gateway', 'run', '--accept-hooks']);
+  assert.equal(f.spawned.length, 0);
+});
+
+test('Windows named profile: both stop and run target that profile with its own home', async () => {
+  const f = fakes();
+  const home = 'D:/Hermes/profiles/tuanmkt';
+  await makeRestartAssistant({ platform: 'win32', hermesHome: home,
+    spawnImpl: f.spawnImpl, execImpl: f.execImpl, existsImpl: f.existsImpl })();
+  assert.deepEqual(f.execs[0][1], ['--profile', 'tuanmkt', 'gateway', 'stop']);
+  assert.deepEqual(f.spawned[0][1], ['--profile', 'tuanmkt', 'gateway', 'run', '--accept-hooks']);
+  assert.equal(f.execs[0][2].env.HERMES_HOME, home);
+  assert.equal(f.spawned[0][2].env.HERMES_HOME, home);
 });
 
 test('spawn phát sự kiện error (ENOENT) thì rejects', async () => {

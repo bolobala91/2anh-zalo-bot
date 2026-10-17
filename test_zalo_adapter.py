@@ -8,7 +8,7 @@ import threading
 import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from jsonschema import Draft7Validator
 
@@ -95,6 +95,331 @@ class FakeCronJobs:
         return len(self.jobs) < before
 
 
+class ZaloContextGateFlowTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.adapter = ZaloAdapterMediaContextTest.make_adapter(self)
+        self.adapter._context_gate_enabled = True
+        self.adapter._ack_gestures = True
+        self.adapter._self_profile = {"user_id": "bot-uid", "display_name": "Tuấn MKT"}
+        self.adapter._is_owner = lambda uid: uid == "owner"
+        self.adapter._group_rules = lambda tid: None
+        self.adapter.handle_message = AsyncMock()
+        self.adapter._command = AsyncMock(return_value={"ok": True, "msgId": "bot-reply"})
+        self.judge = AsyncMock(return_value=True)
+        self.adapter._context_gate_should_respond = self.judge
+        self.members = AsyncMock(return_value={"ok": True, "result": {"total": 2, "members": [
+            {"id": "bot-uid", "displayName": "Tuấn MKT"}, {"id": "u1", "displayName": "Bình"}]}})
+        self.adapter.group_members = self.members
+        self.events = self.enterContext(patch.object(zalo_adapter._context_events, "record"))
+        self.enterContext(patch.object(zalo_adapter, "_zalo_tools", return_value=DummyZaloTools()))
+        self.clock = self.enterContext(patch.object(
+            zalo_adapter, "time", SimpleNamespace(monotonic=Mock(return_value=1000), time=time.time)))
+        self.serial = 0
+
+    async def message(self, text, **extra):
+        self.serial += 1
+        frame = {"type": "message", "id": f"input-{self.serial}", "threadId": "g1",
+                 "threadType": zalo_adapter.THREAD_TYPE_GROUP, "senderUid": "u1",
+                 "senderName": "Bình", "text": text, **extra}
+        await self.adapter._on_message(frame)
+        return frame
+
+    async def open_conversation(self):
+        frame = await self.message("Tuấn xem giúp kế hoạch này", mentions=[{"uid": "bot-uid"}])
+        await self.adapter.send("g1", "Bạn muốn mình xem phần nào trước?", reply_to=frame["id"])
+        self.adapter.handle_message.reset_mock()
+        self.adapter._command.reset_mock()
+        self.judge.reset_mock()
+        return frame
+
+    def assert_silent(self):
+        self.adapter.handle_message.assert_not_called()
+        self.adapter._command.assert_not_called()
+
+    async def test_real_uid_tag_is_classified_with_uid_evidence(self):
+        await self.message("@Tuấn MKT xem giúp", mentions=[{"uid": "bot-uid"}])
+        self.adapter.handle_message.assert_awaited_once()
+        self.judge.assert_awaited_once()
+        self.assertTrue(self.judge.call_args.kwargs["addressing"]["tagged_bot"])
+
+    async def test_context_diagnostics_correlate_rules_and_ignored_messages(self):
+        self.judge.return_value = False
+        frame = await self.message("Ai đặt bàn chưa?")
+        row = self.events.call_args.kwargs
+        self.assertEqual((row["thread"], row["message"], row["respond"]), ("g1", frame["id"], False))
+        self.assertEqual(row["details"]["reason"], "probability")
+        await self.message("@Tuấn", mentions=[{"uid": "bot-uid"}])
+        self.assertEqual(self.events.call_args.kwargs["details"]["reason"], "probability")
+        self.assertNotIn("text", self.events.call_args.kwargs)
+
+    async def test_context_diagnostics_report_expired_and_classifier_failure(self):
+        await self.open_conversation()
+        self.judge.side_effect = RuntimeError("private error")
+        await self.message("Làm tiếp phần vừa rồi")
+        self.assertEqual(self.events.call_args.kwargs["details"]["reason"], "unavailable")
+        await self.open_conversation()
+        self.clock.monotonic.return_value = 1400
+        await self.message("Làm tiếp nhé")
+        self.assertEqual(self.events.call_args.kwargs["details"]["reason"], "unavailable")
+
+    async def test_plain_display_name_from_member_is_not_a_real_account_tag(self):
+        self.judge.return_value = False
+        await self.message("@Tuấn MKT xem giúp")
+        self.assert_silent()
+        self.judge.assert_awaited_once()
+        self.assertFalse(self.judge.call_args.kwargs["addressing"]["tagged_bot"])
+
+    async def test_owner_configured_call_words_are_evidence_for_judge(self):
+        words = [{"text": t, "at": "any"} for t in ("tuấn ơi", "tuấn mkt", "nhờ tuấn")]
+        with patch.object(zalo_adapter._call_words, "owner_words", return_value=words):
+            for text in ("Tuấn ơi", "Tuấn MKT xem giúp", "Nhờ Tuấn kiểm tra"):
+                await self.message(text, senderUid="owner")
+        self.assertEqual(self.adapter.handle_message.await_count, 3)
+        self.assertEqual(self.judge.await_count, 3)
+        self.assertTrue(self.judge.call_args.kwargs["addressing"]["text_matches_call_word"])
+
+    async def test_direct_reply_is_classified_even_with_tag_only_setting(self):
+        await self.message("Làm ngân sách", quote={"authorId": "bot-uid", "id": "sent"})
+        self.adapter.handle_message.assert_awaited_once()
+        self.judge.assert_awaited_once()
+        self.assertTrue(self.judge.call_args.kwargs["quote_is_own"])
+
+    async def test_same_sender_followup_contains_confirmed_bot_question(self):
+        await self.open_conversation()
+        await self.message("Làm phần ngân sách trước nhé.")
+        self.adapter.handle_message.assert_awaited_once()
+        self.judge.assert_awaited_once()
+        recent = self.judge.call_args.kwargs["recent"]
+        self.assertTrue(any(m["sender_uid"] == "bot-uid" and
+                            "Bạn muốn mình xem phần nào trước?" in m["text"] for m in recent))
+        self.assertFalse(any(m["text"] == "Làm phần ngân sách trước nhé." for m in recent))
+
+    async def test_continue_previous_request(self):
+        await self.open_conversation()
+        await self.message("Làm tiếp phần vừa rồi.")
+        self.adapter.handle_message.assert_awaited_once()
+
+    async def test_every_unaddressed_message_reaches_model_without_active_context(self):
+        self.judge.return_value = False
+        self.adapter._reply_only_tagged = False
+        for text in ("Ai đặt bàn chưa?", "Hôm nay đi ăn ở đâu?", "Tăng ngân sách marketing bao nhiêu?", "Chào bạn"):
+            await self.message(text)
+        await self.message("Tối nay ăn ở đâu?", senderUid="owner")
+        self.assert_silent()
+        self.assertEqual(self.judge.await_count, 5)
+        self.assertTrue(self.adapter._recent_group_messages["g1"])
+
+    async def test_group_override_false_does_not_bypass_gate(self):
+        self.judge.return_value = False
+        self.adapter._group_rules = lambda tid: {"active": True, "reply_only_tagged": False}
+        await self.message("Ai đặt bàn chưa?")
+        self.assert_silent()
+        self.judge.assert_awaited_once()
+
+    async def test_other_sender_new_topic_does_not_use_old_bot_response(self):
+        await self.open_conversation()
+        self.judge.return_value = False
+        await self.message("Tối nay ăn gì?", senderUid="u2")
+        self.assert_silent()
+        self.judge.assert_awaited_once()
+        self.assertTrue(any(m["sender_uid"] == "bot-uid" for m in self.judge.call_args.kwargs["recent"]))
+
+    async def test_old_context_is_timestamped_and_judge_can_allow_it(self):
+        await self.open_conversation()
+        self.clock.monotonic.return_value = 1301
+        await self.message("Làm tiếp phần vừa rồi.")
+        self.adapter.handle_message.assert_awaited_once()
+        self.judge.assert_awaited_once()
+        self.assertTrue(any(m.get("age_seconds", 0) >= 301 for m in self.judge.call_args.kwargs["recent"]))
+
+    async def test_tagging_another_account_with_same_display_name_is_not_bot_call(self):
+        await self.open_conversation()
+        self.judge.return_value = False
+        await self.message("@Tuấn MKT xem giúp", mentions=[{"uid": "someone-else"}])
+        self.assert_silent()
+        self.judge.assert_awaited_once()
+        self.assertTrue(self.judge.call_args.kwargs["addressing"]["mentions_other"])
+
+    async def test_reply_to_another_person_is_silent(self):
+        await self.open_conversation()
+        self.judge.return_value = False
+        await self.message("Đúng rồi", quote={"authorId": "someone-else", "id": "their-message"})
+        self.assert_silent()
+        self.judge.assert_awaited_once()
+        self.assertTrue(self.judge.call_args.kwargs["addressing"]["reply_to_other"])
+
+    async def test_ignored_sender_and_bot_echo_cannot_trigger_agent(self):
+        self.adapter._ignored_senders = {"ignored", "owner"}
+        for uid in ("ignored", "owner", "bot-uid"):
+            await self.message("@Tuấn MKT", senderUid=uid, mentions=[{"uid": "bot-uid"}])
+        await self.message("@Tuấn MKT", senderUid="unexpected", isSelf=True)
+        self.assert_silent()
+        self.judge.assert_not_called()
+
+    async def test_unknown_bot_uid_does_not_make_empty_quote_a_bot_reply(self):
+        self.adapter._self_profile = {}
+        self.judge.return_value = False
+        await self.message("Được", quote={"id": "unknown"})
+        self.assert_silent()
+        self.judge.assert_awaited_once()
+        self.assertFalse(self.judge.call_args.kwargs["quote_is_own"])
+
+    async def test_judge_error_never_leaks_exception_and_does_not_block_explicit_call(self):
+        await self.open_conversation()
+        self.judge.side_effect = RuntimeError("synthetic-sensitive-error")
+        with self.assertLogs(zalo_adapter.logger, level="WARNING") as logs:
+            await self.message("Phần tiếp theo thì sao?")
+        self.assert_silent()
+        self.assertNotIn("synthetic-sensitive-error", " ".join(logs.output))
+        await self.message("@Tuấn MKT", mentions=[{"uid": "bot-uid"}])
+        self.adapter.handle_message.assert_awaited_once()
+
+    async def test_next_message_is_classified_after_an_ignore(self):
+        await self.open_conversation()
+        self.judge.return_value = False
+        await self.message("Ai đặt bàn chưa?")
+        self.assert_silent()
+        self.judge.reset_mock()
+        await self.message("Đúng rồi")
+        self.assert_silent()
+        self.judge.assert_awaited_once()
+
+    async def test_cron_notice_and_unanchored_send_never_open_conversation(self):
+        frame = await self.message("Xem giúp", mentions=[{"uid": "bot-uid"}])
+        await self.adapter.send("g1", "Thông báo dashboard")
+        await self.adapter.send("g1", "Thông báo cron", reply_to=frame["id"], metadata={"job_id": "job"})
+        await self.adapter.send("g1", "Đang xử lý", reply_to=frame["id"], metadata={"_interim_send": True})
+        self.adapter.handle_message.reset_mock()
+        self.adapter._command.reset_mock()
+        self.judge.return_value = False
+        await self.message("Được")
+        self.assert_silent()
+        self.assertFalse(any(m["sender_uid"] == "bot-uid" for m in self.judge.call_args.kwargs["recent"]))
+
+    async def test_failed_send_does_not_open_context(self):
+        frame = await self.message("Xem giúp", mentions=[{"uid": "bot-uid"}])
+        self.adapter._command.return_value = {"ok": False}
+        await self.adapter.send("g1", "Bạn muốn xem phần nào?", reply_to=frame["id"])
+        self.adapter.handle_message.reset_mock()
+        self.adapter._command.reset_mock()
+        self.judge.return_value = False
+        await self.message("Ngân sách")
+        self.assert_silent()
+        self.judge.assert_awaited()
+        self.assertFalse(any(m["sender_uid"] == "bot-uid" for m in self.judge.call_args.kwargs["recent"]))
+
+    async def test_unconfirmed_and_cross_group_context_are_not_used(self):
+        await self.message("Xem giúp", mentions=[{"uid": "bot-uid"}])
+        self.adapter.handle_message.reset_mock()
+        self.adapter._command.reset_mock()
+        self.judge.return_value = False
+        await self.message("Ngân sách")
+        self.assert_silent()
+        await self.open_conversation()
+        await self.message("Ngân sách", threadId="g2")
+        self.assert_silent()
+        self.assertEqual(self.judge.call_args.kwargs["recent"], [])
+
+    async def test_duplicate_name_is_not_accepted_just_because_call_word_matches(self):
+        self.members.return_value["result"]["members"].append({"id":"other-tuan", "displayName":"Tuấn Nguyễn"})
+        self.members.return_value["result"]["total"] = 3
+        self.judge.return_value = False
+        with patch.object(zalo_adapter._call_words, "owner_words", return_value=[{"text":"tuấn ơi","at":"any"}]):
+            await self.message("Tuấn ơi, đặt bàn chưa?", senderUid="owner")
+        self.assert_silent()
+        evidence = self.judge.call_args.kwargs["addressing"]
+        self.assertTrue(evidence["text_matches_call_word"])
+        self.assertTrue(evidence["other_members_share_bot_name"])
+        self.assertFalse(evidence["tagged_bot"])
+
+    async def test_model_failure_does_not_bypass_name_only_call(self):
+        self.judge.side_effect = TimeoutError()
+        with patch.object(zalo_adapter._call_words, "owner_words", return_value=[{"text":"tuấn ơi","at":"any"}]):
+            await self.message("Tuấn ơi", senderUid="owner")
+        self.assert_silent()
+
+    async def test_late_bot_reply_is_retained_after_ignored_interleaving(self):
+        first = await self.message("Xem giúp", mentions=[{"uid":"bot-uid"}])
+        self.judge.return_value = False
+        for _ in range(10):
+            await self.message("Mọi người đi ăn không?", senderUid="u2")
+        self.clock.monotonic.return_value = 1400
+        await self.adapter.send("g1", "Bạn muốn xem phần nào?", reply_to=first["id"])
+        self.judge.return_value = True
+        await self.message("Ngân sách nhé", senderUid="u2")
+        self.assertTrue(any(m.get("text") == "Bạn muốn xem phần nào?" for m in self.judge.call_args.kwargs["recent"]))
+
+    async def test_roster_lookup_uses_current_sender_and_group_without_expanding_permissions(self):
+        self.judge.return_value = False
+        await self.message("Tuấn ơi", senderUid="u2")
+        auth = self.members.call_args.kwargs["authorization"]
+        self.assertEqual(auth, {"actorUid":"u2", "actorRole":"public", "sourceThreadId":"g1",
+                                "sourceThreadType":zalo_adapter.THREAD_TYPE_GROUP, "confirmed":False})
+        await self.message("Ai đặt bàn chưa?")
+        self.members.assert_awaited_once()
+
+    async def test_private_messages_do_not_use_classifier(self):
+        await self.message("Chào bot", senderUid="owner", threadType=zalo_adapter.THREAD_TYPE_USER)
+        self.adapter.handle_message.assert_awaited_once()
+        self.judge.assert_not_called()
+
+    async def test_cancelled_roster_request_cleans_pending_ack(self):
+        self.adapter._ws = CapturingSocket()
+        command = zalo_adapter.ZaloAdapter._command.__get__(self.adapter)
+        task = asyncio.create_task(command({"type":"group_members", "auth":{}}, expect_ack=True))
+        await asyncio.sleep(0)
+        self.assertEqual(len(self.adapter._pending), 1)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError): await task
+        self.assertEqual(self.adapter._pending, {})
+
+    async def test_gate_disabled_preserves_legacy_modes(self):
+        self.adapter._context_gate_enabled = False
+        await self.message("Không gọi bot")
+        self.assert_silent()
+        self.adapter._reply_only_tagged = False
+        await self.message("Không gọi bot")
+        self.adapter.handle_message.assert_awaited_once()
+        self.judge.assert_not_called()
+
+    async def test_real_gateway_final_send_preserves_inbound_anchor(self):
+        from gateway.platforms.base import BasePlatformAdapter
+        await self.message("Xem giúp", mentions=[{"uid": "bot-uid"}])
+        event = self.adapter.handle_message.call_args.args[0]
+        # Exercise the actual Hermes final-delivery path, with only durable
+        # ledger I/O and Zalo network delivery replaced by test doubles.
+        self.adapter._final_delivery_adapter = lambda source: self.adapter
+        self.adapter._record_delivery_obligation = AsyncMock(return_value=None)
+        sent = []
+        await BasePlatformAdapter._send_final_text(
+            self.adapter, event, "synthetic-session", "Bạn muốn xem phần nào?", {}, False, 0, sent.append)
+        self.assertTrue(sent[0].success)
+        self.adapter.handle_message.reset_mock()
+        self.adapter._command.reset_mock()
+        await self.message("Ngân sách trước nhé")
+        self.adapter.handle_message.assert_awaited_once()
+
+    def test_gate_env_file_edit_requires_restart_with_stale_scope(self):
+        from pathlib import Path
+        from agent.secret_scope import set_secret_scope, reset_secret_scope
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            env = home / ".env"
+            env.write_text("ZALO_CONTEXT_GATE_ENABLED=false\n", encoding="utf-8")
+            os.utime(env, (100, 100))
+            token = set_secret_scope({"ZALO_CONTEXT_GATE_ENABLED": "false"})
+            try:
+                self.adapter._apply_settings({})
+                self.adapter._settings_watcher = zalo_adapter._live_settings.SettingsWatcher(lambda: home, interval_s=0)
+                self.adapter._settings_watcher.poll(force=True)
+                env.write_text("ZALO_CONTEXT_GATE_ENABLED=true\n", encoding="utf-8")
+                os.utime(env, (200, 200))
+                self.adapter._reload_settings_if_changed()
+                self.assertFalse(self.adapter._context_gate_enabled)
+            finally:
+                reset_secret_scope(token)
+
+
 class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
     def make_adapter(self):
         adapter = zalo_adapter.ZaloAdapter(
@@ -104,6 +429,7 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
                     "bridge_url": "ws://127.0.0.1:9",
                     "reply_only_tagged": True,
                     "ack_gestures": False,
+                    "context_gate_enabled": False,
                 },
             )
         )

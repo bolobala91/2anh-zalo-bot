@@ -14,6 +14,22 @@ function withSettings(t) {
   return deps;
 }
 
+test('context gate route saves all controls and only requests assistant restart', async (t) => {
+  const deps = withSettings(t);
+  const { call } = await startApp(t, deps);
+  const admin = await loginAs(t, deps, call);
+  const values = { contextGateEnabled: true, contextGateThreshold: 0.75,
+    contextGateFallbackEnabled: true, contextGateFallbackModel: 'google/gemma-4-31b-it:free',
+    contextGateOpenrouterFallbackEnabled: true };
+  const saved = await call('/api/admin/settings', { method: 'PUT', cookie: admin, body: { values } });
+  assert.equal(saved.status, 200);
+  for (const [id, value] of Object.entries(values)) assert.equal(saved.json.settings.find((s) => s.id === id).value, value);
+  assert.ok(deps.restartFlags.get().assistant);
+  assert.equal(deps.restartFlags.get().sidecar, null);
+  const invalid = await call('/api/admin/settings', { method: 'PUT', cookie: admin, body: { values: { contextGateThreshold: 2 } } });
+  assert.equal(invalid.status, 400);
+});
+
 test('Cấu hình: chỉ Quản trị; lưu đặt cờ chờ đúng đích + Nhật ký "cũ → mới"; khoá lạ 400; không bao giờ lộ khoá bí mật', async (t) => {
   const deps = withSettings(t);
   const { call } = await startApp(t, deps);

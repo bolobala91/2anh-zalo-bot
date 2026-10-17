@@ -69,6 +69,8 @@ if (!python) {
 console.log(`[test:py] Dùng Python: ${python}`);
 
 const suites = [
+  { label: 'test_zalo_context_gate.py', module: 'test_zalo_context_gate', cwd: REPO_ROOT },
+  { label: 'test_zalo_context_events.py', module: 'test_zalo_context_events', cwd: REPO_ROOT },
   // Suite adapter import lõi Hermes (gateway) và jsonschema. Python hệ thống trên
   // bản clone mới không có hai thứ đó — bỏ qua kèm cảnh báo thay vì báo đỏ cả npm test.
   { label: 'test_zalo_adapter.py', module: 'test_zalo_adapter', cwd: REPO_ROOT, requires: 'import gateway, jsonschema' },

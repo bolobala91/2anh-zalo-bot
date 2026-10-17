@@ -144,6 +144,14 @@ export function InfoPanel({ conv, info, board, reminders, pinned, pinBusy, onPin
         <button type="button" class="info-act" onClick=${() => onTool('search')}><span class="info-act-ico"><${Icon} name="search" size=${18} /></span>Tìm tin nhắn</button>
         <button type="button" class="info-act" onClick=${() => onOpen('photo')}><span class="info-act-ico"><${Icon} name="image" size=${18} /></span>Ảnh, tệp, link</button>
       </div>
+      ${group ? html`<section class="info-sec">
+        <button type="button" class="board-row info-members" onClick=${() => onTool('members')}>
+          <span class="board-ico" aria-hidden="true"><${Icon} name="users" size=${16} /></span>
+          <span class="board-label">Thành viên nhóm</span>
+          <span class="muted small">${info?.members ? `${num(info.members)} người` : 'Xem'}</span>
+          <${Icon} name="next" size=${14} />
+        </button>
+      </section>` : null}
       ${folders ? html`<${FolderAssign} key=${`${conv.threadType}:${conv.threadId}`} conv=${conv} folders=${folders} onChanged=${onFolders} />` : null}
       <${Bulletin} board=${board} reminders=${reminders} group=${group} onJump=${onJump} />
       <${Section} title="Ảnh/Video" state=${photos} onAll=${() => onOpen('photo')} empty="Chưa có ảnh hay video nào.">

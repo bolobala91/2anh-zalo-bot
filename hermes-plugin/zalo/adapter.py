@@ -103,6 +103,8 @@ from .flood import MUTED as FLOOD_MUTED
 from .flood import FloodGuard
 from . import model_command as _model_command
 from . import call_words as _call_words
+from . import context_gate as _context_gate
+from . import context_events as _context_events
 from . import live_settings as _live_settings
 
 
@@ -658,6 +660,10 @@ class ZaloAdapter(BasePlatformAdapter):
         # threadId -> 5 tin gần nhất trong nhóm. Chỉ RAM, không ghi transcript,
         # để câu hỏi kiểu "đây là gì" có thể nhìn lại ảnh vừa gửi không tag bot.
         self._recent_group_messages: Dict[str, Deque[Dict[str, Any]]] = {}
+        # Roster metadata is cached locally; only name-collision booleans go to the classifier.
+        self._context_member_cache: Dict[str, Any] = {}
+        self._context_member_tasks: Dict[str, asyncio.Task] = {}
+        self._context_accepted: Dict[Any, Dict[str, Any]] = {}
 
     # -- Connection lifecycle -------------------------------------------------
 
@@ -845,6 +851,9 @@ class ZaloAdapter(BasePlatformAdapter):
                       _get_scoped_secret("ZALO_GROUP_REPLY_ONLY_TAGGED", "true")),
             default=True,
         )
+        self._context_gate_extra = _context_gate.settings(extra, _get_scoped_secret)
+        self._context_gate_enabled = _context_gate.enabled(
+            self._context_gate_extra, get_secret=_get_scoped_secret)
         # Ai được nhắn riêng với bot.
         #   owner-only  chỉ người trong ZALO_ALLOWED_USERS  (mặc định)
         #   open        bất kỳ ai
@@ -926,8 +935,13 @@ class ZaloAdapter(BasePlatformAdapter):
         )
         sender_uid = str(frame.get("senderUid") or "")
         sender_name = frame.get("senderName") or "Zalo user"
+        bot_uid = str(self._self_profile.get("user_id") or "")
+        if frame.get("isSelf") or (bot_uid and sender_uid == bot_uid):
+            self._record_context_decision(frame, False, {"reason": "self"})
+            return
 
         if not text and not media_urls and not quote_media_urls:
+            self._record_context_decision(frame, False, {"reason": "empty"})
             return
 
         recent_entry = {
@@ -942,14 +956,17 @@ class ZaloAdapter(BasePlatformAdapter):
             "attachments": self._attachments_for(frame, [*media_urls, *quote_media_urls]),
             "msg_type": str(frame.get("msgType") or ""),
             "ts": frame.get("ts"),
+            "received_at": time.monotonic(),
         }
         if is_group:
             self._remember_group_message(thread_id, recent_entry)
 
-        # Chỉ áp trong nhóm và không bao giờ áp cho chủ nhân: lỡ dán nhầm UID chủ
-        # nhân vào danh sách này thì bot không được im lặng với chính chủ.
-        if is_group and sender_uid in self._ignored_senders and not self._is_owner(sender_uid):
+        # Context mode honors the ignore list before any classifier call. Keep
+        # the historical owner exemption only when the gate is disabled.
+        if (is_group and sender_uid in self._ignored_senders
+                and (self._context_gate_enabled or not self._is_owner(sender_uid))):
             logger.debug("[zalo] %s nằm trong ignore_sender_uids — chỉ giữ làm ngữ cảnh", sender_uid)
+            self._record_context_decision(frame, False, {"reason": "ignored_sender"})
             return
 
         is_owner = self._is_owner(sender_uid)
@@ -964,19 +981,25 @@ class ZaloAdapter(BasePlatformAdapter):
         if (is_group and thread_id in self._owner_only_groups and not is_owner
                 and not (group_rules and group_rules.get("custom"))):
             logger.debug("[zalo] nhóm %s chỉ chủ nhân gọi được — %s chỉ giữ làm ngữ cảnh", thread_id, sender_uid)
+            self._record_context_decision(frame, False, {"reason": "owner_only"})
             return
         # Nút tính năng khi nhắn riêng (mục "dm"); chủ nhân không bao giờ bị chặn.
         dm_rules = self._dm_rules(sender_uid) if not is_group and not is_owner else None
         if group_rules and not group_rules["active"] and not is_owner:
             logger.debug("[zalo] nhóm %s đang tắt trên dashboard — %s chỉ giữ làm ngữ cảnh", thread_id, sender_uid)
+            self._record_context_decision(frame, False, {"reason": "group_disabled"})
             return
         reply_only_tagged = self._reply_only_tagged
         if group_rules and group_rules["reply_only_tagged"] is not None:
             reply_only_tagged = group_rules["reply_only_tagged"]
         mentioned = self._is_mentioned(frame, text, is_owner=is_owner)
-        # Trong nhóm: không trả lời khi chưa được gọi, nhưng vẫn giữ tin đó trong
-        # rolling memory ở trên để câu tag ngay sau có ảnh/ngữ cảnh gần nhất.
-        if is_group and reply_only_tagged and not mentioned:
+        if is_group and self._context_gate_enabled:
+            details = {}
+            respond = await self._classify_group_message(thread_id, recent_entry, frame, bot_uid, details)
+            self._record_context_decision(frame, respond, details)
+            if not respond:
+                return
+        elif is_group and reply_only_tagged and not mentioned:
             logger.debug("[zalo] group message not addressed to the bot — saved as context only")
             return
 
@@ -996,7 +1019,7 @@ class ZaloAdapter(BasePlatformAdapter):
         # chống flood và cử chỉ đã xem/thả cảm xúc. Task xử lý agent được tạo
         # phía dưới sẽ kế thừa ContextVar này.
         quote_is_own = bool(
-            quote
+            bot_uid and quote
             and str(quote.get("authorId") or "")
             == str(self._self_profile.get("user_id") or "")
         )
@@ -1228,10 +1251,8 @@ class ZaloAdapter(BasePlatformAdapter):
         )
 
         logger.info(
-            "[zalo] %s from %s (%s): %s%s",
-            "group" if is_group else "dm", sender_name, sender_uid,
-            text[:80] if text else "[media]",
-            f" +{len(cached_media)} ảnh" if cached_media else "",
+            "[zalo] accepted %s message (media_count=%d)",
+            "group" if is_group else "dm", len(cached_media),
         )
 
         # Cử chỉ lịch sự của Zalo: báo đã xem + thả cảm xúc hợp ngữ cảnh.
@@ -1267,6 +1288,10 @@ class ZaloAdapter(BasePlatformAdapter):
         except Exception:
             logger.debug("[zalo] không ghi được lượt dùng bot", exc_info=True)
 
+        if is_group and self._context_gate_enabled and msg_id and sender_uid:
+            if len(self._context_accepted) >= 256:
+                self._context_accepted.pop(next(iter(self._context_accepted)))
+            self._context_accepted[(thread_id, msg_id)] = {"sender_uid": sender_uid}
         await self.handle_message(event)
 
     @staticmethod
@@ -1380,6 +1405,112 @@ class ZaloAdapter(BasePlatformAdapter):
             ]),
             metadata={"chat_type": "dm"},
         )
+
+    async def _context_gate_should_respond(self, **kwargs) -> bool:
+        return await _context_gate.should_respond(
+            # Unlike startup config, classifier credentials must never fall back
+            # to another profile's environment when a multiplex scope is missing.
+            extra=self._context_gate_extra, get_secret=_scoped_get_secret, **kwargs)
+
+    def _record_context_decision(self, frame, respond, details):
+        if self._context_gate_enabled and frame.get("threadType") == THREAD_TYPE_GROUP:
+            _context_events.record(
+                account=self._self_profile.get("user_id"), thread=frame.get("threadId"),
+                message=frame.get("id"), cli_message=frame.get("cliMsgId"),
+                respond=respond, details=details)
+
+    async def _context_name_evidence(self, thread_id, bot_uid, bot_name, sender_uid):
+        now = time.monotonic()
+        cached = self._context_member_cache.get(thread_id)
+        if cached is None or now - cached[0] >= 600:
+            task = self._context_member_tasks.get(thread_id)
+            if task is None:
+                async def load_members():
+                    result = {}
+                    try:
+                        auth = {"actorUid": sender_uid, "actorRole": "owner" if self._is_owner(sender_uid) else "public",
+                                "sourceThreadId": thread_id, "sourceThreadType": THREAD_TYPE_GROUP, "confirmed": False}
+                        response = await asyncio.wait_for(self.group_members(thread_id, authorization=auth), timeout=8.0)
+                        if isinstance(response, dict) and response.get("ok") is True:
+                            result = response.get("result") or {}
+                    except Exception:
+                        pass
+                    finally:
+                        self._context_member_tasks.pop(thread_id, None)
+                    if len(self._context_member_cache) >= 128:
+                        self._context_member_cache.pop(next(iter(self._context_member_cache)))
+                    self._context_member_cache[thread_id] = (time.monotonic(), result)
+                task = asyncio.create_task(load_members())
+                self._context_member_tasks[thread_id] = task
+                self._message_tasks.add(task)
+                task.add_done_callback(self._message_tasks.discard)
+            try:
+                # Keep a slow read running, rather than caching an empty roster
+                # for ten minutes merely because the first message waited a second.
+                await asyncio.wait_for(asyncio.shield(task), timeout=1.0)
+            except asyncio.TimeoutError:
+                pass
+            result = self._context_member_cache.get(thread_id, (0, {}))[1]
+        else:
+            result = cached[1]
+        members = result.get("members", []) if isinstance(result, dict) else []
+        members = [m for m in members if isinstance(m, dict)] if isinstance(members, list) else []
+        total = result.get("total") if isinstance(result, dict) else None
+        return {
+            "other_members_share_bot_name": any(str(m.get("id") or "") != bot_uid and
+                _context_gate.names_overlap(m.get("displayName"), bot_name) for m in members),
+            "name_roster_complete": isinstance(total, int) and total > 0 and len(members) >= total
+                and all(m.get("displayName") for m in members),
+        }
+
+    async def _classify_group_message(self, thread_id, current, frame, bot_uid, diagnostics=None) -> bool:
+        details = diagnostics if diagnostics is not None else {}
+        details["reason"] = "probability"
+        now = time.monotonic()
+        recent = [{**item, "age_seconds": max(0, now - item.get("received_at", now))}
+                  for item in self._recent_group_messages.get(thread_id, ()) if item is not current][-_context_gate.MAX_RECENT:]
+        quote = frame.get("quote") if isinstance(frame.get("quote"), dict) else {}
+        mentions = frame.get("mentions") if isinstance(frame.get("mentions"), list) else []
+        tagged_bot = bool(bot_uid and any(isinstance(m, dict) and str(m.get("uid") or "") == bot_uid for m in mentions))
+        reply_bot = bool(bot_uid and str(quote.get("authorId") or "") == bot_uid)
+        bot_name = str(self._self_profile.get("display_name") or "bot")
+        addressing = {
+            "tagged_bot": tagged_bot, "mentions_other": bool(mentions) and not tagged_bot,
+            "reply_to_other": bool(quote.get("authorId")) and not reply_bot,
+            "reply_sender_uid": str(quote.get("authorId") or ""),
+            "quote_text": quote.get("text") if isinstance(quote.get("text"), str) else "",
+            "has_media": bool(current.get("media_urls") or current.get("quote_media_urls")),
+            "text_matches_call_word": bool(self._is_owner(current["sender_uid"]) and _call_words.matches(
+                current["text"].lower(), _call_words.owner_words(bot_name))),
+            **await self._context_name_evidence(thread_id, bot_uid, bot_name, current["sender_uid"]),
+        }
+        try:
+            respond = await self._context_gate_should_respond(
+                text=current["text"], sender_uid=current["sender_uid"],
+                sender_name=current["sender_name"], bot_uid=bot_uid,
+                bot_name=bot_name, quote_is_own=reply_bot, recent=recent, diagnostics=details, addressing=addressing)
+        except Exception:
+            logger.warning("[zalo] context gate IGNORE (classification unavailable)")
+            details["reason"] = "unavailable"
+            respond = False
+        if details.get("reason") == "unavailable" and (tagged_bot or reply_bot):
+            details["reason"] = "direct_address_fallback"
+            return True
+        return respond is True
+
+    def _remember_context_response(self, chat_id, content, reply_to, metadata, message_id):
+        anchor = self._context_accepted.get((str(chat_id), str(reply_to or "")))
+        bot_uid = str(self._self_profile.get("user_id") or "")
+        if (not self._context_gate_enabled or not anchor or not bot_uid or not content or not reply_to
+                or metadata.get("job_id") or metadata.get("_interim_send")):
+            return
+        now = time.monotonic()
+        self._remember_group_message(str(chat_id), {
+            "id": str(message_id or ""), "sender_uid": bot_uid,
+            "sender_name": str(self._self_profile.get("display_name") or "bot"),
+            "text": content[:1000], "received_at": now,
+            "reply_to_sender_uid": anchor["sender_uid"],
+        })
 
     def _is_mentioned(self, frame: Dict[str, Any], text: str, is_owner: bool = False) -> bool:
         """True only when *this bot* is addressed.
@@ -2063,6 +2194,8 @@ class ZaloAdapter(BasePlatformAdapter):
                     error=(last or {}).get("error", "sidecar did not confirm the send"),
                 )
 
+        if last and thread_type == THREAD_TYPE_GROUP:
+            self._remember_context_response(chat_id, content, reply_to, metadata, last.get("msgId"))
         return SendResult(success=True, message_id=(last or {}).get("msgId"), raw_response=last)
 
     async def send_typing(self, chat_id: str, metadata=None) -> None:
@@ -2260,9 +2393,10 @@ class ZaloAdapter(BasePlatformAdapter):
             expect_ack=True,
         )
 
-    async def group_members(self, chat_id: str) -> Optional[Dict[str, Any]]:
+    async def group_members(self, chat_id: str, *, authorization=None) -> Optional[Dict[str, Any]]:
         return await self._command(
-            {"type": "group_members", "threadId": str(chat_id), "threadType": THREAD_TYPE_GROUP},
+            {"type": "group_members", "threadId": str(chat_id), "threadType": THREAD_TYPE_GROUP,
+             **({"auth": authorization} if authorization is not None else {})},
             expect_ack=True,
         )
 
@@ -2397,6 +2531,9 @@ class ZaloAdapter(BasePlatformAdapter):
 
         try:
             return await asyncio.wait_for(fut, timeout=timeout)
+        except asyncio.CancelledError:
+            self._pending.pop(payload.get("reqId", ""), None)
+            raise
         except asyncio.TimeoutError:
             self._pending.pop(payload.get("reqId", ""), None)
             logger.warning("[zalo] sidecar did not ack %s (%s) in %ss",

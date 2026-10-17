@@ -27,12 +27,14 @@ import { Maintenance } from './maintenance.js';
 import { DonateButton } from './donate.js';
 import { CommunityButton } from './community.js';
 import { Settings } from './settings.js';
+import { ContextGateTracking } from './context-gate.js';
 
 const STATUS_MS = 3000;
 
 const ROUTES = {
   '/': { view: Overview },
   '/chats': { view: Chats },
+  '/context-gate': { view: ContextGateTracking, admin: true },
   '/permissions': { view: Permissions },
   '/zalo': { view: Zalo },
   '/audit': { view: Audit },
@@ -63,6 +65,7 @@ export const GROUPS = [
   { label: 'Tổng quan', items: [{ path: '/', text: 'Tổng quan', icon: 'home' }] },
   { label: 'Hội thoại', items: [
     { path: '/chats', text: 'Phiên chat', icon: 'chat' },
+    { path: '/context-gate', text: 'Lọc ngữ cảnh', icon: 'chart', admin: true },
     { path: '/contacts', text: 'Liên hệ', icon: 'users' },
     { path: '/permissions', text: 'Phân quyền Bot', icon: 'shield' },
     { path: '/schedules', text: 'Lịch hẹn', icon: 'clock' },

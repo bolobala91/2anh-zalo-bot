@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseEnv } from 'node:util';
 import { loadRepoEnv, loadHermesEnv } from '../scripts/setup-env.js';
 import { createDashboardApp } from './app.js';
 import { resolveDashboardPaths } from './lib/paths.js';
@@ -18,6 +19,7 @@ import { createActivityLog } from './lib/activity-log.js';
 import { createSidecarClient } from './lib/sidecar-client.js';
 import { createTelegramLinker } from './lib/telegram.js';
 import { createStoreReader } from './lib/store-reader.js';
+import { createContextGateReader } from './lib/context-gate-reader.js';
 import { createThreadNames } from './lib/thread-names.js';
 import { createPermissionsStore, makeDmEnv, makeGlobalReplyOnlyTagged } from './lib/permissions.js';
 import { createWatchdog } from './lib/watchdog.js';
@@ -25,7 +27,7 @@ import { makeRestartSidecar } from './lib/restart.js';
 import { makeRestartAssistant } from './lib/restart-assistant.js';
 import { createRestartFlags } from './lib/restart-flags.js';
 import { createBrandStore } from './lib/brand.js';
-import { readEnvKey, SETTINGS_ENV_KEYS } from './lib/env-file.js';
+import { readEnvKey, writeEnvKey, SETTINGS_ENV_KEYS } from './lib/env-file.js';
 import { createSecondBrain } from './lib/second-brain.js';
 import { createLearnedMemory, readProvider } from './lib/learned-memory.js';
 import { createPeopleStore } from './lib/people-store.js';
@@ -46,6 +48,7 @@ import { createBotUses } from './lib/bot-uses.js';
 import { createAiEvents } from './lib/ai-events.js';
 import { createAgentTrace } from './lib/agent-trace.js';
 import { createMcpServers } from './lib/mcp-servers.js';
+import { createMcpToolVi } from './lib/mcp-tool-vi.js';
 import { createSettings } from './lib/settings.js';
 import { createOwnersStore } from './lib/owners.js';
 import { createServiceChecker } from './lib/services.js';
@@ -53,6 +56,14 @@ import { createHealthMonitor } from './lib/health-monitor.js';
 import { singleFlight } from './lib/single-flight.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/** The installed bot's home is authoritative over a launching shell's default profile. */
+export function bindDashboardHome({ sidecarRoot, env = process.env }) {
+  const file = join(sidecarRoot, '.env');
+  if (!existsSync(file)) return;
+  const configured = parseEnv(readFileSync(file, 'utf8').replace(/^\uFEFF/, '')).HERMES_HOME?.trim();
+  if (configured) env.HERMES_HOME = configured;
+}
 
 /**
  * @param {object} [opts]
@@ -89,6 +100,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
   return {
     paths, config, sidecar, linker,
     store,
+    contextGate: createContextGateReader({ file: join(paths.hermesHome, 'zalo', 'context-gate-events.jsonl'), feedbackFile: join(paths.hermesHome, 'zalo', 'context-gate-feedback.json'), store }),
     botUses: createBotUses({
       hermesHome: paths.hermesHome, stateDb: paths.hermesStateDb, zaloDb: paths.sqliteFile,
       owners: () => [...owners.list(), ...owners.overrideUids()],
@@ -145,8 +157,10 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     soul: createSoul({ hermesHome: paths.hermesHome, historyDir: paths.soulHistoryDir }),
     toolsManifestFile: paths.toolsManifestFile,
     agentTrace: createAgentTrace({ dbPath: paths.hermesStateDb }),
-    mcpServers: createMcpServers({ configFile: paths.hermesConfigFile, publicMcp: () => readEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP') }),
+    mcpServers: createMcpServers({ configFile: paths.hermesConfigFile, publicMcp: () => readEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP'),
+      writePublicMcp: (v) => writeEnvKey(paths.hermesEnvFile, 'ZALO_PUBLIC_MCP', v) }),
     hermesAdmin,
+    mcpToolVi: createMcpToolVi({ configFile: paths.hermesConfigFile, cacheFile: join(paths.hermesHome, 'zalo', 'mcp-tool-vi.json') }),
     // Ảnh/tệp gửi tay từ Phiên chat đặt tạm ở đây; kết nối Zalo chỉ nhận tệp trong đúng thư mục này.
     outboxDir: join(paths.dataDir, 'outbox'),
     // Cách gọi bot: cùng tệp plugin đọc (ZALO_CALL_WORDS_FILE trong .env Hermes thắng).
@@ -193,6 +207,7 @@ async function main() {
   const inheritedDm = Object.fromEntries(['ZALO_DM_POLICY', 'ZALO_ALLOW_ALL_USERS', 'GATEWAY_ALLOW_ALL_USERS'].map((k) => [k, process.env[k]]));
   const inheritedSettings = Object.fromEntries(SETTINGS_ENV_KEYS.map((k) => [k, process.env[k]]));
   if (existsSync(join(sidecarRoot, '.env'))) loadRepoEnv(join(sidecarRoot, '.env'));
+  bindDashboardHome({ sidecarRoot });
   loadHermesEnv();
   const deps = buildDeps({ sidecarRoot, inheritedReplyOnlyTagged, inheritedOwners, inheritedDm, inheritedSettings });
   // Chủ nhân đọc từ tệp .env, không từ môi trường: tiến trình con khởi động lại sẽ thừa hưởng bản cũ và không bao giờ áp dụng danh sách mới.

@@ -432,7 +432,7 @@ test('thanh điều hướng điện thoại: 4 mục chính + "Thêm" theo vai 
   const { navSplit } = await import('./views/shell.js');
   const admin = navSplit('admin', '/audit', { secondBrain: true });
   assert.deepEqual(admin.primary.map((i) => [i.path, i.short]), [['/', 'Tổng quan'], ['/chats', 'Phiên chat'], ['/zalo', 'Zalo'], ['/permissions', 'Phân quyền']]);
-  assert.deepEqual(admin.more.map((i) => i.path), ['/contacts', '/schedules', '/memory', '/kb', '/insight', '/second-brain', '/mcp',
+  assert.deepEqual(admin.more.map((i) => i.path), ['/context-gate', '/contacts', '/schedules', '/memory', '/kb', '/insight', '/second-brain', '/mcp',
     '/agent', '/ai', '/tools', '/skills', '/audit', '/brand', '/health', '/maintenance', '/settings', '/users', '/owners', '/alerts', '/profile']);
   assert.equal(admin.activeMore.text, 'Nhật ký');
   const owner = navSplit('owner', '/', { secondBrain: true });
@@ -743,6 +743,7 @@ test('Phiên chat: link ngoài (tệp, video, ảnh gốc, link) luôn mở th�
     const anchors = [...src.matchAll(/<a\b[^>]*>/g)].map((m) => m[0]);
     assert.ok(anchors.length > 0, f);
     for (const a of anchors) {
+      if (a.includes('href="#/context-gate"')) continue; // Internal dashboard navigation.
       assert.match(a, /target="_blank"/, `${f}: ${a}`);
       assert.match(a, /rel="noopener noreferrer"/, `${f}: ${a}`);
     }
@@ -754,7 +755,7 @@ test('thanh bên: 5 nhóm theo mẫu; Second brain chỉ Quản trị và chỉ 
   const { visibleGroups } = await import('./views/shell.js');
   const admin = visibleGroups('admin', { secondBrain: true });
   assert.deepEqual(admin.map((g) => g.label), ['Tổng quan', 'Hội thoại', 'Dữ liệu', 'Hệ thống', 'Quản trị']);
-  assert.deepEqual(admin[1].items.map((i) => i.text), ['Phiên chat', 'Liên hệ', 'Phân quyền Bot', 'Lịch hẹn']);
+  assert.deepEqual(admin[1].items.map((i) => i.text), ['Phiên chat', 'Lọc ngữ cảnh', 'Liên hệ', 'Phân quyền Bot', 'Lịch hẹn']);
   assert.deepEqual(admin[2].items.map((i) => i.text), ['Trí nhớ', 'Kho tri thức', 'Insight nhóm', 'Second brain', 'Kết nối MCP']);
   assert.deepEqual(admin[3].items.map((i) => i.text), ['Tài khoản Zalo', 'Tính cách AI', 'Khoá API & Model', 'Công cụ', 'Skill', 'Nhật ký', 'Thương hiệu', 'Sức khoẻ máy chủ', 'Bảo trì', 'Cấu hình']);
   const owner = visibleGroups('owner', { secondBrain: true });
@@ -930,6 +931,9 @@ test('Cấu hình: chữ nhập thành giá trị đúng kiểu; chỉ gửi m�
   const { parseInput, changedValues } = await import('./views/settings.js');
   assert.equal(parseInput({ type: 'int' }, ' 12 '), 12);
   assert.ok(Number.isNaN(parseInput({ type: 'int' }, '12a')));
+  assert.equal(parseInput({ type: 'float' }, '0.72'), 0.72);
+  assert.equal(parseInput({ type: 'float' }, '.85'), 0.85);
+  for (const value of ['', ' ', 'NaN', 'Infinity', '0.72x']) assert.ok(Number.isNaN(parseInput({ type: 'float' }, value)));
   assert.deepEqual(parseInput({ type: 'ids' }, '111, 222,,'), ['111', '222']);
   const list = [{ id: 'a', value: 6 }, { id: 'b', value: ['1'] }, { id: 'c', value: true }];
   assert.deepEqual(changedValues(list, { a: 6, b: ['1', '2'], c: false }), { b: ['1', '2'], c: false });
@@ -1144,4 +1148,14 @@ test('phiên chat kiểu Zalo: gộp cụm tin theo người gửi, dải ngày,
   assert.equal(initialOf('🌸 Hoa'), 'H');
   assert.equal(initialOf(''), '?');
   assert.equal(tintOf('An'), tintOf('An'), 'cùng tên cùng màu');
+});
+
+test('Thành viên nhóm: trưởng → phó → bot → theo tên; lọc theo tên không dấu', async () => {
+  const { sortMembers, filterMembers } = await import('./views/chat-members.js');
+  const list = [{ uid: '1', name: 'Bình' }, { uid: '2', name: 'An', role: 'admin' }, { uid: '3', name: 'Lăng Tiêu', self: true },
+    { uid: '4', name: 'Cô Lan', role: 'owner' }, { uid: '5', name: 'Ánh' }];
+  assert.deepEqual(sortMembers(list).map((m) => m.uid), ['4', '2', '3', '5', '1']);
+  assert.deepEqual(filterMembers(list, 'lang tieu').map((m) => m.uid), ['3']);
+  assert.deepEqual(filterMembers(list, '  ').length, 5, 'ô trống → cả danh sách');
+  assert.equal(list[0].name, 'Bình', 'không đổi danh sách gốc');
 });

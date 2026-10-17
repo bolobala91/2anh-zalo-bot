@@ -13,7 +13,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { writeEnvKeys } from './env-file.js';
 import { editConfigYaml, readConfigYaml } from './config-yaml.js';
 
-const S = ['sidecar']; const AS = ['assistant', 'sidecar'];
+const S = ['sidecar']; const AS = ['assistant', 'sidecar']; const A = ['assistant'];
 // Áp dụng ngay: plugin đọc lại .env / config.yaml khi đổi (hermes-plugin/zalo/live_settings.py) — không cần khởi động lại.
 const NOW = [];
 export const SETTINGS = [
@@ -32,6 +32,12 @@ export const SETTINGS = [
   { id: 'publicMcp', group: 'Tài liệu và MCP', label: 'Kết nối MCP thành viên được dùng', hint: 'Tên kết nối (được dùng * và ?). Mở cho thành viên là cho người ngoài dùng tài nguyên của chủ bot — cân nhắc kỹ.', type: 'patterns', max: 20, env: 'ZALO_PUBLIC_MCP', def: [], restart: NOW, confirm: true },
   { id: 'mediaLookback', group: 'Đọc ảnh và tệp', label: 'Số tin gần nhất bot xem lại để tìm ảnh/tệp', hint: 'Khi được hỏi về ảnh hay tệp (vd. "xem ảnh này", "gộp 2 file vừa gửi") trong nhóm, bot lật lại chừng này tin để lấy ảnh/tệp mà đọc. Mặc định 3. Đặt cao thì đọc được ảnh gửi xa hơn nhưng tốn thêm lượt AI cho mỗi ảnh; chỉ tính các tin nhận được từ lần khởi động lại trợ lý gần nhất.', type: 'int', min: 1, max: 30, env: 'ZALO_MEDIA_LOOKBACK', extra: 'media_lookback', extraWins: true, def: 3, restart: NOW },
   { id: 'historyDays', group: 'Lưu trữ', label: 'Giữ lịch sử trò chuyện (ngày)', type: 'int', min: 30, max: 3650, env: 'ZALO_HISTORY_RETENTION_DAYS', def: 365, restart: S },
+  { id: 'contextGateEnabled', group: 'Ngữ cảnh nhóm', label: 'Chỉ trả lời khi hội thoại hướng tới bot', hint: 'Model đọc mọi tin nhóm hợp lệ cùng ngữ cảnh, kể cả tag/call/reply. Không tự chặn vì đổi người hoặc quá 5 phút. Tên trùng cần bằng chứng phân biệt; lỗi model chỉ cho qua tag đúng UID/reply bot.', type: 'bool', env: 'ZALO_CONTEXT_GATE_ENABLED', extra: 'context_gate_enabled', extraWins: true, def: false, restart: A },
+  { id: 'contextGateThreshold', group: 'Ngữ cảnh nhóm', label: 'Ngưỡng tin cậy', hint: 'Mặc định 0.72. Tăng ngưỡng để bot thận trọng hơn; khi không chắc bot im lặng.', type: 'float', min: 0, max: 1, env: 'ZALO_CONTEXT_GATE_THRESHOLD', extra: 'context_gate_threshold', extraWins: true, def: 0.72, restart: A },
+  { id: 'contextGateClassifier', group: 'Ngữ cảnh nhóm', label: 'Model nhận diện chính', hint: 'Chỉ đổi bộ nhận diện, không đổi model trả lời của Hermes. Chọn Gemini/Gemma chính thì chỉ gọi model đó, lỗi sẽ bỏ qua tin mơ hồ.', type: 'enum', options: [{ value: 'configured', label: 'Theo cấu hình hiện tại (mặc định Jev 9router)' }, { value: 'jev-9router', label: 'Jev 1.13 · 9router' }, { value: 'jev-openrouter', label: 'Jev 1.14 · OpenRouter' }, { value: 'gemma-26b', label: 'Gemma 4 26B A4B free · OpenRouter' }, { value: 'gemma-31b', label: 'Gemma 4 31B free · OpenRouter' }, { value: 'gemini-9router', label: 'Gemini 3.8 Flash · 9router' }, { value: 'gemini-cli', label: 'Gemini 3.8 Flash high · CLI proxy' }], env: 'ZALO_CONTEXT_GATE_CLASSIFIER', extra: 'context_gate_classifier', extraWins: true, def: 'configured', restart: A },
+  { id: 'contextGateFallbackEnabled', group: 'Ngữ cảnh nhóm', label: 'Dùng model dự phòng khi Jev gặp lỗi', hint: 'Chỉ chuyển khi lỗi, timeout hoặc dữ liệu sai. Kết quả hợp lệ dù là IGNORE cũng dừng ngay, không hỏi lại model khác.', type: 'bool', env: 'ZALO_CONTEXT_GATE_FALLBACK_ENABLED', extra: 'context_gate_fallback_enabled', extraWins: true, def: false, restart: A },
+  { id: 'contextGateFallbackModel', group: 'Ngữ cảnh nhóm', label: 'Model dự phòng', hint: 'Gemma dùng OpenRouter. Gemini chỉ dùng 9router hoặc CLI proxy với khóa đã lưu của profile.', type: 'enum', options: [{ value: 'google/gemma-4-26b-a4b-it:free', label: 'Gemma 4 26B A4B (free)' }, { value: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B (free)' }, { value: 'gemini/gemini-3.8-flash', label: 'Gemini 3.8 Flash · 9router' }, { value: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash high · CLI proxy' }], env: 'ZALO_CONTEXT_GATE_FALLBACK_MODEL', extra: 'context_gate_fallback_model', extraWins: true, def: 'google/gemma-4-26b-a4b-it:free', restart: A },
+  { id: 'contextGateOpenrouterFallbackEnabled', group: 'Ngữ cảnh nhóm', label: 'Dùng Jev OpenRouter làm dự phòng cuối', hint: 'Khi Jev là model chính và bật dự phòng: Jev → model dự phòng đã chọn → Jev 1.14 OpenRouter. Tổng tối đa 8 giây; tất cả lỗi thì im lặng. Nếu model chính đã là Jev OpenRouter thì không gọi lại nó.', type: 'bool', env: 'ZALO_CONTEXT_GATE_OPENROUTER_FALLBACK_ENABLED', extra: 'context_gate_openrouter_fallback_enabled', extraWins: true, def: false, restart: A },
 ];
 
 const err = (message) => Object.assign(new Error(message), { statusCode: 400 });
@@ -43,6 +49,7 @@ function coerce(def, raw) {
   if (raw === undefined || raw === null || (raw === '' && def.type !== 'bool')) return def.def;
   // Bool: chuỗi rỗng = tắt (như _truthy của adapter: chỉ 1/true/yes/on mới là bật).
   if (def.type === 'bool') return typeof raw === 'boolean' ? raw : truthy(raw);
+  if (def.type === 'float') { const n = Number(raw); return Number.isFinite(n) ? n : def.def; }
   // Số: hiện đúng giá trị bộ đọc nhận — adapter đọc cửa sổ/thời gian chặn bằng float() nên có thể có phần thập phân.
   if (def.type === 'int') { const n = Number(raw); return def.decimal ? (Number.isFinite(n) ? n : def.def) : (Number.isInteger(n) ? n : def.def); }
   if (def.type === 'enum') { const s = String(raw).trim().toLowerCase(); return def.options.some((o) => o.value === s) ? s : def.def; }
@@ -52,6 +59,10 @@ function coerce(def, raw) {
 /** Kiểm giá trị người dùng gửi lên; trả giá trị đã chuẩn hoá hoặc ném lỗi 400 có câu dễ hiểu. */
 export function validateSetting(def, v) {
   if (def.type === 'bool') { if (typeof v !== 'boolean') throw err(`${def.label}: chọn bật hoặc tắt.`); return v; }
+  if (def.type === 'float') {
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < def.min || v > def.max) throw err(`${def.label}: nhập số từ ${def.min} đến ${def.max}.`);
+    return v;
+  }
   if (def.type === 'int') {
     if (!Number.isInteger(v) || v < def.min || v > def.max) throw err(`${def.label}: nhập số nguyên từ ${def.min} đến ${def.max}.`);
     return v;

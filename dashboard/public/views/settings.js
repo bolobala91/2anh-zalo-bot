@@ -14,6 +14,7 @@ export function restartText(restart) {
 
 /** Chữ trong ô nhập → giá trị gửi lên theo kiểu của mục. */
 export function parseInput(s, text) {
+  if (s.type === 'float') return /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text.trim()) ? Number(text.trim()) : NaN;
   if (s.type === 'int') return /^\d+$/.test(text.trim()) ? Number(text.trim()) : NaN;
   if (['ids', 'names', 'patterns'].includes(s.type)) return text.split(',').map((x) => x.trim()).filter(Boolean);
   return text;
@@ -26,9 +27,19 @@ export function changedValues(list, draft) {
 
 export const SOURCE_LABELS = { env: 'Cài đặt của trợ lý (.env)', config: 'config.yaml', default: 'Mặc định' };
 
+function DecimalField({ s, value, onChange, note, id }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => { setText(Number.isNaN(value) ? '' : String(value)); }, [value]);
+  return html`<div class="field"><label for=${id}>${s.label} (${s.min}–${s.max})</label>
+    <input id=${id} inputmode="decimal" value=${text} onInput=${(e) => {
+      const raw = e.currentTarget.value; setText(raw); onChange(parseInput(s, raw));
+    }} />${note}</div>`;
+}
+
 function Field({ s, value, onChange }) {
   const id = `set-${s.id}`;
   const note = html`<small class="muted">${s.hint ? `${s.hint} ` : ''}Đang lấy từ: ${SOURCE_LABELS[s.source]} · ${restartText(s.restart)}.</small>`;
+  if (s.type === 'float') return html`<${DecimalField} s=${s} value=${value} onChange=${onChange} note=${note} id=${id} />`;
   if (s.type === 'bool') return html`<${Toggle} id=${id} checked=${value} onChange=${onChange} label=${s.label} hint=${note} />`;
   if (s.type === 'enum') return html`<div class="field"><label for=${id}>${s.label}</label>
     <select id=${id} value=${value} onChange=${(e) => onChange(e.currentTarget.value)}>${s.options.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}</select>${note}</div>`;

@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import { html, Dialog, Icon, Live, Notice, PageHead, Spinner } from '../ui.js';
 import { fold } from '../fold.js';
 import { RestartBanner } from './restart-banner.js';
+import { MCP_GROUPS, accessNote, filterCatalog, viEntry, viServer } from '../mcp-vi.js';
 
 /** Màu nhãn trạng thái. */
 export function mcpKind(status) {
@@ -27,15 +28,78 @@ export const someToolsOff = (s) => Boolean(s.toolsOff) || (s.toolsOnly !== null 
 
 const restartNote = 'Khởi động lại trợ lý để áp dụng.';
 
+/** Kết nối dùng tài khoản/khoá của chủ bot (OAuth, khoá) — mở cho thành viên là cho họ dùng tài khoản đó. */
+export const usesOwnerAccount = (s) => s.auth !== 'none' || (s.keys || []).length > 0;
+
+/** Trường đổi trong hộp Sửa → thân yêu cầu: chỉ gửi trường thật sự đổi; khoá để trống = giữ khoá cũ. */
+export function editBody(server, form) {
+  const body = {};
+  if (server.transport === 'http' && form.url.trim()) body.url = form.url.trim();
+  const keys = Object.fromEntries(Object.entries(form.keys).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()]));
+  if (Object.keys(keys).length) body.keys = keys;
+  for (const [field, cur] of [['timeout', server.timeout], ['connect_timeout', server.connectTimeout]]) {
+    const v = String(form[field] ?? '').trim();
+    if (v !== (cur ? String(cur) : '')) body[field] = v === '' ? '' : Number(v);
+  }
+  return body;
+}
+
+/** Sửa kết nối: địa chỉ (kiểu http), khoá (chỉ ghi — không bao giờ hiện lại), thời gian chờ. */
+function EditDialog({ server, onSaved, onClose }) {
+  const [form, setForm] = useState({ url: '', keys: Object.fromEntries((server.keys || []).map((k) => [k, ''])),
+    timeout: server.timeout ? String(server.timeout) : '', connect_timeout: server.connectTimeout ? String(server.connectTimeout) : '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const body = editBody(server, form);
+  async function save(ev) {
+    ev.preventDefault();
+    if (!Object.keys(body).length) { onClose(); return; }
+    setBusy(true); setError('');
+    try {
+      const r = await api(`/api/admin/mcp/${encodeURIComponent(server.name)}/edit`, { method: 'PUT', body });
+      const what = r.edited?.changed?.length ? r.edited.changed.join(', ') : 'không có gì thay đổi';
+      onSaved(`Đã lưu ${server.name}: ${what}.${r.edited?.relogin ? ' Địa chỉ đổi sang máy khác — bấm Đăng nhập lại.' : ''} ${restartNote}`);
+    } catch (e) { setError(e.message); setBusy(false); }
+  }
+  const set = (k) => (ev) => setForm({ ...form, [k]: ev.currentTarget.value });
+  return html`<${Dialog} title=${`Sửa kết nối — ${server.name}`} onClose=${onClose} dirty=${() => !busy && Object.keys(body).length > 0}>
+    <form class="stack" onSubmit=${save}>
+      ${server.transport === 'http' ? html`<label class="field"><span>Địa chỉ MCP mới</span>
+        <input type="url" value=${form.url} placeholder=${`Đang dùng ${server.target}/… — để trống để giữ`} onInput=${set('url')} />
+        <small class="muted">Chỉ hiện máy chủ của địa chỉ cũ (phần sau có thể chứa khoá). Muốn đổi thì dán địa chỉ mới đầy đủ.</small></label>` : null}
+      ${(server.keys || []).map((k) => html`<label key=${k} class="field"><span>Khoá <span class="mono">${k}</span></span>
+        <input type="password" autocomplete="new-password" spellcheck="false" placeholder="Đã có — để trống để giữ khoá cũ" value=${form.keys[k]}
+          onInput=${(ev) => setForm({ ...form, keys: { ...form.keys, [k]: ev.currentTarget.value } })} /></label>`)}
+      ${(server.keys || []).length ? html`<small class="muted">Khoá lưu trong .env của trợ lý và không bao giờ hiện lại — kể cả ở đây.</small>` : null}
+      <label class="field"><span>Thời gian chờ mỗi lần dùng công cụ (giây)</span>
+        <input type="number" min="10" max="3600" inputmode="numeric" value=${form.timeout} placeholder="Mặc định 300" onInput=${set('timeout')} /></label>
+      <label class="field"><span>Thời gian chờ kết nối (giây)</span>
+        <input type="number" min="5" max="600" inputmode="numeric" value=${form.connect_timeout} placeholder="Mặc định 60" onInput=${set('connect_timeout')} /></label>
+      <${Live} error=${error} />
+      <div class="dialog-actions"><button class="btn btn-primary" disabled=${busy || !Object.keys(body).length}>${busy ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
+    </form>
+  <//>`;
+}
+
 /** Chọn công cụ của một kết nối: kiểm tra thật rồi bật/tắt từng công cụ. */
 function ToolsDialog({ server, onSaved, onClose }) {
   const [test, setTest] = useState(null);
   const [off, setOff] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [vi, setVi] = useState(null); // { [tên công cụ]: { label, desc } } — null: đang dịch
   useEffect(() => {
+    let alive = true;
     api(`/api/admin/mcp/${encodeURIComponent(server.name)}/test`, { method: 'POST' })
-      .then((t) => { setTest(t); setOff(new Set(t.tools.filter((x) => !x.enabled).map((x) => x.name))); }).catch((e) => setError(e.message));
+      .then((t) => {
+        if (!alive) return;
+        setTest(t); setOff(new Set(t.tools.filter((x) => !x.enabled).map((x) => x.name)));
+        if (!t.tools.length) { setVi({}); return; }
+        // Hiện bản gốc ngay; bản tiếng Việt (dịch một lần, có đệm) thay vào khi xong.
+        api('/api/admin/mcp-tools-vi', { method: 'POST', body: { tools: t.tools.slice(0, 100).map((x) => ({ name: x.name, description: x.description })) } })
+          .then((r) => alive && setVi(r.vi || {}), () => alive && setVi({}));
+      }).catch((e) => alive && setError(e.message));
+    return () => { alive = false; };
   }, [server.name]);
   const flip = (n, on) => setOff((s) => { const d = new Set(s); if (on) d.delete(n); else d.add(n); return d; });
   async function save() {
@@ -48,9 +112,12 @@ function ToolsDialog({ server, onSaved, onClose }) {
       ${test ? html`<p class=${`ai-result ${test.connected ? 'is-ok' : 'is-bad'}`}>${testText(test)}</p>` : null}
       ${test?.tools?.length ? html`<div class="toolbar"><button type="button" class="btn btn-ghost btn-sm" onClick=${() => setOff(new Set())}>Bật hết</button>
           <button type="button" class="btn btn-ghost btn-sm" onClick=${() => setOff(new Set(test.tools.map((x) => x.name)))}>Tắt hết</button></div>
-        <ul class="row-list">${test.tools.map((t) => html`<li key=${t.name} class="row-item">
-          <label class="check row-main"><input type="checkbox" checked=${!off.has(t.name)} onChange=${(e) => flip(t.name, e.currentTarget.checked)} />
-            <span><strong class="mono">${t.name}</strong><small class="clamp-2">${t.description}</small></span></label></li>`)}</ul>` : null}
+        ${vi === null ? html`<p class="muted small">Đang dịch mô tả sang tiếng Việt…</p>` : null}
+        <ul class="row-list">${test.tools.map((t) => { const v = vi?.[t.name]; return html`<li key=${t.name} class="row-item">
+          <label class="check mcp-tool"><input type="checkbox" checked=${!off.has(t.name)} onChange=${(e) => flip(t.name, e.currentTarget.checked)} />
+            <span class="mcp-tool-text"><strong>${v?.label || t.name}</strong>
+              <small class="clamp-2">${v?.desc || t.description}</small>
+              ${v ? html`<small class="muted mono">${t.name}</small>` : null}</span></label></li>`; })}</ul>` : null}
       <${Live} error=${error} />
       ${test?.tools?.length ? html`<div class="dialog-actions"><button type="button" class="btn btn-primary" disabled=${busy} onClick=${save}>${busy ? 'Đang lưu…' : 'Lưu lựa chọn'}</button></div>` : null}
     </div>
@@ -97,6 +164,8 @@ function AddDialog({ onAdded, onClose }) {
   const [tab, setTab] = useState('catalog');
   const [catalog, setCatalog] = useState(null);
   const [q, setQ] = useState('');
+  const [group, setGroup] = useState('goi-y');
+  const [noAccount, setNoAccount] = useState(false);
   const [open, setOpen] = useState('');
   const [env, setEnv] = useState({});
   const [form, setForm] = useState({ name: '', url: '', auth: 'none', token: '' });
@@ -113,8 +182,10 @@ function AddDialog({ onAdded, onClose }) {
     try { await api('/api/admin/mcp-add', { method: 'POST', body: form });
       onAdded(`Đã thêm ${form.name}.${form.auth === 'oauth' ? ' Bấm Đăng nhập ở kết nối này để cấp quyền.' : ''} ${restartNote}`, form.auth === 'oauth' ? form.name : ''); } catch (err) { setError(err.message); setBusy(false); }
   }
-  const n = fold(q).trim();
-  const shown = (catalog || []).filter((e) => !n || fold(`${e.name} ${e.description}`).includes(n));
+  const all = (catalog || []).map(viEntry);
+  // Đang gõ tìm thì tìm khắp danh mục, không bó trong nhóm đang chọn.
+  const shown = filterCatalog(all, { group: q.trim() ? 'all' : group, q, noAccount, fold });
+  const groups = [['all', 'Tất cả'], ...MCP_GROUPS, ...(all.some((e) => e.groups.includes('khac')) ? [['khac', 'Khác']] : [])];
   const set = (k) => (ev) => setForm({ ...form, [k]: ev.currentTarget.value });
   return html`<${Dialog} title="Thêm kết nối MCP" onClose=${onClose} dirty=${() => !busy && (Boolean(form.url) || Object.values(env).some(Boolean))} wide>
     <div class="stack">
@@ -124,11 +195,15 @@ function AddDialog({ onAdded, onClose }) {
       </div>
       <${Live} error=${error} />
       ${tab === 'catalog' ? html`
-        <input type="search" aria-label="Tìm kết nối" placeholder="Tìm: notion, linear, google…" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
+        <input type="search" aria-label="Tìm kết nối" placeholder="Tìm: thiết kế, slide, toán, notion…" value=${q} onInput=${(e) => setQ(e.currentTarget.value)} />
+        <div class="chips mcp-groups" role="group" aria-label="Lọc theo nhu cầu, ngành">${groups.map(([id, label]) => html`<button key=${id} type="button"
+          class="btn btn-secondary btn-sm chip" aria-pressed=${!q.trim() && group === id ? 'true' : 'false'} onClick=${() => { setGroup(id); setQ(''); }}>${label}</button>`)}</div>
+        <label class="check small"><input type="checkbox" checked=${noAccount} onChange=${(e) => setNoAccount(e.currentTarget.checked)} /> Chỉ hiện kết nối không cần tài khoản</label>
         ${!catalog && !error ? html`<${Spinner} />` : null}
+        ${catalog && !shown.length ? html`<p class="muted small">Không có kết nối nào khớp — thử nhóm khác hoặc bỏ lọc.</p>` : null}
         <ul class="row-list">${shown.map((e) => html`<li key=${e.name} class="row-item mcp-cat">
-          <span class="row-main"><strong>${e.name}</strong><small class="clamp-2">${e.description}</small>
-            <small class="muted">${AUTH_LABEL[e.auth] || e.auth}${e.transport === 'stdio' ? ' · chạy trên máy chủ' : ''}</small></span>
+          <span class="row-main"><strong>${e.title}${e.pick ? html` <span class="badge badge-ok mcp-pick">Gợi ý</span>` : null}</strong><small class="clamp-2">${e.descVi}</small>
+            <small class=${`mcp-access is-${accessNote(e.auth).kind}`}>${accessNote(e.auth).text}${e.transport === 'stdio' ? ' · chạy trên máy chủ' : ''} · <span class="mono">${e.name}</span></small></span>
           ${e.installed ? html`<span class="badge badge-ok">Đã thêm</span>`
             : e.needsBuild ? html`<small class="muted">Cần người cài đặt chạy <span class="mono">hermes mcp install ${e.name}</span></small>`
             : html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy} onClick=${() => { setOpen(open === e.name ? '' : e.name); setEnv({}); }}>${open === e.name ? 'Đóng' : 'Thêm'}</button>`}
@@ -137,7 +212,7 @@ function AddDialog({ onAdded, onClose }) {
             ${e.env.map((v) => html`<label key=${v.name} class="field"><span>${v.prompt || v.name}${v.required ? '' : ' (tuỳ chọn)'}</span>
               <input type=${v.secret ? 'password' : 'text'} autocomplete="off" spellcheck="false" placeholder=${v.isSet ? 'Đã có — để trống để giữ' : ''} value=${env[v.name] || ''} onInput=${(ev) => setEnv({ ...env, [v.name]: ev.currentTarget.value })} /></label>`)}
             ${e.postInstall ? html`<details><summary class="small">Hướng dẫn của dịch vụ</summary><p class="muted small mem-text">${e.postInstall}</p></details>` : null}
-            <div class="dialog-actions"><button type="button" class="btn btn-primary" disabled=${busy} onClick=${() => install(e)}>${busy ? 'Đang thêm…' : `Thêm ${e.name}`}</button></div>
+            <div class="dialog-actions"><button type="button" class="btn btn-primary" disabled=${busy} onClick=${() => install(e)}>${busy ? 'Đang thêm…' : `Thêm ${e.title}`}</button></div>
           </div>` : null}
         </li>`)}</ul>` : html`
         <form class="stack" onSubmit=${addCustom}>
@@ -178,6 +253,14 @@ export function Mcp() {
     setBusy(s.name); setMsg({});
     try { await api(`/api/admin/mcp/${encodeURIComponent(s.name)}/tools`, { method: 'PUT', body: { disabled: [] } }); done(`Đã bật hết công cụ của ${s.name}. ${restartNote}`); } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
   }
+  async function setMembers(s, open) {
+    if (open && usesOwnerAccount(s) && !confirm(`${s.name} dùng tài khoản/khoá của bạn. Mở cho thành viên là ai được bot trả lời cũng thao tác được trên tài khoản đó qua bot. Vẫn mở?`)) return;
+    setBusy(s.name); setMsg({});
+    try {
+      setData(await api(`/api/admin/mcp/${encodeURIComponent(s.name)}/members`, { method: 'PUT', body: { open } }));
+      setMsg({ ok: open ? `Thành viên đã dùng được ${s.name} (có hiệu lực ngay).` : `${s.name} giờ chỉ chủ nhân dùng (có hiệu lực ngay).` });
+    } catch (e) { setMsg({ error: e.message }); } finally { setBusy(''); }
+  }
   async function remove(s) {
     if (!confirm(`Gỡ hẳn kết nối ${s.name}? Trợ lý sẽ mất các công cụ của nó.`)) return;
     setBusy(s.name); setMsg({});
@@ -192,25 +275,36 @@ export function Mcp() {
       <${Live} error=${msg.error} ok=${msg.ok} />
       ${!list && !msg.error ? html`<${Spinner} />` : null}
       ${list && !list.length ? html`<p class="muted">Trợ lý chưa có kết nối MCP nào. Bấm Thêm kết nối để chọn từ danh mục.</p>` : null}
-      <ul class="row-list">${(list || []).map((s) => html`<li key=${s.name} class="row-item mcp-row">
-        <span class="row-main"><strong>${s.name}</strong><small class="muted mono">${s.transport === 'http' ? s.target : `lệnh: ${s.target}`}</small>
-          <small class="muted">${s.publicToMembers ? 'Thành viên nhóm dùng được (ZALO_PUBLIC_MCP)' : 'Chỉ chủ nhân dùng'}${s.auth !== 'none' ? ` · ${AUTH_LABEL[s.auth]}` : ''}${s.toolsOff ? ` · tắt ${s.toolsOff} công cụ` : ''}${s.toolsOnly !== null ? ` · chỉ dùng ${s.toolsOnly} công cụ` : ''}</small>
-          ${tests[s.name] === 'busy' ? html`<small class="muted">Đang kết nối thử…</small>` : tests[s.name] ? html`<small class=${`ai-result ${tests[s.name].connected ? 'is-ok' : 'is-bad'}`}>${testText(tests[s.name])}</small>` : null}</span>
-        <span class=${`badge badge-${mcpKind(s.status)}`}>${s.status}</span>
-        <span class="key-actions">
+      <ul class="mcp-grid">${(list || []).map((s) => { const vi = viServer(s.name); return html`<li key=${s.name} class=${`mcp-card${s.enabled ? '' : ' is-off'}`}>
+        <div class="mcp-card-head">
+          <span class="mcp-card-title"><strong>${vi?.title || s.name}</strong>${vi && vi.title.toLowerCase() !== s.name.toLowerCase() ? html` <small class="muted mono">${s.name}</small>` : null}</span>
+          <span class=${`badge badge-${mcpKind(s.status)} mcp-status`} title=${s.status}>${s.status.split(" — ")[0]}</span>
+        </div>
+        <p class="mcp-desc">${vi?.desc || 'Kết nối riêng (thêm theo địa chỉ) — chưa có mô tả trong danh mục.'}</p>
+        <p class="muted small mcp-meta"><span class="mono">${s.transport === 'http' ? s.target : `lệnh: ${s.target}`}</span><br />
+          ${s.auth !== 'none' ? AUTH_LABEL[s.auth] : 'Không cần đăng nhập'}${s.toolsOff ? ` · tắt ${s.toolsOff} công cụ` : ''}${s.toolsOnly !== null ? ` · chỉ dùng ${s.toolsOnly} công cụ` : ''}${s.timeout ? ` · chờ tối đa ${s.timeout} giây` : ''}</p>
+        <label class="mcp-who small"><span>Ai được dùng</span>
+          <select value=${s.publicToMembers ? 'members' : 'owner'} disabled=${busy !== '' || Boolean(s.publicVia)} onChange=${(e) => setMembers(s, e.currentTarget.value === 'members')}>
+            <option value="owner">Chỉ chủ nhân</option><option value="members">Thành viên</option></select></label>
+        ${s.publicVia ? html`<small class="muted">Đang mở theo mẫu "${s.publicVia}" ở trang Cấu hình — đổi ở đó.</small>`
+          : s.publicToMembers && usesOwnerAccount(s) ? html`<small class="mcp-access is-warn">Thành viên đang dùng tài khoản của bạn qua kết nối này.</small>` : null}
+        ${tests[s.name] === 'busy' ? html`<small class="muted">Đang kết nối thử…</small>` : tests[s.name] ? html`<small class=${`ai-result ${tests[s.name].connected ? 'is-ok' : 'is-bad'}`}>${testText(tests[s.name])}</small>` : null}
+        <div class="mcp-card-actions">
           ${data.manage ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== '' || tests[s.name] === 'busy'} onClick=${() => test(s)}>Kiểm tra</button>
             <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => setDialog({ kind: 'tools', server: s })}>Công cụ</button>
+            <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => setDialog({ kind: 'edit', server: s })}>Sửa</button>
             ${someToolsOff(s) ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => allToolsOn(s)}>Bật hết công cụ</button>` : null}
             ${s.auth === 'oauth' ? html`<button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => setDialog({ kind: 'login', server: s })}>Đăng nhập</button>` : null}` : null}
           <button type="button" class="btn btn-secondary btn-sm" disabled=${busy !== ''} onClick=${() => toggle(s)}>${s.enabled ? 'Tắt' : 'Bật'}</button>
-          ${data.manage ? html`<button type="button" class="btn btn-ghost btn-sm" aria-label=${`Gỡ kết nối ${s.name}`} disabled=${busy !== ''} onClick=${() => remove(s)}><${Icon} name="close" size=${14} /></button>` : null}
-        </span>
-      </li>`)}</ul>
+          ${data.manage ? html`<button type="button" class="btn btn-ghost btn-sm mcp-remove" aria-label=${`Gỡ kết nối ${s.name}`} title="Gỡ kết nối" disabled=${busy !== ''} onClick=${() => remove(s)}><${Icon} name="close" size=${14} /></button>` : null}
+        </div>
+      </li>`; })}</ul>
     </section>
     ${dialog?.kind === 'add' ? html`<${AddDialog} onClose=${() => setDialog(null)} onAdded=${(text, loginName) => {
       done(text);
       if (loginName) setDialog({ kind: 'login', server: { name: loginName } });
     }} />` : null}
+    ${dialog?.kind === 'edit' ? html`<${EditDialog} server=${dialog.server} onSaved=${done} onClose=${() => setDialog(null)} />` : null}
     ${dialog?.kind === 'tools' ? html`<${ToolsDialog} server=${dialog.server} onSaved=${done} onClose=${() => setDialog(null)} />` : null}
     ${dialog?.kind === 'login' ? html`<${LoginDialog} server=${dialog.server} onDone=${done} onClose=${() => setDialog(null)} />` : null}`;
 }

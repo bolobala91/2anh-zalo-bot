@@ -5,6 +5,7 @@ import { authRoutes } from './routes/auth.js';
 import { statusRoutes } from './routes/status.js';
 import { zaloRoutes } from './routes/zalo.js';
 import { chatRoutes } from './routes/chats.js';
+import { contextGateRoutes } from './routes/context-gate.js';
 import { mediaRoutes } from './routes/media.js';
 import { auditRoutes } from './routes/audit.js';
 import { secondBrainRoutes } from './routes/second-brain.js';
@@ -43,6 +44,7 @@ export function createDashboardApp(deps) {
   app.use('/api', statusRoutes(deps));
   app.use('/api', zaloRoutes(deps));
   app.use('/api', chatRoutes(deps));
+  if (deps.contextGate) app.use('/api', contextGateRoutes(deps));
   app.use('/api', mediaRoutes(deps));
   app.use('/api', auditRoutes(deps));
   app.use('/api', permissionRoutes(deps));

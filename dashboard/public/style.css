@@ -419,6 +419,20 @@ textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: 
 .side-head h3 { font-size: 15px; }
 .side-body { flex: 1; min-height: 0; overflow-y: auto; }
 .side-body .conv-list { margin: 0; }
+.gate-filter { display: grid; gap: 6px; margin: 12px 0; }
+.gate-list { list-style: none; padding: 0; margin: 0; }
+.gate-entry { padding: 14px 0; border-bottom: 1px solid var(--line, #dce3eb); }
+.gate-entry p { margin: 7px 0; }
+.gate-entry-head { display: grid; gap: 4px; }
+.gate-entry-head time { font-size: 12px; color: var(--muted, #667085); }
+.gate-respond { color: #087443; }
+.gate-ignore { color: #805500; }
+.gate-stages { padding-left: 20px; margin: 10px 0; }
+.gate-stages li { padding: 4px 0; }
+.gate-stages span { display: block; }
+.gate-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.gate-feedback [aria-pressed="true"] { outline: 2px solid currentColor; }
+.gate-metrics { min-width: 780px; width: 100%; }
 .tabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
 .tab { flex: 1; min-height: 40px; padding: 8px 6px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted);
   font: inherit; font-weight: 600; cursor: pointer; }
@@ -1528,3 +1542,49 @@ button.board-item:disabled { cursor: default; }
 .folder-assign .folder-select select { flex: 1; min-width: 0; max-width: none; }
 .folder-assign .row { margin-top: 8px; gap: 8px; flex-wrap: wrap; }
 .folder-assign .row input { flex: 1 1 140px; min-width: 0; }
+
+/* Phiên chat › Thành viên nhóm */
+.head-members { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; border: 0; border-radius: 6px; background: none;
+  font: inherit; color: inherit; cursor: pointer; }
+.head-members:hover, .head-members[aria-pressed="true"] { color: var(--brand); background: var(--brand-soft); }
+.head-members:focus-visible { outline: none; box-shadow: var(--focus); }
+.info-members { margin-top: 6px; }
+.info-members .board-label { flex: 1; text-align: left; }
+.members-panel .chat-search input { width: 100%; }
+.member-note { margin: 4px 0 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); }
+.member-list { list-style: none; margin: 0; padding: 0; }
+.member-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 4px 6px; border-radius: 8px; }
+.member-row:hover { background: var(--brand-soft); }
+.member-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-role { flex: none; font-size: 12px; }
+.role-owner { background: #fef3c7; color: #92400e; }
+.role-admin { background: var(--brand-soft); color: var(--brand-dark); }
+.role-bot { background: #ede9fe; color: #5b21b6; }
+
+/* Kết nối MCP: Ai được dùng, danh mục tiếng Việt */
+.mcp-who { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; align-self: flex-start; }
+.mcp-who > span { white-space: nowrap; }
+.mcp-who select { width: auto; min-width: 0; max-width: 180px; padding: 4px 8px; }
+.mcp-access.is-ok { color: var(--ok); }
+.mcp-access.is-warn { color: #854d0e; }
+.mcp-groups { flex-wrap: wrap; }
+.mcp-pick { margin-left: 6px; padding: 1px 8px; font-size: 12px; vertical-align: 1px; }
+.check.mcp-tool { flex: 1 1 auto; align-items: flex-start; gap: 12px; font-weight: 400; min-width: 0; }
+.mcp-tool input { margin-top: 2px; }
+.mcp-tool-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mcp-tool-text strong { font-weight: 600; }
+.mcp-desc { color: var(--text); margin: 2px 0; }
+
+/* Kết nối MCP: mỗi kết nối một ô */
+.mcp-grid { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.mcp-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card, #fff); min-width: 0; }
+.mcp-card.is-off { opacity: .7; }
+.mcp-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.mcp-card-title { min-width: 0; overflow-wrap: anywhere; font-size: 15.5px; }
+.mcp-status { flex: none; font-size: 12px; padding: 2px 8px; white-space: nowrap; }
+.mcp-card .mcp-desc { margin: 0; font-size: 14px; }
+.mcp-meta { margin: 0; overflow-wrap: anywhere; }
+.mcp-card .mcp-who { margin-top: 0; }
+.mcp-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+.mcp-card-actions .mcp-remove { margin-left: auto; }
+@media (max-width: 480px) { .mcp-grid { grid-template-columns: 1fr; } }

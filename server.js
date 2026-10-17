@@ -103,8 +103,10 @@ app.use('/control', createControlRouter({
     if (!api) throw new Error('Zalo chưa đăng nhập');
     const hit = memberCache.get(groupId);
     if (hit && Date.now() - hit.at < 10 * 60_000) return hit.value;
-    const { total, members } = await fetchGroupMembers(api, groupId);
-    const value = { total, members: members.filter((m) => m.displayName) };
+    const result = await fetchGroupMembers(api, groupId);
+    const { total, members } = result;
+    const { adminIds = [], creatorId = '' } = result;
+    const value = { total, adminIds, creatorId, members: members.filter((m) => m.displayName) };
     memberCache.set(groupId, { at: Date.now(), value });
     if (memberCache.size > 100) memberCache.delete(memberCache.keys().next().value);
     return value;

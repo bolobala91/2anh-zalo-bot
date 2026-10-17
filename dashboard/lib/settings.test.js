@@ -19,12 +19,54 @@ function setup(t, { env = ENV, config = CONFIG, inherited = {} } = {}) {
 }
 const pick = (view, id) => view.find((x) => x.id === id);
 
+test('context gate: bounded controls save profile settings without exposing credentials', (t) => {
+  const { d, s } = setup(t, { env: 'ZALO_CONTEXT_GATE_ENABLED=true\nZALO_CONTEXT_GATE_THRESHOLD=0.72\n' });
+  assert.equal(pick(s.view(), 'contextGateEnabled').value, true);
+  assert.equal(pick(s.view(), 'contextGateThreshold').value, 0.72);
+  const changes = s.save({ contextGateThreshold: 0.8, contextGateFallbackEnabled: true,
+    contextGateFallbackModel: 'google/gemma-4-31b-it:free', contextGateOpenrouterFallbackEnabled: true });
+  assert.ok(changes.every((c) => JSON.stringify(c.restart) === '["assistant"]'));
+  const env = readFileSync(join(d, '.env'), 'utf8');
+  assert.match(env, /^ZALO_CONTEXT_GATE_THRESHOLD=0.8$/m);
+  assert.match(env, /^ZALO_CONTEXT_GATE_OPENROUTER_FALLBACK_ENABLED=true$/m);
+  for (const value of [-0.1, 1.1, '0.72', null, NaN, Infinity]) {
+    assert.throws(() => s.save({ contextGateThreshold: value }), /0.*1/);
+  }
+  assert.throws(() => s.save({ contextGateFallbackModel: 'arbitrary-model' }), /chọn lại/);
+  assert.throws(() => s.save({ contextGateKeyEnv: 'OPENROUTER_API_KEY' }), /danh sách/);
+  assert.doesNotMatch(JSON.stringify(s.view()), /API_KEY|bridge_token/);
+});
+
+test('Gemini classifier routes save only gate options and exclude OpenRouter', (t) => {
+  const { d, s } = setup(t, { env: 'ZALO_CONTEXT_GATE_THRESHOLD=0.72\n' });
+  const original = readFileSync(join(d, 'config.yaml'), 'utf8');
+  for (const model of ['gemini-cli', 'gemini-9router', 'jev-9router', 'configured']) {
+    s.save({ contextGateClassifier: model });
+    assert.equal(pick(s.view(), 'contextGateClassifier').value, model);
+  }
+  for (const model of ['gemini-3.8-flash-high', 'gemini/gemini-3.8-flash']) {
+    s.save({ contextGateFallbackModel: model });
+    assert.equal(pick(s.view(), 'contextGateFallbackModel').value, model);
+  }
+  assert.throws(() => s.save({ contextGateClassifier: 'gemini-openrouter' }), /chọn lại/);
+  assert.throws(() => s.save({ contextGateFallbackModel: 'google/gemini-3.8-flash' }), /chọn lại/);
+  assert.equal(readFileSync(join(d, 'config.yaml'), 'utf8'), original);
+});
+
+test('context gate: extra overrides env and only its own config value changes', (t) => {
+  const config = CONFIG.replace('      reply_only_tagged: false', '      reply_only_tagged: false\n      context_gate_threshold: 0.9');
+  const { d, s } = setup(t, { config, env: 'ZALO_CONTEXT_GATE_THRESHOLD=0.72\n' });
+  assert.equal(pick(s.view(), 'contextGateThreshold').value, 0.9);
+  s.save({ contextGateThreshold: 0.85 });
+  assert.equal(readFileSync(join(d, 'config.yaml'), 'utf8').replace('context_gate_threshold: 0.85', 'context_gate_threshold: 0.9'), config);
+});
+
 test('danh sách cố định: không khoá bí mật nào; mỗi mục có kiểu, nhóm, đích khởi động lại', () => {
-  assert.equal(SETTINGS.length, 15);
-  assert.deepEqual(SETTINGS.filter((s) => s.restart.length).map((s) => s.id), ['friendTools', 'historyDays'], 'còn lại áp dụng ngay');
+  assert.equal(SETTINGS.length, 21);
+  assert.deepEqual(SETTINGS.filter((s) => s.restart.length).map((s) => s.id), ['friendTools', 'historyDays', 'contextGateEnabled', 'contextGateThreshold', 'contextGateClassifier', 'contextGateFallbackEnabled', 'contextGateFallbackModel', 'contextGateOpenrouterFallbackEnabled'], 'gate cần nạp lại scope của gateway');
   for (const s of SETTINGS) {
     assert.doesNotMatch(s.env, /KEY|TOKEN|SECRET|PASSWORD/, s.env);
-    assert.ok(['bool', 'int', 'enum', 'ids', 'names', 'patterns'].includes(s.type), s.id);
+    assert.ok(['bool', 'int', 'float', 'enum', 'ids', 'names', 'patterns'].includes(s.type), s.id);
     assert.ok(Array.isArray(s.restart) && s.group && s.label, s.id);
   }
 });

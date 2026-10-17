@@ -2,6 +2,42 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.51.3] — 2026-10-17
+
+### Sửa — Kết nối MCP gọn hơn
+
+- Mỗi kết nối nằm trong **một ô riêng** (2–3 ô một hàng trên máy tính, một cột trên điện thoại): tên và trạng thái ở đầu, mô tả tiếng Việt, địa chỉ, cách đăng nhập, ô **Ai được dùng**, các nút ở chân ô. Kết nối đang tắt hiện mờ.
+- Nhãn trạng thái rút gọn ("Máy ngoài", "Đang mở"…); rê chuột để xem câu đầy đủ.
+
+## [2.51.2] — 2026-10-17
+
+### Sửa — Danh sách Kết nối MCP
+
+- Mỗi kết nối đã thêm hiện **tên và mô tả tiếng Việt** (theo danh mục, vd. "Wolfram|Alpha — Tính toán toán, lý, hoá…", "trivago — Tìm khách sạn, so sánh giá…") để dễ nhớ kết nối nào làm gì; tên gốc hiện nhỏ bên cạnh. Kết nối thêm theo địa chỉ riêng ghi rõ là kết nối riêng.
+
+## [2.51.1] — 2026-10-17
+
+### Sửa — Hộp "Công cụ" của Kết nối MCP
+
+- Tên và mô tả công cụ (do dịch vụ bên ngoài gửi, thường tiếng Anh) được **dịch sang tiếng Việt** bằng model AI chính của bot: hiện tên dễ hiểu, mô tả một câu và tên gốc nhỏ bên dưới. Mỗi công cụ chỉ dịch một lần rồi lưu đệm; AI lỗi thì vẫn hiện bản gốc.
+- Sửa bố cục: ô tích nằm cạnh tên công cụ, không còn bị đẩy lên trên và lệch giữa.
+
+## [2.51.0] — 2026-10-17
+
+### Thêm — Kết nối MCP dễ dùng hơn
+
+- **Ai được dùng** ngay trên từng kết nối: chọn **Chỉ chủ nhân** hoặc **Thành viên**, có hiệu lực ngay (ghi vào `ZALO_PUBLIC_MCP`, không phải sang trang Cấu hình). Kết nối dùng tài khoản hay khoá của chủ bot (đăng nhập OAuth, khoá) sẽ hỏi lại trước khi mở cho thành viên. Kết nối đang mở theo mẫu chung (`*`, `rag_*`…) ở Cấu hình thì ghi rõ và giữ nguyên.
+- Nút **Sửa** cho từng kết nối: đổi địa chỉ (kết nối kiểu https), thay khoá, đổi thời gian chờ mỗi lần dùng công cụ và thời gian chờ kết nối. Khoá chỉ ghi, không bao giờ hiện lại; để trống là giữ khoá cũ. Đổi địa chỉ sang máy khác với kết nối OAuth thì phải đăng nhập lại.
+- **Danh mục tiếng Việt**: 65 kết nối có tên, mô tả tiếng Việt và nhãn "Không cần tài khoản — có thể mở cho thành viên" hoặc "Dùng tài khoản của bạn — nên để Chỉ chủ nhân". Lọc theo nhu cầu, ngành: Gợi ý cho trường học, Giáo dục & học tập, Văn phòng & công việc, Thiết kế & truyền thông, Kinh doanh & bán hàng, Tài chính, Du lịch & đời sống, Dữ liệu & phân tích, Lập trình & kỹ thuật; ô "Chỉ hiện kết nối không cần tài khoản"; tìm không cần gõ dấu.
+
+## [2.50.0] — 2026-10-16
+
+### Thêm — Danh sách thành viên nhóm trong Phiên chat
+
+- **Phiên chat**: bấm số thành viên ở đầu khung chat, hoặc dòng **Thành viên nhóm** trong bảng Thông tin, là mở danh sách thành viên ở cột phải giống Zalo: ảnh đại diện, tên, nhãn **Trưởng nhóm / Phó nhóm / Bot**, tìm theo tên không cần gõ dấu.
+- Nhóm cộng đồng mà Zalo chỉ cho xem trưởng, phó nhóm: danh sách gộp thêm những người từng nhắn trong nhóm và ghi rõ Zalo cho xem bao nhiêu người.
+- Nhóm thường: danh sách khớp đúng Zalo, không liệt kê người đã rời nhóm.
+
 ## [2.49.0] — 2026-10-16
 
 ### Thêm — Xếp thư mục ngay trong Phiên chat

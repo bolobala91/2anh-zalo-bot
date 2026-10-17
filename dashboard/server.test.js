@@ -4,7 +4,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { buildDeps } from './server.js';
+import { bindDashboardHome } from './server.js';
 import { createDashboardApp } from './app.js';
+
+test('repo profile home overrides inherited default without loading credentials into settings', (t) => {
+  const sidecarRoot = join(tmpdir(), `gate-home-${Date.now()}`);
+  mkdirSync(sidecarRoot, { recursive: true });
+  t.after(() => rmSync(sidecarRoot, { recursive: true, force: true }));
+  writeFileSync(join(sidecarRoot, '.env'), 'HERMES_HOME=D:/Hermes/profiles/tuanmkt\n');
+  const env = { HERMES_HOME: 'D:/Hermes', OTHER: 'keep' };
+  bindDashboardHome({ sidecarRoot, env });
+  assert.deepStrictEqual(env, { HERMES_HOME: 'D:/Hermes/profiles/tuanmkt', OTHER: 'keep' });
+});
 
 test('buildDeps returns all required keys', () => {
   const tmpDir = join(tmpdir(), `hermes-test-${Date.now()}`);

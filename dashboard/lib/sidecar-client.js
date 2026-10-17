@@ -43,8 +43,8 @@ export function createSidecarClient({ baseUrl = 'http://127.0.0.1:3872', token, 
     sendFile: async (m) => (await call('/send-file', { method: 'POST', body: m, limitMs: 60_000, distinctTimeout: true })).result,
     recall: async (m) => (await call('/recall', { method: 'POST', body: m, limitMs: sendTimeoutMs })).result,
     groupMembers: async (groupId) => {
-      const { total, members } = await call(`/group-members?groupId=${encodeURIComponent(groupId)}`, { limitMs: sendTimeoutMs });
-      return { total, members };
+      const { total, members, adminIds, creatorId } = await call(`/group-members?groupId=${encodeURIComponent(groupId)}`, { limitMs: sendTimeoutMs });
+      return { total, members, adminIds: Array.isArray(adminIds) ? adminIds.map(String) : [], creatorId: creatorId ? String(creatorId) : '' };
     },
     // Liên hệ và Lịch hẹn (spec §18.4). Danh sách bạn có thể dài — hạn chờ như lệnh gửi.
     // Phiên chat kiểu Zalo. Ảnh đại diện không bắt buộc: chờ ngắn, lỗi thì trang vẫn hiện chữ cái đầu.
