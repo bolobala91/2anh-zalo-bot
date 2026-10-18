@@ -48,7 +48,8 @@ class RecipesTest(unittest.TestCase):
     def test_guides_follow_the_chosen_option(self):
         with tempfile.TemporaryDirectory() as tmp:
             studio, skills = Path(tmp, "studio"), Path(tmp, "skills")
-            for rel in ("docs/vi/tro-ly/nhip-vox.md", "docs/vi/tro-ly/video-giai-thich.md", "docs/vi/tham-khao/video-viet-tay.md"):
+            for rel in ("docs/vi/tro-ly/nhip-vox.md", "docs/vi/tro-ly/video-giai-thich.md", "docs/vi/tham-khao/video-viet-tay.md",
+                        "docs/vi/tro-ly/video-hap-dan.md", "docs/vi/tro-ly/chon-giong.md"):
                 (studio / rel).parent.mkdir(parents=True, exist_ok=True)
                 (studio / rel).write_text("x", encoding="utf-8")
             for rel in ("tro-choi-giao-duc/references/matching.md", "tro-choi-giao-duc/references/flashcard-timer.md"):
@@ -56,8 +57,12 @@ class RecipesTest(unittest.TestCase):
                 (skills / rel).write_text("x", encoding="utf-8")
             where = recipes.Places(studio=studio, python=None, skills=skills, node=None)
             video, game = recipes.RECIPES["video"], recipes.RECIPES["tro_choi"]
-            self.assertEqual([p.name for p in recipes.guide_paths(video, where, {"kieu": "vox"})], ["video-giai-thich.md", "nhip-vox.md"])
-            self.assertEqual([p.name for p in recipes.guide_paths(video, where, {"kieu": "viet-tay"})], ["video-viet-tay.md"])
+            self.assertEqual([p.name for p in recipes.guide_paths(video, where, {"kieu": "vox"})],
+                             ["video-giai-thich.md", "nhip-vox.md", "video-hap-dan.md", "chon-giong.md"])
+            self.assertEqual([p.name for p in recipes.guide_paths(video, where, {"kieu": "viet-tay"})],
+                             ["video-viet-tay.md", "video-hap-dan.md", "chon-giong.md"])
+            for kieu in video.options["kieu"]:
+                self.assertIn("chon-giong.md", [p.name for p in recipes.guide_paths(video, where, {"kieu": kieu})], kieu)
             self.assertEqual([p.name for p in recipes.guide_paths(game, where, {"loai": "matching"})], ["matching.md"])
             self.assertEqual([p.name for p in recipes.guide_paths(game, where, {"loai": "timer"})], ["flashcard-timer.md"])
             # Giá trị lựa chọn ngoài danh sách không bao giờ được ghép vào đường dẫn.
@@ -2128,6 +2133,12 @@ class VideoPlanTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("kb-1234abcd", text)
         self.assertLessEqual(len(script_view.render(VIDEO_MD + "loi: " + "x" * 9000 + "\n", "kb-1", "5–15")),
                              script_view.MAX_MESSAGE)
+
+    def test_script_view_names_the_chosen_voice(self):
+        for key, label in (("thanh-binh", "Thanh Bình (nam, Bắc, kể chuyện)"), ("nu-tuoi", "nữ trẻ, tươi"),
+                           ("mai-anh", "Mai Anh (nữ, Bắc, tin tức)")):
+            md = VIDEO_MD.replace("phong-cach: ngan", f"phong-cach: ngan\ngiong: {key}", 1)
+            self.assertIn(f"Giọng: {label}", script_view.render(md, "kb-1", "5–15"), key)
 
     async def test_draft_repairs_once_and_estimates(self):
         llm = FakeLlm("không phải kịch bản", VIDEO_MD)

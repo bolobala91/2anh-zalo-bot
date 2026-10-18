@@ -2,6 +2,22 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.53.0] — 2026-10-18
+
+### Thêm — Video hấp dẫn hơn, giọng đọc chọn theo nội dung
+
+- Khi viết kịch bản video (mọi phong cách), AI đọc thêm hai hướng dẫn mới của 2Anh Studio 6.3.2-vi.18:
+  - **video-hap-dan.md**: hook 3 giây đầu, không có hai cảnh liền nhau cùng loại, mỗi cảnh có hình để nhìn, đổi nhịp 5–8 giây, lời văn nói, kết có kêu gọi.
+  - **chon-giong.md**: chọn giọng theo nội dung trong 24 giọng VieNeu (tự nhiên, tin tức, kể chuyện, đọc truyện; Bắc, Trung, Nam) và 4 giọng edge-tts. Không còn mặc định một giọng.
+- Bản kịch bản gửi để duyệt ghi rõ giọng đã chọn, ví dụ "Giọng: Thanh Bình (nam, Bắc, kể chuyện)". Muốn đổi thì người dùng nói ở bước sửa kịch bản.
+- Máy không có VieNeu (VPS RAM thấp): studio tự đọc bằng giọng edge-tts cùng giới, gần chất giọng nhất.
+
+### Sửa — video khổ dọc (studio vi.18)
+
+- Hình không còn tràn mép.
+- Phụ đề chỉ tô vàng từ đang đọc.
+- Khung khái niệm không còn trống nửa màn hình.
+
 ## [2.52.1] — 2026-10-18
 
 ### Đổi — Tin báo chờ xưng đúng tên

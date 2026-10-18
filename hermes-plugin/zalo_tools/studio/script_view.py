@@ -18,7 +18,22 @@ SCENE_LABELS = {
     "minh-hoa": "Minh hoạ", "anh": "Ảnh", "bieu-do": "Biểu đồ", "so-do": "Sơ đồ", "dong-thoi-gian": "Dòng thời gian",
     "cau-hoi": "Câu hỏi nhanh", "ke-chuyen": "Kể chuyện",
 }
-VOICE_LABELS = {"nu": "nữ", "nam": "nam", "thu-giang": "Thu Giang (VieNeu)"}
+VOICE_LABELS = {"nu": "nữ", "nam": "nam", "nu-tuoi": "nữ trẻ, tươi", "nam-tram": "nam trầm"}
+# Giọng VieNeu (2Anh Studio giong_ds.py): khoá → "Tên (giới, miền, chất giọng)".
+VOICE_LABELS.update({k: f"{n} ({g}, {r}, {c})" for k, (n, g, r, c) in {
+    "thu-giang": ("Thu Giang", "nữ", "Bắc", "MC"), "ngoc-huyen": ("Ngọc Huyền", "nữ", "Bắc", "tự nhiên"),
+    "truc-ly": ("Trúc Ly", "nữ", "Bắc", "tự nhiên"), "doan-trang": ("Đoan Trang", "nữ", "Bắc", "tự nhiên"),
+    "ngoc-linh": ("Ngọc Linh", "nữ", "Bắc", "kể chuyện"), "mai-anh": ("Mai Anh", "nữ", "Bắc", "tin tức"),
+    "quynh-anh": ("Quỳnh Anh", "nữ", "Bắc", "đọc truyện"), "ngoc-tran": ("Ngọc Trân", "nữ", "Trung", "tự nhiên"),
+    "thuc-doan": ("Thục Đoan", "nữ", "Nam", "kể chuyện"), "thuy-dung": ("Thùy Dung", "nữ", "Nam", "tin tức"),
+    "my-duyen": ("Mỹ Duyên", "nữ", "Nam", "đọc truyện"), "kim-thanh": ("Kim Thanh", "nữ", "Nam", "đọc truyện"),
+    "pham-tuyen": ("Phạm Tuyên", "nam", "Bắc", "tự nhiên"), "xuan-vinh": ("Xuân Vĩnh", "nam", "Bắc", "tự nhiên"),
+    "manh-dung": ("Mạnh Dũng", "nam", "Bắc", "tự nhiên"), "minh-quan": ("Minh Quân", "nam", "Bắc", "tự nhiên"),
+    "minh-duc": ("Minh Đức", "nam", "Bắc", "tin tức"), "thanh-binh": ("Thanh Bình", "nam", "Bắc", "kể chuyện"),
+    "anh-khoi": ("Anh Khôi", "nam", "Bắc", "kể chuyện"), "quang-son": ("Quang Sơn", "nam", "Trung", "tự nhiên"),
+    "thai-son": ("Thái Sơn", "nam", "Nam", "kể chuyện"), "minh-triet": ("Minh Triết", "nam", "Nam", "tin tức"),
+    "duc-tri": ("Đức Trí", "nam", "Nam", "đọc truyện"), "adam": ("Adam", "nam", "Nam", "tự nhiên"),
+}.items()})
 MAX_MESSAGE = 3500
 _MARKUP = re.compile(r"\*\*|==|\(\(|\)\)|__|\{\{|\}\}|[~^]")
 _SCENE = re.compile(r"^##\s+Cảnh\s+(\d+)\s*$")

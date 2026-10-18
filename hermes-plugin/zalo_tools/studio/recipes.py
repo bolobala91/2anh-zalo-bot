@@ -74,6 +74,9 @@ def node_engine(recipe: "Recipe", loai: str) -> str:
     cong_van, bien_ban, other = NODE_ENGINES[recipe.script]
     return cong_van if loai == "cong_van" else bien_ban if loai == "bien_ban" else other
 
+# Mọi kiểu video (2Anh Studio vi.18): hook, nhịp, đa dạng cảnh, và chọn giọng theo nội dung (không mặc định một giọng).
+VIDEO_CRAFT = (("studio", ("docs/vi/tro-ly/video-hap-dan.md",)), ("studio", ("docs/vi/tro-ly/chon-giong.md",)))
+
 RECIPES: Dict[str, Recipe] = {r.kind: r for r in (
     Recipe("slide", "studioSlides", "slide PowerPoint", "svg_output", "slides",
            guides=(("studio", ("docs/vi/tro-ly/{loai}.md",)),
@@ -123,12 +126,13 @@ RECIPES: Dict[str, Recipe] = {r.kind: r for r in (
                # Video ngắn mạng xã hội (2Anh Studio vi.17): công thức giải thích / so sánh A–B / tin từ link.
                "ngan": (("studio", ("docs/vi/tro-ly/video-ngan.md",)),
                         ("studio", ("docs/vi/tham-khao/video-viet-tay.md", "docs/vi/tro-ly/video-viet-tay.md")),
-                        ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md"))),
-               "vox": (("studio", ("docs/vi/tro-ly/video-giai-thich.md",)), ("studio", ("docs/vi/tro-ly/nhip-vox.md",))),
+                        ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md")), *VIDEO_CRAFT),
+               "vox": (("studio", ("docs/vi/tro-ly/video-giai-thich.md",)), ("studio", ("docs/vi/tro-ly/nhip-vox.md",)),
+                       *VIDEO_CRAFT),
                "viet-tay": (("studio", ("docs/vi/tham-khao/video-viet-tay.md", "docs/vi/tro-ly/video-viet-tay.md")),
-                            ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md"))),
+                            ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md")), *VIDEO_CRAFT),
                "cat-dan": (("studio", ("docs/vi/tham-khao/video-viet-tay.md", "docs/vi/tro-ly/video-viet-tay.md")),
-                           ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md"))),
+                           ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md")), *VIDEO_CRAFT),
            }),
     Recipe("video_bai_giang", "studioVideo", "video bài giảng từ slide (MP4)", "svg_output", "lecture_video",
            guides=(("studio", ("docs/vi/tro-ly/{loai}.md",)),
