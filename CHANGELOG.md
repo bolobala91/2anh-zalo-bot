@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.53.2] — 2026-10-18
+
+### Đổi — Video bài giảng đọc bằng VieNeu
+
+- Video bài giảng từ slide đọc lời giảng bằng giọng VieNeu Thu Giang (2Anh Studio 6.3.2-vi.20 `giong_bai_giang.py`), có phụ đề chia theo câu. Máy chủ không có VieNeu thì studio tự đọc bằng giọng edge-tts dự phòng. Studio cũ chưa có script này thì dùng cách cũ.
+
+### Sửa
+
+- Video giọng VieNeu chạy trong sandbox của xưởng không còn tải lại model khoảng 600 MB mỗi lần làm: xưởng trỏ `HF_HOME` về kho model thật thay vì thư mục việc tạm.
+
 ## [2.53.1] — 2026-10-18
 
 ### Đổi — Giọng VieNeu là giọng chính cho video

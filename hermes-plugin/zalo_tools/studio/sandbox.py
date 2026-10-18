@@ -123,6 +123,10 @@ def clean_env(job_dir: Path, *, network: bool, extra: Optional[Dict[str, str]] =
     env.update({"TEMP": tmp, "TMP": tmp, "TMPDIR": tmp, "HOME": str(job_dir), "USERPROFILE": str(job_dir),
                 "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONDONTWRITEBYTECODE": "1",
                 "NO_COLOR": "1"})
+    if network:
+        # HOME bị đổi sang thư mục việc → VieNeu (huggingface_hub) tưởng chưa có model và tải lại ~600 MB mỗi việc.
+        # Trỏ về kho model thật của tài khoản chạy bot.
+        env["HF_HOME"] = os.environ.get("HF_HOME") or os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
     env.update(extra or {})
     return env
 

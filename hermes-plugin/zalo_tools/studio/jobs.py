@@ -40,7 +40,9 @@ CONTENT_STEPS = {"input", "parse", "canh", "model", "check", "framework", "json"
 SLIDE_MAX_AI_IMAGES = 4
 SLIDE_MAX_WEB_IMAGES = 6
 IMAGE_TOOL_NAME = "2Anh Zalo (máy chủ)"
-LECTURE_VOICE = "vi-VN-HoaiMyNeural"
+LECTURE_VOICE = "vi-VN-HoaiMyNeural"   # edge-tts: chỉ khi 2Anh Studio cũ chưa có giong_bai_giang.py
+# Giọng VieNeu của lời giảng (2Anh Studio vi.20 giong_bai_giang.py; máy không có VieNeu thì script tự lùi về edge-tts).
+LECTURE_VIENEU = "thu-giang"
 # Mã lỗi của bộ kiểm văn bản Đoàn do DỮ LIỆU còn thiếu (bản nháp) — không phải lỗi thể thức của bộ sinh.
 DOAN_DRAFT_CODES = {"placeholder": "Bản nháp: còn ô [CẦN BỔ SUNG] cần điền",
                     "invalid_document_number": "Số văn bản để trống cho văn thư điền"}
@@ -572,8 +574,10 @@ class Builder:
             if index not in notes:
                 raise StudioError("trang slide không khớp lời giảng", refund=True)
             sandbox.write_file(self.job_dir, notes_dir / f"{svg.stem}.md", (notes[index] + "\n").encode("utf-8"))
+        narrate = self.where.studio / "tools" / "vi" / "giong_bai_giang.py"
         steps = (
-            ([py, str(scripts / "notes_to_audio.py"), str(self.project), "--voice", LECTURE_VOICE], 900, True),
+            (([py, str(narrate), str(self.project), "--giong", LECTURE_VIENEU] if narrate.is_file() else
+              [py, str(scripts / "notes_to_audio.py"), str(self.project), "--voice", LECTURE_VOICE]), 1800, True),
             ([py, str(scripts / "svg_to_pptx.py"), str(self.project), "--quick-generate", "--with-notes",
               "--recorded-narration", "audio"], 600, False),
             ([py, str(self.where.studio / "tools" / "vi" / "video.py"), str(self.project), "--cach", "ffmpeg",

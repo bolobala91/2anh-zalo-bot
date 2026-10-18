@@ -384,6 +384,15 @@ class SandboxTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(env["PATH"], "/usr/bin")
             self.assertIn("LOCALAPPDATA", sandbox.clean_env(self.dir, network=True))
 
+    def test_clean_env_keeps_the_real_model_cache_for_vieneu(self):
+        with patch.dict(os.environ, {"HF_HOME": "D:/hf"}):
+            self.assertEqual(sandbox.clean_env(self.dir, network=True)["HF_HOME"], "D:/hf")
+            self.assertNotIn("HF_HOME", sandbox.clean_env(self.dir, network=False))
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("HF_HOME", None)
+            hf = sandbox.clean_env(self.dir, network=True)["HF_HOME"]
+            self.assertFalse(hf.startswith(str(self.dir)), "kho model không được nằm trong thư mục việc")
+
     def test_systemd_command_isolates_user_home_network_and_resources(self):
         hidden = ["/opt", "/srv/hermes", "/var/lib/zalo-studio"]
         present = {"/opt/studio", "/opt/studio/.env", "/root/.cache/ms-playwright", "/usr/lib/node"}
@@ -1529,6 +1538,36 @@ class BuilderImagesTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([p.name for p in out.files], ["bai-giang.mp4"])
         self.assertEqual([o[0] for o in order][-3:], ["notes_to_audio.py", "svg_to_pptx.py", "video.py"])
         self.assertEqual([o[1] for o in order][-3:], [True, False, False], "chỉ bước giọng đọc edge-tts có mạng")
+
+    async def test_lecture_video_reads_notes_with_vieneu_when_the_studio_has_it(self):
+        narrate = self.where.studio / "tools" / "vi" / "giong_bai_giang.py"
+        narrate.parent.mkdir(parents=True, exist_ok=True)
+        narrate.write_text("#", encoding="utf-8")
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" data-pptx-page-role="{r}"><text>t</text></svg>'
+        llm = FakeLlm(json.dumps({"pages": [{"role": "cover"}, {"role": "ending"}]}), svg.format(r="cover"), svg.format(r="ending"),
+                      json.dumps({"1": "Chào các em.", "2": "Hẹn gặp lại."}))
+        calls = []
+
+        def behave(argv, job_dir, kw):
+            script = Path(argv[1]).name
+            calls.append((script, argv[2:], kw.get("network")))
+            if script == "project_manager.py":
+                (job_dir / "deck_20261008" / "svg_output").mkdir(parents=True)
+            elif script == "svg_quality_checker.py":
+                (Path(argv[2]) / "validation").mkdir(exist_ok=True)
+                (Path(argv[2]) / "validation" / "svg_quality_report.json").write_text('{"files": []}', encoding="utf-8")
+            elif script == "video.py":
+                (Path(argv[2]) / "exports").mkdir(exist_ok=True)
+                (Path(argv[2]) / "exports" / "bai-giang.mp4").write_bytes(b"mp4")
+            return sandbox.Result(0, "", "", False)
+
+        with self.fake_run(behave):
+            await jobs.produce(make_job("video_bai_giang", loai="bai-giang"), llm, self.job_dir, self.where)
+        voice = [c for c in calls if c[0] == "giong_bai_giang.py"]
+        self.assertEqual(len(voice), 1)
+        self.assertEqual(voice[0][1][1:], ["--giong", "thu-giang"])
+        self.assertTrue(voice[0][2])
+        self.assertNotIn("notes_to_audio.py", [c[0] for c in calls])
 
     async def test_doan_document_is_built_in_process_and_checked_by_the_skill_validator_in_the_sandbox(self):
         validator = self.where.skills / "soan-van-ban-doan" / "scripts" / "validate_van_ban_doan.py"
