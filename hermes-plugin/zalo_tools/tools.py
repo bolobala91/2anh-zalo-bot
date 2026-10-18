@@ -853,7 +853,7 @@ def studio_turn_note(sender_uid: str, thread_id: str, is_group: bool) -> Optiona
 
 
 VIDEO_STYLE_CHOICES = ("viết tay trên bảng (viet-tay); cắt dán giấy (cat-dan); Vox có ảnh minh hoạ AI (vox); "
-                       "video ngắn mạng xã hội nền neon, khổ dọc cho TikTok/Reels (ngan)")
+                       "video ngắn TikTok/Reels khổ dọc, hình đổi theo từng câu, có nhân vật minh hoạ hoặc số liệu (ngan)")
 
 
 def _bot_name() -> str:
@@ -923,7 +923,7 @@ async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
         kieu = str(raw_options.get("kieu") or (previous or {}).get("options", {}).get("kieu") or "")
         if kieu not in recipe.options["kieu"]:
             return _err("chưa biết phong cách video — HỎI người dùng muốn phong cách nào trong: " + VIDEO_STYLE_CHOICES +
-                        "; kèm khổ (dọc/ngang) và giọng (nữ/nam) nếu chưa rõ. Có câu trả lời rồi gọi lại action=plan với "
+                        "; kèm khổ (dọc/ngang) nếu chưa rõ (video ngắn luôn dọc). Không hỏi giọng — kịch bản tự chọn. Có câu trả lời rồi gọi lại action=plan với "
                         "options.kieu.")
         brief = str(args.get("brief") or (previous or {}).get("brief") or "").strip()
         if len(brief) < 10:
@@ -3304,7 +3304,7 @@ TOOLS = [
         "Xưởng tạo sản phẩm của 2Anh Studio: nhờ máy chủ làm slide PowerPoint đẹp (có ảnh minh hoạ), giáo án 5512, "
         "văn bản hành chính NĐ30 / văn bản Đoàn / văn bản Đảng, đề kiểm tra, đề KHTN tiếng Anh, SKKN, trò chơi "
         "(trắc nghiệm, ghép đôi, ô chữ, vòng quay, thẻ lật, đếm ngược), thí nghiệm ảo, video giải thích (viết tay, "
-        "cắt dán, Vox có ảnh AI, video ngắn mạng xã hội nền neon) và video bài giảng từ slide — rồi tự gửi tệp vào "
+        "cắt dán, Vox có ảnh AI, video ngắn TikTok có nhân vật minh hoạ) và video bài giảng từ slide — rồi tự gửi tệp vào "
         "cuộc trò chuyện này sau vài phút. Bot TỰ nhắn người dùng lời báo chờ; đừng lặp lại. VIDEO (kind=video) đi hai "
         "bước: (1) hỏi người dùng phong cách → action=plan (bot viết và gửi kịch bản kèm mã) → (2) người dùng đồng ý → "
         "action=make kèm plan_id; muốn sửa → action=plan với plan_id và feedback. Loại khác: gọi MỘT lần action=make khi "
@@ -3324,8 +3324,10 @@ TOOLS = [
                          "description": "slide / video_bai_giang: kiểu bài; tro_choi: loại trò chơi."},
                 "kieu": {"type": "string", "enum": ["viet-tay", "cat-dan", "vox", "ngan"],
                          "description": "Chỉ với video: phong cách người dùng đã chọn — viet-tay (viết tay trên bảng), "
-                                        "cat-dan (cắt dán giấy), vox (ảnh minh hoạ AI), ngan (video ngắn mạng xã hội "
-                                        "nền neon, khổ dọc; hợp giải thích nhanh, so sánh A–B, tin từ link)."}},
+                                        "cat-dan (cắt dán giấy), vox (ảnh minh hoạ AI), ngan (video ngắn TikTok/Reels khổ dọc: "
+                                        "hình đổi theo từng câu, nhân vật minh hoạ tự ghép theo nội dung, số liệu, tin "
+                                        "nhắn; giao diện tự chọn theo nội dung; hợp kỹ năng sống, mẹo học, tin nhanh, giải "
+                                        "mã số liệu)."}},
                         "additionalProperties": False},
             "action": {"type": "string", "enum": ["plan", "make"],
                        "description": "plan: chỉ video — viết kịch bản gửi người dùng duyệt. make (mặc định): làm sản phẩm."},

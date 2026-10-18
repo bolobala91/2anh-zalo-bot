@@ -2,6 +2,23 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.54.0] — 2026-10-19
+
+### Đổi — Video ngắn "nhịp hình" (2Anh Studio 6.3.2-vi.22)
+
+- Video ngắn (`kieu: ngan`) làm lại theo các kênh TikTok triệu lượt xem:
+  - Hình đổi theo từng câu.
+  - Nhân vật minh hoạ tự ghép đúng vai nội dung (học sinh, thầy cô, bác sĩ, công an, đầu bếp, nông dân…) và đổi tư thế theo lời.
+  - Có thêm số khổng lồ, lưới chấm, trước → sau, tin nhắn, thông báo, trích dẫn.
+  - Hai giao diện, AI chọn theo nội dung: **phẳng sáng** cho kỹ năng sống và mẹo học, **tối dữ liệu** cho tin công nghệ và số liệu.
+- Phụ đề nổi bật:
+  - Căn giữa, mỗi lúc một dòng, ngắt đúng cụm từ.
+  - Từ khoá được tô nền, khoanh tròn, gạch chân hoặc chữ to khác font.
+- Tiếng hiệu ứng đa dạng theo từng loại hình: vút, bụp, pop, tích tích, ding.
+- Bước kiểm kịch bản nhận ngữ pháp nhịp của video ngắn. Kịch bản còn `loai:` hay thiếu nhịp thì báo lại để AI viết lại.
+- Bản kịch bản gửi duyệt ghi giao diện, dàn nhân vật và tóm tắt từng nhịp hình, ví dụ "an suy-nghi → biểu tượng alarm → an vo-dau → …".
+- Giọng VieNeu không còn đọc sai tiếng đầu câu.
+
 ## [2.53.2] — 2026-10-18
 
 ### Đổi — Video bài giảng đọc bằng VieNeu

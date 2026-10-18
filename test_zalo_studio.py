@@ -2062,10 +2062,17 @@ class StudioToolTest(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------- video: hỏi phong cách → kịch bản → duyệt → dựng
 from plugins.zalo_tools.studio import drafts as drafts_module, script_view  # noqa: E402
 
-VIDEO_MD = ("---\ntieu-de: Axit và bazơ\nmon: Hoá\nlop: 11\nphong-cach: ngan\nloat: 2ANH AI\n---\n\n"
-            "## Cảnh 1\nloai: tieu-de\nchu: Axit hay ((bazơ))?\nphu: 30 giây\nloi: Chanh chua, xà phòng trơn.\n\n"
-            "## Cảnh 2\nloai: so-sanh\ntieu-de: Axit và bazơ\ntrai: Axit\nphai: Bazơ\ny-trai: Vị ==chua==\n"
-            "y-phai: Vị chát\nloi: Axit chua, bazơ chát.\n")
+VIDEO_MD = ("---\ntieu-de: Axit và bazơ\nphong-cach: ngan\ngiao-dien: phang-sang\nloat: 2ANH AI\n"
+            "vai: an = hoc-sinh-nam; co = co-giao\n---\n\n"
+            "## Cảnh 1\ntieu-de: Axit hay bazơ?\nloi: Chanh chua, / xà phòng ==trơn==.\n"
+            "nhip: @dau | nguoi: an suy-nghi\nnhip: xà phòng | bieu-tuong: flask | Xà phòng\n\n"
+            "## Cảnh 2\ntieu-de: Cách nhận biết\nloi: Axit làm quỳ hoá đỏ, bazơ làm quỳ hoá xanh.\n"
+            "nhip: @dau | nguoi: co giai-thich\nnhip: quỳ hoá đỏ | truoc-sau: Tím -> Đỏ | quỳ | axit\n")
+# Kịch bản kiểu cũ (loại cảnh) cho bản duyệt các phong cách viết tay / cắt dán.
+VIDEO_MD_CU = ("---\ntieu-de: Axit và bazơ\nmon: Hoá\nlop: 11\nphong-cach: cat-dan\nloat: 2ANH AI\n---\n\n"
+               "## Cảnh 1\nloai: tieu-de\nchu: Axit hay ((bazơ))?\nphu: 30 giây\nloi: Chanh chua, xà phòng trơn.\n\n"
+               "## Cảnh 2\nloai: so-sanh\ntieu-de: Axit và bazơ\ntrai: Axit\nphai: Bazơ\ny-trai: Vị ==chua==\n"
+               "y-phai: Vị chát\nloi: Axit chua, bazơ chát.\n")
 
 
 class VideoPlanTest(unittest.IsolatedAsyncioTestCase):
@@ -2163,13 +2170,31 @@ class VideoPlanTest(unittest.IsolatedAsyncioTestCase):
             {"kind": "giao_an", "brief": "Giáo án Toán 10 bài 1", "action": "plan"}))["error"])
 
     def test_script_view_shows_style_frame_scenes_and_the_code(self):
-        text = script_view.render(validate.check_video(VIDEO_MD, LIB), "kb-1234abcd", "5–15")
-        self.assertIn("video ngắn mạng xã hội", text)
-        self.assertIn("dọc 9:16", text)
+        text = script_view.render(validate.check_video(VIDEO_MD_CU, LIB), "kb-1234abcd", "5–15")
+        self.assertIn("cắt dán giấy", text)
         self.assertIn("Cảnh 2 · So sánh", text)
         self.assertIn("Axit: Vị chua", text)
         self.assertNotIn("==", text)
         self.assertIn("kb-1234abcd", text)
+
+    def test_script_view_of_a_short_video_lists_theme_cast_and_beats(self):
+        text = script_view.render(validate.check_video(VIDEO_MD, LIB), "kb-1", "5–15")
+        self.assertIn("video ngắn mạng xã hội (nhịp hình)", text)
+        self.assertIn("dọc 9:16", text)
+        self.assertIn("Giao diện: phẳng sáng", text)
+        self.assertIn("Nhân vật: an = hoc-sinh-nam", text)
+        self.assertIn("Cảnh 2 · Cách nhận biết", text)
+        self.assertIn("🖼 co giai-thich → trước → sau Tím -> Đỏ", text)
+        self.assertIn("🎙 Chanh chua, xà phòng trơn.", text)
+        self.assertNotIn(" / ", text)
+
+    def test_short_video_needs_beats_not_scene_types(self):
+        checked = validate.check_video(VIDEO_MD.replace("phong-cach: ngan", "phong-cach: ngan\nkho: ngang"), LIB)
+        self.assertNotIn("kho:", checked)                       # video ngắn luôn khổ dọc
+        for bad in (VIDEO_MD.replace("tieu-de: Axit hay bazơ?", "loai: tieu-de"),
+                    VIDEO_MD + "\n## Cảnh 3\nloi: Hết rồi.\n"):
+            with self.subTest(bad=bad[-40:]), self.assertRaises(validate.SourceError):
+                validate.check_video(bad, LIB)
         self.assertLessEqual(len(script_view.render(VIDEO_MD + "loi: " + "x" * 9000 + "\n", "kb-1", "5–15")),
                              script_view.MAX_MESSAGE)
 

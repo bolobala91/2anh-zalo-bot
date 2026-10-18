@@ -10,7 +10,7 @@ from . import validate
 
 STYLE_LABELS = {
     "viet-tay": "viết tay trên bảng", "cat-dan": "cắt dán giấy", "vox": "Vox (ảnh minh hoạ AI)",
-    "ngan": "video ngắn mạng xã hội (nền neon)",
+    "ngan": "video ngắn mạng xã hội (nhịp hình)",
 }
 SCENE_LABELS = {
     "tieu-de": "Tiêu đề", "khai-niem": "Khái niệm", "cong-thuc": "Công thức", "y-tung-y": "Danh sách ý",
@@ -35,13 +35,18 @@ VOICE_LABELS.update({k: f"{n} ({g}, {r}, {c})" for k, (n, g, r, c) in {
     "duc-tri": ("Đức Trí", "nam", "Nam", "đọc truyện"), "adam": ("Adam", "nam", "Nam", "tự nhiên"),
 }.items()})
 MAX_MESSAGE = 3500
-_MARKUP = re.compile(r"\*\*|==|\(\(|\)\)|__|\{\{|\}\}|[~^]")
+_MARKUP = re.compile(r"\*\*|==|\(\(|\)\)|__|\{\{|\}\}|[~^]|(?<=\s)/(?=\s)")
+GIAO_DIEN = {"phang-sang": "phẳng sáng (pastel, nhân vật)", "toi-du-lieu": "tối dữ liệu (số liệu, màu cam)"}
+# Vật của video ngắn → cách gọi ngắn trong bản duyệt.
+VAT_NGAN = {"bieu-tuong": "biểu tượng", "so": "số", "luoi-cham": "lưới chấm", "truoc-sau": "trước → sau",
+            "tin-nhan": "tin nhắn", "thong-bao": "thông báo", "trich-dan": "trích dẫn", "chu": "chữ", "the": "thẻ",
+            "nhan": "nhãn", "dau": "dấu", "cot": "biểu đồ", "moc": "dòng thời gian", "chu-trinh": "các bước", "thap": "tháp"}
 _SCENE = re.compile(r"^##\s+Cảnh\s+(\d+)\s*$")
 _KEY = re.compile(r"^([a-z][a-z0-9-]*)\s*:\s*(.*)$")
 
 
 def _plain(text: str) -> str:
-    return _MARKUP.sub("", text).strip()
+    return re.sub(r"\s{2,}", " ", _MARKUP.sub("", text)).strip()
 
 
 def scenes(body: List[str]) -> List[Tuple[int, Dict[str, List[str]]]]:
@@ -85,6 +90,25 @@ def _on_screen(kind: str, f: Dict[str, List[str]]) -> str:
     return one("tieu-de") or one("chu-thich") or SCENE_LABELS.get(kind, kind)
 
 
+def _nhip_ngan(nhip: List[str]) -> str:
+    """Các nhịp của cảnh video ngắn → "an đứng → linh chỉ tay → lưới chấm 7/10 → …"."""
+    ra = []
+    for n in nhip:
+        phan = [p.strip() for p in n.split(" | ")]
+        if len(phan) < 2 or ":" not in phan[1]:
+            continue
+        vat, _, nd = phan[1].partition(":")
+        vat, nd = vat.strip(), _plain(nd.strip())
+        if vat == "nguoi":
+            ra.append(nd.replace("-", " ", 0))
+        elif vat == "nhom":
+            ra.append("nhóm " + ", ".join(x.strip() for x in nd.split(";")))
+        else:
+            them = " | ".join(p for p in phan[2:] if p not in ("tren", "duoi", "trai", "phai", "giua", "dien-thoai"))
+            ra.append(f"{VAT_NGAN.get(vat, vat)} {(nd + (' ' + them if them else ''))[:60]}".strip())
+    return " → ".join(ra)
+
+
 def render(text: str, draft_id: str, minutes: str, name: str = "Mình") -> str:
     meta, _head, body = validate.front_matter(text)
     style = meta.get("phong-cach", "viet-tay")
@@ -95,8 +119,24 @@ def render(text: str, draft_id: str, minutes: str, name: str = "Mình") -> str:
              f" · Giọng: {VOICE_LABELS.get(meta.get('giong', 'nu'), meta.get('giong', 'nữ'))}"]
     if meta.get("loat"):
         lines.append(f"Nhãn kênh: {meta['loat']}")
+    if style == "ngan":
+        lines.append(f"Giao diện: {GIAO_DIEN.get(meta.get('giao-dien', 'phang-sang'), meta.get('giao-dien'))}")
+        if meta.get("vai"):
+            lines.append(f"Nhân vật: {meta['vai'][:300]}")
     lines.append("")
     for number, fields in scenes(body):
+        if style == "ngan":
+            tieu_de = _plain((fields.get("tieu-de") or [""])[0])
+            lines.append(f"Cảnh {number}" + (f" · {tieu_de}" if tieu_de else ""))
+            hinh = _nhip_ngan(fields.get("nhip", []))
+            if hinh:
+                lines.append(f"🖼 {hinh[:260]}")
+            speech = " ".join(_plain(v) for v in fields.get("loi", []))
+            narration += len(speech)
+            if speech:
+                lines.append(f"🎙 {speech[:400]}")
+            lines.append("")
+            continue
         kind = "vox" if "bo-cuc" in fields or "nhip" in fields else (fields.get("loai") or ["?"])[0]
         speech = " ".join(_plain(v) for v in fields.get("loi", []) + fields.get("loi-giai", []))
         narration += len(speech)

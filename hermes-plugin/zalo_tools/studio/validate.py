@@ -142,9 +142,12 @@ def check_video(text: str, library: Set[str], max_seconds: int = MAX_VIDEO_SECON
     if seconds is not None and not (seconds.isascii() and seconds.isdigit() and 15 <= int(seconds) <= max_seconds):
         raise SourceError(f"`thoi-luong` là số giây từ 15 đến {max_seconds}")
     narration, scenes = 0, 0
+    ngan = style == "ngan"
+    nhip_canh: list = []
     for line in body:
         if line.strip().startswith("##"):
             scenes += 1
+            nhip_canh.append(0)
         match = _KEY_LINE.match(line.strip())
         if not match:
             continue
@@ -157,22 +160,31 @@ def check_video(text: str, library: Set[str], max_seconds: int = MAX_VIDEO_SECON
             if key == "anh" or value.startswith(("ve:", "tim:")):
                 _image_request(key, value)
         if key == "nhip":
-            if style != "vox":
-                raise SourceError("`nhip:` chỉ dùng với `phong-cach: vox`")
+            if style not in ("vox", "ngan"):
+                raise SourceError("`nhip:` chỉ dùng với `phong-cach: vox` hoặc `ngan`")
             _nhip(value)
+            if nhip_canh:
+                nhip_canh[-1] += 1
+        if ngan and key in ("loai", "bo-cuc"):
+            # Video ngắn (2Anh Studio vi.22) không có loại cảnh hay bố cục: mỗi cảnh là `loi` + các dòng `nhip`.
+            raise SourceError(f"video ngắn (`phong-cach: ngan`) không có `{key}:`; mỗi cảnh viết `loi` và 3–6 dòng "
+                              "`nhip: <cụm từ> | <vật>: <nội dung>` theo hướng dẫn video-ngan.md")
         if key == "hinh" and _PATHISH.search(value):
             raise SourceError("`hinh:` là tên biểu tượng, không phải đường dẫn")
         if key == "nen-canh" and value not in ("ve", "khong"):
             raise SourceError("`nen-canh` chỉ được `ve` hoặc `khong`")
         if key == "mau" and (value == "moi" or value not in library):
             raise SourceError("cảnh thí nghiệm chỉ dùng mẫu có sẵn")
+    if ngan and any(n == 0 for n in nhip_canh):
+        raise SourceError(f"Cảnh {nhip_canh.index(0) + 1} của video ngắn chưa có dòng `nhip`; mỗi cảnh cần 3–6 nhịp")
     if scenes > MAX_VIDEO_SCENES:
         raise SourceError(f"video tối đa {MAX_VIDEO_SCENES} cảnh")
     if narration > max_seconds * VIDEO_CHARS_PER_SECOND:
         raise SourceError(f"lời đọc dài {narration} ký tự — video tối đa {max_seconds} giây "
                           f"(khoảng {max_seconds * VIDEO_CHARS_PER_SECOND} ký tự lời đọc); rút gọn lời")
     voice = EDGE_TO_VIENEU.get(meta.get("giong", ""), meta.get("giong"))
-    head = [line for line in head if not line.strip().startswith(("do-phan-giai", "giong"))]
+    bo = ("do-phan-giai", "giong", "kho") if ngan else ("do-phan-giai", "giong")   # video ngắn luôn khổ dọc
+    head = [line for line in head if not line.strip().startswith(bo)]
     head += [f"giong: {voice}", "do-phan-giai: 720"]
     return "\n".join(["---", *head, "---", *body]).rstrip("\n") + "\n"
 

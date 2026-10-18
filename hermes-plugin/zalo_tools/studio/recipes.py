@@ -123,9 +123,8 @@ RECIPES: Dict[str, Recipe] = {r.kind: r for r in (
            max_tokens=200_000, deadline=3_600,
            options={"kieu": ("viet-tay", "cat-dan", "vox", "ngan")},
            extra_guides={
-               # Video ngắn mạng xã hội (2Anh Studio vi.17): công thức giải thích / so sánh A–B / tin từ link.
+               # Video ngắn "nhịp hình" (2Anh Studio vi.22): ngữ pháp nhịp riêng; canh-video.md chỉ để tra tên biểu tượng.
                "ngan": (("studio", ("docs/vi/tro-ly/video-ngan.md",)),
-                        ("studio", ("docs/vi/tham-khao/video-viet-tay.md", "docs/vi/tro-ly/video-viet-tay.md")),
                         ("studio", ("docs/vi/tham-khao/canh-video.md", "docs/vi/tro-ly/canh-video.md")), *VIDEO_CRAFT),
                "vox": (("studio", ("docs/vi/tro-ly/video-giai-thich.md",)), ("studio", ("docs/vi/tro-ly/nhip-vox.md",)),
                        *VIDEO_CRAFT),
