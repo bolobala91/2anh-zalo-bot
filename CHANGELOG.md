@@ -2,6 +2,13 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.52.1] — 2026-10-18
+
+### Đổi — Tin báo chờ xưng đúng tên
+
+- Tin báo chờ và kịch bản video dùng **tên Zalo của chính tài khoản** thay cho chữ "bot": "🎨 Lăng Tiêu đang vẽ ảnh, bạn chờ khoảng 1 phút nhé", "⏳ Uyển Nhi đang tạo video giải thích…, bạn chờ khoảng 5–15 phút nhé — xong Uyển Nhi tự gửi tệp vào đây", "Trả lời "OK" để Lăng Tiêu tạo video…". Chưa đọc được tên thì xưng "Mình".
+- Lệnh đổi model trả lời "Đang dùng … rồi." (bỏ chữ "Bot").
+
 ## [2.52.0] — 2026-10-18
 
 ### Thêm — Video: hỏi phong cách, duyệt kịch bản rồi mới dựng

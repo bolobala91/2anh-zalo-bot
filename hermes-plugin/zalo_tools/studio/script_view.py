@@ -70,7 +70,7 @@ def _on_screen(kind: str, f: Dict[str, List[str]]) -> str:
     return one("tieu-de") or one("chu-thich") or SCENE_LABELS.get(kind, kind)
 
 
-def render(text: str, draft_id: str, minutes: str) -> str:
+def render(text: str, draft_id: str, minutes: str, name: str = "Mình") -> str:
     meta, _head, body = validate.front_matter(text)
     style = meta.get("phong-cach", "viet-tay")
     frame = meta.get("kho") or ("doc" if style == "ngan" else "ngang")
@@ -94,7 +94,7 @@ def render(text: str, draft_id: str, minutes: str) -> str:
         lines.append("")
     seconds = max(10, round(narration / validate.VIDEO_CHARS_PER_SECOND * 1.15))
     lines.insert(2 if not meta.get("loat") else 3, f"Thời lượng ước tính: khoảng {seconds} giây")
-    tail = (f"👉 Trả lời \"OK\" để bot dựng video (khoảng {minutes} phút), hoặc nói cần sửa gì (đổi lời, thêm/bớt cảnh, "
+    tail = (f"👉 Trả lời \"OK\" để {name} tạo video (khoảng {minutes} phút), hoặc nói cần sửa gì (đổi lời, thêm/bớt cảnh, "
             f"đổi phong cách). Mã kịch bản: {draft_id}")
     message = "\n".join(lines).strip()
     if len(message) + len(tail) + 2 > MAX_MESSAGE:

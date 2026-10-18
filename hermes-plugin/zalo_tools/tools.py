@@ -503,7 +503,7 @@ async def zalo_media(args: Dict[str, Any], **_kw) -> str:
             what = "ảnh" if kind == "image" else "video"
             return _err(f"hôm nay người này đã dùng hết {limit} {what} AI — mai thử lại, hoặc nhờ chủ bot nâng hạn mức")
     if kind == "image":
-        await _send_wait(turn, "🎨 Bot đang vẽ ảnh, bạn chờ khoảng 1 phút nhé.")
+        await _send_wait(turn, f"🎨 {_bot_name()} đang vẽ ảnh, bạn chờ khoảng 1 phút nhé.")
         try:
             got = await asyncio.to_thread(media_engines.draw, prompt, aspect=str(args.get("aspect") or "square"), refs=refs)
         except media_engines.EngineError as exc:
@@ -523,7 +523,7 @@ async def zalo_media(args: Dict[str, Any], **_kw) -> str:
         if not sent.get("success"):
             return _err(f"vẽ xong nhưng chưa gửi được ảnh: {sent.get('error')}")
         note = f" (nguồn ưu tiên lỗi nên đã dùng {media_engines.ENGINE_LABELS[got['engine']]})" if got["fallbacks"] else ""
-        return _ok(f"Đã vẽ và gửi ảnh vào cuộc trò chuyện{note} (bot đã tự nhắn báo chờ trước khi vẽ). Đừng gửi lại "
+        return _ok(f"Đã vẽ và gửi ảnh vào cuộc trò chuyện{note} (đã tự nhắn báo chờ trước khi vẽ). Đừng gửi lại "
                    "ảnh; chỉ nói một câu ngắn nếu cần.")
     try:
         job = await asyncio.to_thread(media_engines.submit_video, prompt, seconds=args.get("seconds"),
@@ -534,9 +534,10 @@ async def zalo_media(args: Dict[str, Any], **_kw) -> str:
         return _err(f"chưa tạo được video: {exc}")
     from agent.video_gen_provider import save_bytes_video
     media_engines.start_background(dict(turn), job, prompt, save_bytes_video)
-    await _send_wait(turn, f"🎬 Bot đã nhận yêu cầu tạo video AI {job['seconds']} giây. Bạn chờ khoảng 3–15 phút nhé — "
-                           "bot vẫn đang chạy, xong sẽ tự gửi video vào đây.")
-    return _ok(f"Đã gửi yêu cầu tạo video {job['seconds']} giây; bot ĐÃ tự nhắn người dùng chờ 3–15 phút. Xong hệ thống "
+    name = _bot_name()
+    await _send_wait(turn, f"🎬 {name} đang tạo video AI {job['seconds']} giây, bạn chờ khoảng 3–15 phút nhé — xong "
+                           f"{name} tự gửi video vào đây.")
+    return _ok(f"Đã gửi yêu cầu tạo video {job['seconds']} giây; ĐÃ tự nhắn người dùng chờ 3–15 phút. Xong hệ thống "
                "TỰ GỬI vào cuộc trò chuyện này. Đừng nhắn lại lời chờ; đừng gọi lại công cụ này.")
 
 
@@ -855,6 +856,13 @@ VIDEO_STYLE_CHOICES = ("viết tay trên bảng (viet-tay); cắt dán giấy (c
                        "video ngắn mạng xã hội nền neon, khổ dọc cho TikTok/Reels (ngan)")
 
 
+def _bot_name() -> str:
+    """Tên hiển thị Zalo của chính tài khoản bot (Lăng Tiêu, Uyển Nhi…) cho tin nhắn gửi người dùng; chưa biết → "Mình"."""
+    profile = getattr(_ACTIVE_ADAPTER, "_self_profile", None)
+    name = str((profile or {}).get("display_name") or "").strip() if isinstance(profile, dict) else ""
+    return name[:40] or "Mình"
+
+
 async def _send_wait(turn: Dict[str, Any], text: str) -> None:
     """Tin báo chờ gửi NGAY (không đợi mô hình nói), để người dùng biết bot vẫn đang làm. Lỗi gửi thì bỏ qua."""
     try:
@@ -932,13 +940,14 @@ async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
         async def done(job_: jobs.Job, text: str) -> None:
             store.save(draft_id, {"uid": uid, "thread_id": thread, "kind": kind, "options": job_.options,
                                   "brief": job_.brief, "text": text})
-            await _studio_notify(job_, script_view.render(text, draft_id, minutes))
+            await _studio_notify(job_, script_view.render(text, draft_id, minutes, name=_bot_name()))
 
-        await _send_wait(turn, f"✍️ Bot đang {'sửa' if previous else 'viết'} kịch bản video, chờ khoảng 1–2 phút nhé. "
-                               "Xong bot gửi kịch bản để bạn duyệt trước khi dựng.")
+        name = _bot_name()
+        await _send_wait(turn, f"✍️ {name} đang {'sửa' if previous else 'viết'} kịch bản video, bạn chờ khoảng 1–2 phút nhé. "
+                               f"Xong {name} gửi kịch bản để bạn duyệt trước khi tạo video.")
         studio.submit_draft(job, feedback=feedback, previous=(previous or {}).get("text", ""), done=done)
         return _ok({"status": "drafting", "plan_id": draft_id,
-                    "note": ("Bot ĐÃ tự nhắn người dùng chờ 1–2 phút; kịch bản sẽ tự gửi kèm mã "
+                    "note": ("ĐÃ tự nhắn người dùng chờ 1–2 phút; kịch bản sẽ tự gửi kèm mã "
                              f"{draft_id}. Đừng nhắn lại lời chờ, đừng tự viết kịch bản. Khi người dùng đồng ý → gọi "
                              f"zalo_studio action=make kind=video plan_id={draft_id}. Muốn sửa → action=plan, "
                              f"plan_id={draft_id}, feedback=<điều cần sửa>.")})
@@ -964,7 +973,7 @@ async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
             options[key] = value
     job = jobs.Job(id=jobs.new_job_id(), kind=kind, brief=brief[:8000], options=options, turn=captured, script=script)
     if studio.pending_for(job.uid):
-        return _err("người này đang có một việc ở xưởng chưa xong — chờ bot gửi xong rồi nhờ tiếp")
+        return _err("người này đang có một việc ở xưởng chưa xong — chờ việc đó gửi xong rồi nhờ tiếp")
     left = studio.ledger.take(job_id=job.id, uid=job.uid, name=str(turn.get("sender_name") or ""), kind=kind,
                               thread_id=thread, is_group=bool(turn.get("is_group")), quota=quota)
     if left == -1:
@@ -979,10 +988,12 @@ async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
         store.drop(str(args.get("plan_id")))
     minutes = jobs.estimate_minutes(kind, options)
     queue = f" (đang xếp thứ {position}, có thể lâu hơn)" if position > 1 else ""
-    await _send_wait(turn, f"⏳ Bot đã nhận việc làm {recipe.label}. Bạn chờ khoảng {minutes} phút{queue} nhé — bot vẫn "
-                           "đang chạy, xong sẽ tự gửi tệp vào đây.")
+    name = _bot_name()
+    verb = "đang tạo" if kind in ("video", "video_bai_giang") else "đang làm"
+    await _send_wait(turn, f"⏳ {name} {verb} {recipe.label}, bạn chờ khoảng {minutes} phút{queue} nhé — xong {name} tự gửi "
+                           "tệp vào đây.")
     return _ok({"status": "queued", "job_id": job.id, "position": position, "quota_left": left,
-                "note": (f"Đã nhận việc {recipe.label}; bot ĐÃ tự nhắn người dùng chờ khoảng {minutes} phút. "
+                "note": (f"Đã nhận việc {recipe.label}; ĐÃ tự nhắn người dùng chờ khoảng {minutes} phút. "
                          "Đừng nhắn lại lời chờ; xong sẽ tự gửi tệp. Không gọi lại cho cùng yêu cầu.")})
 
 

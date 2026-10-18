@@ -747,7 +747,7 @@ class Studio:
         """Xếp việc; trả vị trí (1 = làm ngay). Đầy hàng hoặc người này đang có việc → Busy."""
         with self._lock:
             if any(other.uid == job.uid for other in self._pending.values()):
-                raise Busy("bạn đang có một việc chưa xong — chờ bot gửi xong rồi nhờ tiếp")
+                raise Busy("bạn đang có một việc chưa xong — chờ việc đó gửi xong rồi nhờ tiếp")
             if len(self._pending) >= self.max_queue:
                 raise Busy("xưởng đang bận nhiều việc — thử lại sau ít phút")
             self._pending[job.id] = job

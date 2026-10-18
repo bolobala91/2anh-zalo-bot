@@ -2183,6 +2183,21 @@ class MediaWaitTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(out["success"])
         self.assertIn("chờ khoảng 1 phút", self.sent[0][1][0]["msg"])
 
+    async def test_wait_messages_use_the_account_name_not_the_word_bot(self):
+        from plugins.zalo_tools import media_engines
+
+        adapter = SimpleNamespace(_self_profile={"display_name": "Lăng Tiêu"})
+        with patch.object(zalo_tools, "_ACTIVE_ADAPTER", adapter),                 patch.object(media_engines, "draw", side_effect=media_engines.EngineError("x")):
+            await zalo_tools.zalo_media({"kind": "image", "prompt": "con mèo"})
+        msg = self.sent[-1][1][0]["msg"]
+        self.assertIn("Lăng Tiêu đang vẽ ảnh", msg)
+        self.assertNotIn("bot", msg.lower())
+        with patch.object(zalo_tools, "_ACTIVE_ADAPTER", None):
+            self.assertEqual(zalo_tools._bot_name(), "Mình")
+        text = script_view.render(validate.check_video(VIDEO_MD, LIB), "kb-1", "5–15", name="Uyển Nhi")
+        self.assertIn("để Uyển Nhi tạo video", text)
+        self.assertNotIn("bot", text.lower())
+
 class RestartSafetyTest(unittest.TestCase):
     """Review cuối GĐ6: policy ghi lúc nạp plugin, DNS trong hộp cát, gateway khởi động lại giữa việc."""
 

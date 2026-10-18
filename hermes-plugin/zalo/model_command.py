@@ -212,7 +212,7 @@ def handle(
         return "Tên model không có dấu cách. " + _USAGE
 
     if target == current:
-        return f"Bot đang dùng {current} rồi."
+        return f"Đang dùng {current} rồi."
     try:
         available = fetch(config_path)
     except Exception as exc:
