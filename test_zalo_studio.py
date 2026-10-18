@@ -2134,6 +2134,13 @@ class VideoPlanTest(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(script_view.render(VIDEO_MD + "loi: " + "x" * 9000 + "\n", "kb-1", "5–15")),
                              script_view.MAX_MESSAGE)
 
+    def test_video_always_uses_a_vieneu_voice(self):
+        for given, expected in (("", "thu-giang"), ("nu", "thu-giang"), ("nam", "minh-quan"),
+                                ("nam-tram", "thanh-binh"), ("mai-anh", "mai-anh")):
+            md = VIDEO_MD if not given else VIDEO_MD.replace("phong-cach: ngan", f"phong-cach: ngan\ngiong: {given}", 1)
+            meta, _head, _body = validate.front_matter(validate.check_video(md, LIB))
+            self.assertEqual(meta["giong"], expected, given)
+
     def test_script_view_names_the_chosen_voice(self):
         for key, label in (("thanh-binh", "Thanh Bình (nam, Bắc, kể chuyện)"), ("nu-tuoi", "nữ trẻ, tươi"),
                            ("mai-anh", "Mai Anh (nữ, Bắc, tin tức)")):

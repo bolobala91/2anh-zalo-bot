@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.53.1] — 2026-10-18
+
+### Đổi — Giọng VieNeu là giọng chính cho video
+
+- Kịch bản video luôn dùng giọng VieNeu. Nếu AI không ghi giọng hoặc ghi giọng edge-tts, xưởng tự đổi sang giọng VieNeu gần nhất:
+  - nữ → Thu Giang;
+  - nam → Minh Quân;
+  - nam trầm → Thanh Bình.
+- Giọng edge-tts chỉ còn là dự phòng: máy chủ không có VieNeu (VPS) thì studio tự đọc bằng giọng edge-tts cùng giới (studio 6.3.2-vi.19).
+
 ## [2.53.0] — 2026-10-18
 
 ### Thêm — Video hấp dẫn hơn, giọng đọc chọn theo nội dung

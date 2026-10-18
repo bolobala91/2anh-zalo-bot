@@ -120,6 +120,12 @@ def _nhip(value: str) -> None:
         _image_request("nhip … anh", thing.group(2).strip())
 
 
+# Giọng VieNeu là giọng chính; edge-tts chỉ là dự phòng do 2Anh Studio tự dùng khi máy không có VieNeu (VPS).
+# Kịch bản không ghi giọng hoặc ghi giọng edge-tts → đổi sang giọng VieNeu gần nhất.
+EDGE_TO_VIENEU = {"": "thu-giang", "nu": "thu-giang", "nu-tuoi": "thu-giang", "nam": "minh-quan",
+                  "nam-tram": "thanh-binh"}
+
+
 def check_video(text: str, library: Set[str], max_seconds: int = MAX_VIDEO_SECONDS) -> str:
     """Video viết tay / cắt dán / Vox / video ngắn; ảnh chỉ ở dạng xin; trả bản đã ép ``do-phan-giai: 720``."""
     text = clean_text(text)
@@ -165,7 +171,9 @@ def check_video(text: str, library: Set[str], max_seconds: int = MAX_VIDEO_SECON
     if narration > max_seconds * VIDEO_CHARS_PER_SECOND:
         raise SourceError(f"lời đọc dài {narration} ký tự — video tối đa {max_seconds} giây "
                           f"(khoảng {max_seconds * VIDEO_CHARS_PER_SECOND} ký tự lời đọc); rút gọn lời")
-    head = [line for line in head if not line.strip().startswith("do-phan-giai")] + ["do-phan-giai: 720"]
+    voice = EDGE_TO_VIENEU.get(meta.get("giong", ""), meta.get("giong"))
+    head = [line for line in head if not line.strip().startswith(("do-phan-giai", "giong"))]
+    head += [f"giong: {voice}", "do-phan-giai: 720"]
     return "\n".join(["---", *head, "---", *body]).rstrip("\n") + "\n"
 
 
