@@ -489,8 +489,45 @@ def schedule_cleanup(workdir: str, delay: int = 900) -> None:
     timer.start()
 
 
-def check_downloadable(info: Dict[str, Any], max_minutes: Optional[int]) -> None:
-    """Soát kết quả dò ``-J`` trước khi cho tải thật."""
+_MOC_RE = re.compile(r"^(?:(\d{1,2}):)?(?:(\d{1,3}):)?(\d{1,5}(?:[.,]\d+)?)$")
+
+
+def doc_moc(raw: Any) -> Optional[float]:
+    """Mốc thời gian để cắt video: số giây (``80``, ``80.5``) hoặc ``m:ss`` / ``h:mm:ss`` (``1:20``, ``0:01:20``).
+    Trống → None. Sai dạng → MediaError."""
+    s = str(raw if raw is not None else "").strip()
+    if not s:
+        return None
+    m = _MOC_RE.match(s)
+    if m is None:
+        raise MediaError(f"mốc thời gian `{s}` không hiểu — viết số giây (80) hoặc phút:giây (1:20)")
+    a, b, c = m.group(1), m.group(2), float(m.group(3).replace(",", "."))
+    if a is not None and b is not None:
+        return int(a) * 3600 + int(b) * 60 + c
+    if a is not None:
+        return int(a) * 60 + c
+    return c
+
+
+def cat_doan(start: Optional[float], end: Optional[float], duration: float) -> Optional[tuple]:
+    """(bắt đầu, kết thúc) hợp lệ trong video dài ``duration`` giây; None nếu không cắt (cả hai trống, hoặc đúng
+    trọn video)."""
+    if start is None and end is None:
+        return None
+    a = start or 0.0
+    b = duration if end is None else min(end, duration)
+    if a >= duration:
+        raise MediaError(f"mốc bắt đầu ({a:g} giây) vượt quá độ dài video ({duration:g} giây)")
+    if b - a < 1:
+        raise MediaError("đoạn cắt phải dài ít nhất 1 giây và mốc kết thúc phải sau mốc bắt đầu")
+    if a <= 0 and b >= duration:
+        return None
+    return a, b
+
+
+def check_downloadable(info: Dict[str, Any], max_minutes: Optional[int], doan: Optional[tuple] = None) -> None:
+    """Soát kết quả dò ``-J`` trước khi cho tải thật. ``doan`` (bắt đầu, kết thúc): chỉ tải đoạn đó, nên giới hạn
+    thời lượng và dung lượng tính trên đoạn cắt."""
     from tools.url_safety import is_safe_url
 
     if info.get("_type", "video") != "video":
@@ -500,10 +537,11 @@ def check_downloadable(info: Dict[str, Any], max_minutes: Optional[int]) -> None
     duration = info.get("duration")
     if not duration:
         raise MediaError("không xác định được thời lượng video nên không tải")
-    if max_minutes and duration > max_minutes * 60:
-        raise MediaError(f"video dài quá {max_minutes} phút — chỉ tải được video ngắn hơn")
+    dai = (doan[1] - doan[0]) if doan else duration
+    if max_minutes and dai > max_minutes * 60:
+        raise MediaError(f"{'đoạn cắt' if doan else 'video'} dài quá {max_minutes} phút — chỉ tải được đoạn ngắn hơn")
     formats = info.get("requested_formats") or [info]
-    size = sum((f.get("filesize") or f.get("filesize_approx") or 0) for f in formats)
+    size = sum((f.get("filesize") or f.get("filesize_approx") or 0) for f in formats) * dai / duration
     if size > VIDEO_MAX_MB * 1024 * 1024:
         raise MediaError(f"video nặng quá {VIDEO_MAX_MB} MB, không gửi qua Zalo được")
     # Nguồn tải do trang video khai ra: không được trỏ vào máy chủ hay mạng LAN.
@@ -513,16 +551,20 @@ def check_downloadable(info: Dict[str, Any], max_minutes: Optional[int]) -> None
             raise MediaError("nguồn tải của video không an toàn nên không tải")
 
 
-async def download_video(url: str, workdir: str, *, max_minutes: Optional[int]) -> str:
-    """Tải video Full HD vào ``workdir``; trả về đường dẫn tệp."""
+async def download_video(url: str, workdir: str, *, max_minutes: Optional[int],
+                         start: Optional[float] = None, end: Optional[float] = None) -> str:
+    """Tải video Full HD vào ``workdir``; trả về đường dẫn tệp. ``start``/``end`` (giây): chỉ tải đúng đoạn đó
+    (yt-dlp --download-sections, cắt chính xác ở mốc) — nhanh hơn nhiều so với tải cả video rồi cắt."""
     rc, out, err = await _run_ytdlp(["-J", *_FORMAT_ARGS, url], INFO_TIMEOUT_S)
     info = _video_info(out, err)
-    check_downloadable(info, max_minutes)
+    doan = cat_doan(start, end, float(info.get("duration") or 0)) if info.get("duration") else None
+    check_downloadable(info, max_minutes, doan)
+    cat = (["--download-sections", f"*{doan[0]:.3f}-{doan[1]:.3f}", "--force-keyframes-at-cuts"] if doan else [])
 
     probe = Path(workdir, "probe.info.json")
     probe.write_text(json.dumps(info), encoding="utf-8")
     rc, out, err = await _run_ytdlp([
-        "--load-info-json", str(probe), *_FORMAT_ARGS,
+        "--load-info-json", str(probe), *_FORMAT_ARGS, *cat,
         "--merge-output-format", "mp4",
         "--max-filesize", f"{VIDEO_MAX_MB}M",
         "-o", os.path.join(workdir, "%(title).80B [%(id)s].%(ext)s"),

@@ -36,7 +36,7 @@ FEATURE_TOOLS: Dict[str, tuple] = {
     "kb": ("zalo_kb_list", "zalo_kb_read"),
     "people": ("zalo_remember_person", "zalo_recall_person"),
     "academic": ("zalo_academic_search", "zalo_dictionary", "zalo_species"),
-    "video": ("zalo_video_info", "zalo_video_download"),
+    "video": ("zalo_video_info", "zalo_video_download", "zalo_video_ghep", "zalo_video_edit"),
     "history": ("zalo_thread_history",),
 }
 
@@ -52,7 +52,7 @@ FEATURE_LABELS: Dict[str, str] = {
     "kb": "kho tài liệu",
     "people": "sổ người quen",
     "academic": "tra cứu học thuật",
-    "video": "tải và xem thông tin video",
+    "video": "tải, cắt ghép, sửa và xem thông tin video",
     "history": "tra lịch sử trò chuyện",
 }
 

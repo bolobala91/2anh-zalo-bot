@@ -545,5 +545,91 @@ class PublicToolsetTest(unittest.TestCase):
             self.assertTrue(tools._member_may_call(name, {}))
 
 
+class CatVideoTest(unittest.TestCase):
+    """Cắt một đoạn khi tải (người dùng: "tải video về, giữ lại từ 0:00 đến 1:20")."""
+
+    def test_doc_moc(self):
+        for raw, giay in (("80", 80), ("1:20", 80), ("01:20", 80), ("0:01:20", 80), ("1:02:03", 3723), ("12.5", 12.5),
+                          ("", None), (None, None)):
+            self.assertEqual(media.doc_moc(raw), giay, raw)
+        for raw in ("1p20", "abc", "1:2:3:4", "-5"):
+            with self.subTest(raw=raw), self.assertRaises(media.MediaError):
+                media.doc_moc(raw)
+
+    def test_cat_doan(self):
+        self.assertEqual(media.cat_doan(0, 80, 816), (0.0, 80))
+        self.assertEqual(media.cat_doan(None, 900, 816), None)          # đúng trọn video: không cắt
+        self.assertEqual(media.cat_doan(600, None, 816), (600, 816.0))
+        for a, b in ((900, None), (50, 40), (10, 10.5)):
+            with self.subTest(a=a, b=b), self.assertRaises(media.MediaError):
+                media.cat_doan(a, b, 816)
+
+    def test_gioi_han_tinh_tren_doan_cat(self):
+        dai = probe(duration=3600, filesize=600 * 1024 * 1024)
+        with self.assertRaises(media.MediaError):
+            media.check_downloadable(dai, 20)                          # cả video: 60 phút, 600 MB
+        media.check_downloadable(dai, 20, (0, 80))                      # đoạn 80 giây: ~13 MB
+
+    def test_chi_tai_dung_doan(self):
+        goi = []
+
+        async def fake(args, timeout):
+            goi.append(args)
+            if "-J" in args:
+                return 0, json.dumps(probe(duration=816, filesize=177 * 1024 * 1024)), ""
+            out = Path(args[args.index("-o") + 1].replace("%(title).80B [%(id)s].%(ext)s", "clip.mp4"))
+            out.write_bytes(b"0" * 100)
+            return 0, str(out) + "\n", ""
+
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(media, "_run_ytdlp", fake):
+            path = run(media.download_video(YT, d, max_minutes=20, start=0, end=80))
+        self.assertTrue(path.endswith("clip.mp4"))
+        tai = goi[-1]
+        self.assertEqual(tai[tai.index("--download-sections") + 1], "*0.000-80.000")
+        self.assertIn("--force-keyframes-at-cuts", tai)
+
+    def test_khong_cat_thi_khong_them_tham_so(self):
+        goi = []
+
+        async def fake(args, timeout):
+            goi.append(args)
+            if "-J" in args:
+                return 0, json.dumps(probe()), ""
+            out = Path(args[args.index("-o") + 1].replace("%(title).80B [%(id)s].%(ext)s", "v.mp4"))
+            out.write_bytes(b"0")
+            return 0, str(out) + "\n", ""
+
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(media, "_run_ytdlp", fake):
+            run(media.download_video(YT, d, max_minutes=20))
+        self.assertNotIn("--download-sections", goi[-1])
+
+    def test_y_dinh_cat_video_la_y_dinh_tai(self):
+        for text in ("cắt video này từ 0 đến 1 phút 20", "cat clip giup chi", "trích đoạn đầu video",
+                     "tải video về, giữ lại cho chị từ phút thứ 0.0 đến 1.20s"):
+            self.assertTrue(tools._wants_download(text), text)
+        self.assertFalse(tools._wants_download("cắt giảm chi phí"))
+
+    def test_cong_cu_chuyen_moc_xuong_tai(self):
+        tools._VIDEO_QUOTA.clear()
+        nhan = {}
+
+        async def fake_download(url, workdir, *, max_minutes, start=None, end=None):
+            nhan.update(start=start, end=end)
+            p = Path(workdir, "c.mp4")
+            p.write_bytes(b"0")
+            return str(p)
+
+        async def fake_invoke(action, params):
+            return json.dumps({"success": True})
+
+        with as_member("cắt video này từ 0:00 đến 1:20 giúp chị", is_group=True, thread_id="g1"), \
+                mock.patch.object(media, "download_video", fake_download), \
+                mock.patch.object(tools, "_invoke", fake_invoke), \
+                mock.patch.object(tools, "_scoped_thread", return_value=("g1", "group", None)):
+            out = json.loads(run(tools.zalo_video_download({"url": YT, "start": "0:00", "end": "1:20"})))
+        self.assertTrue(out.get("success"), out)
+        self.assertEqual(nhan, {"start": 0.0, "end": 80.0})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

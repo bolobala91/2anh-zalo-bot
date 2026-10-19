@@ -85,7 +85,7 @@ class ModelCommandTest(unittest.TestCase):
         self.assertEqual(self.config.read_bytes().decode("utf-8"), CONFIG)
 
     def test_same_model_is_a_no_op(self):
-        self.assertIn("đang dùng hermes rồi", self.run_cmd("hermes"))
+        self.assertIn("Đang dùng hermes rồi", self.run_cmd("hermes"))
 
     def test_list_uses_choices_and_marks_current_and_default(self):
         reply = self.run_cmd("list", choices=["hermes", "ag/claude-opus-4-6-thinking"])

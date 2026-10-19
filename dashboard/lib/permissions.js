@@ -22,7 +22,7 @@ export const FEATURES = [
   { key: 'kb', label: 'Kho tài liệu', hint: 'Đọc tài liệu chủ bot đã mở cho nhóm' },
   { key: 'people', label: 'Sổ người quen', hint: 'Ghi nhớ và tra hồ sơ thành viên' },
   { key: 'academic', label: 'Tra cứu học thuật', hint: 'Tìm bài báo khoa học' },
-  { key: 'video', label: 'Video', hint: 'Xem thông tin và tải video từ link' },
+  { key: 'video', label: 'Video', hint: 'Xem thông tin, tải, cắt ghép video (link hoặc video gửi vào Zalo) và sửa video: phụ đề, nhạc nền, logo, chuyển cảnh' },
   { key: 'history', label: 'Tra lịch sử trò chuyện', hint: 'Bot tìm lại tin cũ của chính nhóm này khi được hỏi "hôm trước ai nói gì", "ai đã gửi tệp X"' },
 ];
 export const FEATURE_KEYS = FEATURES.map((f) => f.key);
@@ -35,7 +35,7 @@ export const STUDIO_FEATURES = [
   { key: 'studioSlides', label: 'Slide PowerPoint', hint: 'Bài giảng, báo cáo, hoạt động Đoàn, poster, tập huấn — tệp .pptx làm bằng 2Anh Studio, có ảnh AI/ảnh web' },
   { key: 'studioDocs', label: 'Văn bản và giáo án', hint: 'Giáo án 5512, văn bản hành chính Nghị định 30, văn bản Đoàn, văn bản Đảng — tệp Word' },
   { key: 'studioExams', label: 'Đề thi, SKKN, trò chơi, thí nghiệm ảo', hint: 'Đề kiểm tra, đề KHTN tiếng Anh, sáng kiến kinh nghiệm, trò chơi (trắc nghiệm, ghép đôi, ô chữ, vòng quay, thẻ lật, đếm ngược), thí nghiệm ảo' },
-  { key: 'studioVideo', label: 'Video', hint: 'Video giải thích (viết tay, cắt dán, Vox có ảnh AI) và video bài giảng từ slide, tối đa 3 phút, 720p. Máy chủ chạy nặng vài phút mỗi video' },
+  { key: 'studioVideo', label: 'Video', hint: 'Video giải thích (viết tay, cắt dán, Vox có ảnh AI, video ngắn TikTok có nhân vật minh hoạ và phụ đề nổi bật) và video bài giảng từ slide, tối đa 3 phút, 720p. Bot hỏi phong cách và gửi kịch bản để duyệt trước khi dựng. Máy chủ chạy nặng vài phút mỗi video' },
   { key: 'studioImage', label: 'Vẽ ảnh AI', hint: 'Nhờ bot vẽ hoặc sửa ảnh theo mô tả — dùng nguồn ở Khoá API & Model › Tạo ảnh & video, tốn tiền mỗi ảnh' },
   { key: 'studioAIVideo', label: 'Tạo video AI', hint: 'Nhờ bot tạo video ngắn từ mô tả hoặc ảnh (Stali, vài nghìn đồng mỗi video); xong bot tự gửi vào cuộc trò chuyện' },
 ];

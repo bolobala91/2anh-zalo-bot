@@ -2,6 +2,106 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.55.0] — 2026-10-19
+
+### Thêm — Cắt ghép và sửa video ngay trên Zalo
+
+- **`zalo_video_ghep`** — cắt rồi ghép đơn thuần nhiều đoạn thành một video.
+  - Nguồn: link video (YouTube, TikTok, Facebook…; chỉ tải đúng đoạn cần) hoặc video người dùng gửi vào Zalo, chọn theo số thứ tự.
+  - Tự đưa các đoạn về cùng khổ: dọc 720×1280 hoặc ngang 1280×720 theo đa số. Hình lệch tỉ lệ đặt giữa trên nền mờ, không méo. Đoạn không có tiếng được thêm im lặng.
+  - Không có hiệu ứng.
+- **`zalo_video_edit`** — khi người dùng muốn thêm phụ đề, nhạc nền, logo hoặc hiệu ứng chuyển cảnh:
+  - Chuyển cảnh: mờ dần, trượt, lau ngang, mở vòng tròn, phóng to.
+  - Logo: ảnh người dùng gửi, đặt ở một trong bốn góc.
+  - Nhạc nền: tệp nhạc gửi kèm hoặc link, chỉnh được âm lượng, có thể tắt tiếng gốc.
+  - Phụ đề: AI soạn kèm mốc thời gian (video YouTube có phụ đề thì lấy lời và mốc từ `zalo_video_info`), hiện font Phudu chữ vàng viền đen.
+- Cả hai công cụ:
+  - Chạy nền, tự nhắn "bạn chờ khoảng N phút" và tự gửi video vào đúng cuộc trò chuyện khi xong.
+  - Mỗi máy xử lý một video một lúc.
+  - Người trong nhóm: tối đa 5 đoạn, tổng 10 phút, tính chung lượt với tải video (3 lần mỗi giờ). Chỉ làm khi chính tin của họ nhờ cắt, ghép hay sửa video.
+  - Bật/tắt cùng nút "Video" trên dashboard.
+- Font Phudu ExtraBold (OFL) đi kèm plugin để đốt phụ đề.
+
+## [2.54.1] — 2026-10-19
+
+### Thêm — Cắt video khi tải
+
+- `zalo_video_download` có thêm `start` / `end` (số giây, `phút:giây` hoặc `giờ:phút:giây`). Bot chỉ tải và gửi đúng đoạn cần, ví dụ "tải video về, giữ lại từ 0:00 đến 1:20".
+  - Dùng `yt-dlp --download-sections`, cắt chính xác ở mốc.
+  - Nhanh hơn nhiều so với tải cả video: đoạn 80 giây của một video 13 phút tải trong khoảng 80 giây trên VPS, trong khi tải cả video (177 MB) quá giới hạn 7 phút của một lần gọi công cụ.
+- Giới hạn cho người trong nhóm (20 phút, 300 MB) giờ tính trên đoạn cắt, nên lấy được một đoạn ngắn từ video dài.
+- Câu "cắt video", "cắt đoạn", "trích đoạn…" được nhận là yêu cầu tải.
+
+## [2.54.0] — 2026-10-19
+
+### Đổi — Video ngắn "nhịp hình" (2Anh Studio 6.3.2-vi.22)
+
+- Video ngắn (`kieu: ngan`) làm lại theo các kênh TikTok triệu lượt xem:
+  - Hình đổi theo từng câu.
+  - Nhân vật minh hoạ tự ghép đúng vai nội dung (học sinh, thầy cô, bác sĩ, công an, đầu bếp, nông dân…) và đổi tư thế theo lời.
+  - Có thêm số khổng lồ, lưới chấm, trước → sau, tin nhắn, thông báo, trích dẫn.
+  - Hai giao diện, AI chọn theo nội dung: **phẳng sáng** cho kỹ năng sống và mẹo học, **tối dữ liệu** cho tin công nghệ và số liệu.
+- Phụ đề nổi bật:
+  - Căn giữa, mỗi lúc một dòng, ngắt đúng cụm từ.
+  - Từ khoá được tô nền, khoanh tròn, gạch chân hoặc chữ to khác font.
+- Tiếng hiệu ứng đa dạng theo từng loại hình: vút, bụp, pop, tích tích, ding.
+- Bước kiểm kịch bản nhận ngữ pháp nhịp của video ngắn. Kịch bản còn `loai:` hay thiếu nhịp thì báo lại để AI viết lại.
+- Bản kịch bản gửi duyệt ghi giao diện, dàn nhân vật và tóm tắt từng nhịp hình, ví dụ "an suy-nghi → biểu tượng alarm → an vo-dau → …".
+- Giọng VieNeu không còn đọc sai tiếng đầu câu.
+
+## [2.53.2] — 2026-10-18
+
+### Đổi — Video bài giảng đọc bằng VieNeu
+
+- Video bài giảng từ slide đọc lời giảng bằng giọng VieNeu Thu Giang (2Anh Studio 6.3.2-vi.20 `giong_bai_giang.py`), có phụ đề chia theo câu. Máy chủ không có VieNeu thì studio tự đọc bằng giọng edge-tts dự phòng. Studio cũ chưa có script này thì dùng cách cũ.
+
+### Sửa
+
+- Video giọng VieNeu chạy trong sandbox của xưởng không còn tải lại model khoảng 600 MB mỗi lần làm: xưởng trỏ `HF_HOME` về kho model thật thay vì thư mục việc tạm.
+
+## [2.53.1] — 2026-10-18
+
+### Đổi — Giọng VieNeu là giọng chính cho video
+
+- Kịch bản video luôn dùng giọng VieNeu. Nếu AI không ghi giọng hoặc ghi giọng edge-tts, xưởng tự đổi sang giọng VieNeu gần nhất:
+  - nữ → Thu Giang;
+  - nam → Minh Quân;
+  - nam trầm → Thanh Bình.
+- Giọng edge-tts chỉ còn là dự phòng: máy chủ không có VieNeu (VPS) thì studio tự đọc bằng giọng edge-tts cùng giới (studio 6.3.2-vi.19).
+
+## [2.53.0] — 2026-10-18
+
+### Thêm — Video hấp dẫn hơn, giọng đọc chọn theo nội dung
+
+- Khi viết kịch bản video (mọi phong cách), AI đọc thêm hai hướng dẫn mới của 2Anh Studio 6.3.2-vi.18:
+  - **video-hap-dan.md**: hook 3 giây đầu, không có hai cảnh liền nhau cùng loại, mỗi cảnh có hình để nhìn, đổi nhịp 5–8 giây, lời văn nói, kết có kêu gọi.
+  - **chon-giong.md**: chọn giọng theo nội dung trong 24 giọng VieNeu (tự nhiên, tin tức, kể chuyện, đọc truyện; Bắc, Trung, Nam) và 4 giọng edge-tts. Không còn mặc định một giọng.
+- Bản kịch bản gửi để duyệt ghi rõ giọng đã chọn, ví dụ "Giọng: Thanh Bình (nam, Bắc, kể chuyện)". Muốn đổi thì người dùng nói ở bước sửa kịch bản.
+- Máy không có VieNeu (VPS RAM thấp): studio tự đọc bằng giọng edge-tts cùng giới, gần chất giọng nhất.
+
+### Sửa — video khổ dọc (studio vi.18)
+
+- Hình không còn tràn mép.
+- Phụ đề chỉ tô vàng từ đang đọc.
+- Khung khái niệm không còn trống nửa màn hình.
+
+## [2.52.1] — 2026-10-18
+
+### Đổi — Tin báo chờ xưng đúng tên
+
+- Tin báo chờ và kịch bản video dùng **tên Zalo của chính tài khoản** thay cho chữ "bot": "🎨 Lăng Tiêu đang vẽ ảnh, bạn chờ khoảng 1 phút nhé", "⏳ Uyển Nhi đang tạo video giải thích…, bạn chờ khoảng 5–15 phút nhé — xong Uyển Nhi tự gửi tệp vào đây", "Trả lời "OK" để Lăng Tiêu tạo video…". Chưa đọc được tên thì xưng "Mình".
+- Lệnh đổi model trả lời "Đang dùng … rồi." (bỏ chữ "Bot").
+
+## [2.52.0] — 2026-10-18
+
+### Thêm — Video: hỏi phong cách, duyệt kịch bản rồi mới dựng
+
+- **Video giải thích của xưởng đi ba bước:** bot hỏi phong cách (viết tay trên bảng, cắt dán giấy, Vox có ảnh AI, **video ngắn mạng xã hội nền neon**), viết kịch bản và gửi vào Zalo để người dùng duyệt: phong cách, khổ, giọng, thời lượng ước tính, từng cảnh "trên hình có gì" và lời đọc, kèm mã `kb-…`. Người dùng đồng ý thì bot mới dựng, đúng bản đã duyệt; muốn sửa thì nói điều cần sửa, bot viết lại từ bản cũ. Kịch bản giữ 48 giờ, chỉ người đã nhờ ở đúng cuộc trò chuyện đó dùng được; người không phải chủ nhân viết tối đa 5 kịch bản mỗi ngày.
+- **Phong cách video ngắn mạng xã hội** (`ngan`, cần 2Anh Studio 6.3.2-vi.17): khổ dọc 9:16 cho TikTok, Reels; ba công thức kịch bản: giải thích nhanh (hook → vấn đề → giải pháp → kêu gọi), so sánh hai khái niệm dễ nhầm, tin nhanh từ một link bài báo.
+- **Video bài giảng từ slide:** bot hỏi kiểu bài và chốt dàn ý với người dùng trước khi làm.
+- **Video AI** (`zalo_media`): bot hỏi phong cách (điện ảnh, hoạt hình 3D, anime…), gửi kịch bản ngắn để người dùng xác nhận rồi mới tạo.
+- **Tin báo chờ tự động:** khi nhận việc vẽ ảnh, tạo video, làm sản phẩm xưởng hay viết kịch bản, bot nhắn ngay "bạn chờ khoảng N phút nhé" (ảnh ~1 phút, video ngắn/viết tay 5–15 phút, Vox 10–25 phút, video bài giảng 15–30 phút, video AI 3–15 phút; có hàng đợi thì báo vị trí), không phụ thuộc mô hình có nhớ nói hay không.
+
 ## [2.51.3] — 2026-10-17
 
 ### Sửa — Kết nối MCP gọn hơn
