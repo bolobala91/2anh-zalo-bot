@@ -394,7 +394,7 @@ class AdapterGroupRulesTest(PermissionsFile, AdapterHarness, unittest.IsolatedAs
         adapter = self.make_adapter()
         await self.say(adapter, "m1", MEMBER, "@Lăng Tiêu tra giá vàng")
         context = self.handled[0].channel_context
-        self.assertIn("Nhóm này đang tắt: tra cứu web, tải và xem thông tin video", context)
+        self.assertIn("Nhóm này đang tắt: tra cứu web, tải, cắt ghép, sửa và xem thông tin video", context)
         await self.say(adapter, "m2", OWNER, "@Lăng Tiêu tra giá vàng")
         self.assertNotIn("đang tắt", self.handled[1].channel_context or "")
 

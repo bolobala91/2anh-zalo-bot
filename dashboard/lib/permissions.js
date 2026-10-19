@@ -22,7 +22,7 @@ export const FEATURES = [
   { key: 'kb', label: 'Kho tài liệu', hint: 'Đọc tài liệu chủ bot đã mở cho nhóm' },
   { key: 'people', label: 'Sổ người quen', hint: 'Ghi nhớ và tra hồ sơ thành viên' },
   { key: 'academic', label: 'Tra cứu học thuật', hint: 'Tìm bài báo khoa học' },
-  { key: 'video', label: 'Video', hint: 'Xem thông tin và tải video từ link' },
+  { key: 'video', label: 'Video', hint: 'Xem thông tin, tải, cắt ghép video (link hoặc video gửi vào Zalo) và sửa video: phụ đề, nhạc nền, logo, chuyển cảnh' },
   { key: 'history', label: 'Tra lịch sử trò chuyện', hint: 'Bot tìm lại tin cũ của chính nhóm này khi được hỏi "hôm trước ai nói gì", "ai đã gửi tệp X"' },
 ];
 export const FEATURE_KEYS = FEATURES.map((f) => f.key);

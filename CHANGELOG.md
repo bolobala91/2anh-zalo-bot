@@ -2,6 +2,26 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.55.0] — 2026-10-19
+
+### Thêm — Cắt ghép và sửa video ngay trên Zalo
+
+- **`zalo_video_ghep`** — cắt rồi ghép đơn thuần nhiều đoạn thành một video.
+  - Nguồn: link video (YouTube, TikTok, Facebook…; chỉ tải đúng đoạn cần) hoặc video người dùng gửi vào Zalo, chọn theo số thứ tự.
+  - Tự đưa các đoạn về cùng khổ: dọc 720×1280 hoặc ngang 1280×720 theo đa số. Hình lệch tỉ lệ đặt giữa trên nền mờ, không méo. Đoạn không có tiếng được thêm im lặng.
+  - Không có hiệu ứng.
+- **`zalo_video_edit`** — khi người dùng muốn thêm phụ đề, nhạc nền, logo hoặc hiệu ứng chuyển cảnh:
+  - Chuyển cảnh: mờ dần, trượt, lau ngang, mở vòng tròn, phóng to.
+  - Logo: ảnh người dùng gửi, đặt ở một trong bốn góc.
+  - Nhạc nền: tệp nhạc gửi kèm hoặc link, chỉnh được âm lượng, có thể tắt tiếng gốc.
+  - Phụ đề: AI soạn kèm mốc thời gian (video YouTube có phụ đề thì lấy lời và mốc từ `zalo_video_info`), hiện font Phudu chữ vàng viền đen.
+- Cả hai công cụ:
+  - Chạy nền, tự nhắn "bạn chờ khoảng N phút" và tự gửi video vào đúng cuộc trò chuyện khi xong.
+  - Mỗi máy xử lý một video một lúc.
+  - Người trong nhóm: tối đa 5 đoạn, tổng 10 phút, tính chung lượt với tải video (3 lần mỗi giờ). Chỉ làm khi chính tin của họ nhờ cắt, ghép hay sửa video.
+  - Bật/tắt cùng nút "Video" trên dashboard.
+- Font Phudu ExtraBold (OFL) đi kèm plugin để đốt phụ đề.
+
 ## [2.54.1] — 2026-10-19
 
 ### Thêm — Cắt video khi tải

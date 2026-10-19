@@ -27,7 +27,7 @@ import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import group_permissions
 from . import ai_events  # noqa: F401  (nạp sẵn: adapter ghi lượt đọc ảnh qua _zalo_tools_module("ai_events"))
@@ -2546,6 +2546,194 @@ async def zalo_video_download(args: Dict[str, Any], **_kw) -> str:
         media.DOWNLOAD_LOCK.release()
 
 
+# ---- Cắt ghép / sửa video (video_edit.py): chạy nền, xong tự gửi tệp vào đúng cuộc trò chuyện ----
+# Người trong nhóm chỉ được nhờ khi CHÍNH TIN HỌ GÕ có ý cắt/ghép/sửa video (như _wants_download).
+_VIDEO_EDIT_INTENT = re.compile(
+    r"\b(ghép|ghep|nối|noi|cắt|cat|trích|trich|chèn|chen|gộp|gop|edit|dựng|dung|sửa|sua|làm)\s*"
+    r"(video|clip|đoạn|doan|lại|lai|phụ đề|phu de|sub|nhạc|nhac|logo|hiệu ứng|hieu ung|chuyển cảnh|chuyen canh)\b"
+    r"|\b(ghép|ghep|nối|noi|gộp|gop)\b",
+    re.IGNORECASE,
+)
+VIDEO_EDIT_LOCK = threading.Lock()
+
+
+def _wants_video_edit(text: str) -> bool:
+    plain = unicodedata.normalize("NFC", re.sub(r"https?://\S+", " ", str(text or "")))
+    return bool(_VIDEO_EDIT_INTENT.search(plain)) or _wants_download(plain)
+
+
+def _video_edit_check(args: Dict[str, Any], turn: Dict[str, Any], as_owner: bool) -> Tuple[List[Dict[str, Any]], str]:
+    """Kiểm nguồn các đoạn TRƯỚC khi nhận việc (lỗi báo ngay trong lượt). Trả (đoạn đã kiểm, lỗi)."""
+    from . import media, video_edit
+
+    raw = args.get("doan")
+    toi_da = video_edit.MAX_DOAN_CHU if as_owner else video_edit.MAX_DOAN_THANH_VIEN
+    if not isinstance(raw, list) or not raw:
+        return [], _err("`doan` là danh sách các đoạn theo thứ tự, mỗi đoạn có `url` (link video) hoặc `tep` "
+                        "(số thứ tự video người dùng gửi, đếm từ 1), kèm `start`/`end` nếu chỉ lấy một phần")
+    if len(raw) > toi_da:
+        return [], _err(f"tối đa {toi_da} đoạn mỗi lần")
+    ds = []
+    try:
+        for k, d in enumerate(raw, 1):
+            if not isinstance(d, dict) or bool(d.get("url")) == bool(d.get("tep")):
+                return [], _err(f"đoạn {k} cần đúng một trong hai: `url` hoặc `tep`")
+            tu, den = media.doc_moc(d.get("start")), media.doc_moc(d.get("end"))
+            if tu is not None and den is not None and den - tu < 1:
+                return [], _err(f"đoạn {k}: mốc kết thúc phải sau mốc bắt đầu ít nhất 1 giây")
+            if d.get("url"):
+                url = str(d["url"]).strip()
+                if not media.is_video_url(url):
+                    return [], _err(f"đoạn {k}: chỉ lấy được video YouTube, TikTok, Facebook, Instagram, X, Vimeo, "
+                                    "Dailymotion")
+                ds.append({"url": url, "tu": tu, "den": den})
+            else:
+                ds.append({"path": video_edit.chon_tep(turn.get("attachments") or [], "video", int(d["tep"])),
+                           "tu": tu, "den": den})
+    except (media.MediaError, ValueError, TypeError) as exc:
+        return [], _err(str(exc))
+    return ds, ""
+
+
+def _video_edit_run(turn: Dict[str, Any], doan: List[Dict[str, Any]], opts: Dict[str, Any], as_owner: bool,
+                    caption: str) -> None:
+    """Luồng nền: lấy từng đoạn, chuẩn hoá, ghép (kèm hiệu ứng nếu là bản sửa), gửi, dọn."""
+    import asyncio
+
+    from . import media, media_engines, video_edit
+
+    workdir = None
+    try:
+        workdir = video_edit.thu_muc_tam()
+        nguon = []
+        for k, d in enumerate(doan):
+            if d.get("url"):
+                sub = Path(workdir, f"tai{k}")
+                sub.mkdir()
+                cat = {x: d[y] for x, y in (("start", "tu"), ("end", "den")) if d.get(y) is not None}
+                path = asyncio.run(media.download_video(
+                    d["url"], str(sub), max_minutes=None if as_owner else media.VIDEO_MAX_MINUTES, **cat))
+                nguon.append({"path": path, "tu": None, "den": None})
+            else:
+                nguon.append(d)
+        cac_do = [video_edit.do(n["path"]) for n in nguon]
+        dai = sum(min(n["den"] if n["den"] is not None else do_["giay"], do_["giay"]) - (n["tu"] or 0)
+                  for n, do_ in zip(nguon, cac_do))
+        if not as_owner and dai > video_edit.MAX_PHUT_THANH_VIEN * 60:
+            raise media.MediaError(f"tổng các đoạn dài quá {video_edit.MAX_PHUT_THANH_VIEN} phút")
+        kho = video_edit.kho_chung(cac_do)
+        cac_tep, cac_giay = [], []
+        for k, (n, do_) in enumerate(zip(nguon, cac_do)):
+            ten = f"d{k}.mp4"
+            video_edit.chuan_hoa(n["path"], ten, kho, do_["co_tieng"], workdir, n.get("tu"), n.get("den"))
+            cac_tep.append(ten)
+            cac_giay.append(video_edit.do(str(Path(workdir, ten)))["giay"])
+        if opts:
+            for khoa in ("logo", "nhac"):
+                if opts.get(khoa + "_url"):
+                    sub = Path(workdir, khoa)
+                    sub.mkdir()
+                    opts[khoa] = asyncio.run(media.download_video(opts[khoa + "_url"], str(sub), max_minutes=None))
+            tong = video_edit.sua(cac_tep, cac_giay, "ket-qua.mp4", workdir, kho,
+                                  chuyen=opts.get("chuyen"), logo=opts.get("logo"),
+                                  vi_tri_logo=opts.get("vi_tri_logo") or "tren-phai", nhac=opts.get("nhac"),
+                                  am_luong_nhac=opts.get("am_luong_nhac", 25),
+                                  tat_tieng_goc=bool(opts.get("tat_tieng_goc")),
+                                  cues=video_edit.cues_hop_le(opts.get("phu_de"), None))
+        else:
+            video_edit.noi(cac_tep, "ket-qua.mp4", workdir)
+            tong = sum(cac_giay)
+        ket = str(Path(workdir, "ket-qua.mp4"))
+        video_edit.kiem_ra(ket)
+        msg = caption or f"🎬 Video {'đã sửa' if opts else 'đã ghép'} ({len(doan)} đoạn, {round(tong)} giây)"
+        if not media_engines._send_to_turn(turn, {"msg": msg, "attachments": [ket]}):
+            media_engines._send_to_turn(turn, {"msg": "Video đã xong nhưng chưa gửi được vào đây — thử lại giúp em nhé."})
+    except media.MediaError as exc:
+        media_engines._send_to_turn(turn, {"msg": f"Chưa làm được video: {exc}."})
+    except Exception:
+        logger.warning("[zalo] cắt ghép video lỗi", exc_info=True)
+        media_engines._send_to_turn(turn, {"msg": "Chưa làm được video do lỗi khi xử lý."})
+    finally:
+        video_edit.don(workdir)
+        VIDEO_EDIT_LOCK.release()
+
+
+async def _video_edit_start(args: Dict[str, Any], opts: Dict[str, Any]) -> str:
+    turn = _turn() or {}
+    as_owner = _acting_as_owner(turn)
+    if not as_owner and not _wants_video_edit(turn.get("text") or ""):
+        return _err("người dùng chưa nhờ cắt/ghép/sửa video — đừng tự làm")
+    thread_id, kind, err = _scoped_thread({})
+    if err:
+        return err
+    doan, err = _video_edit_check(args, turn, as_owner)
+    if err:
+        return err
+    if not VIDEO_EDIT_LOCK.acquire(blocking=False):
+        return _err("đang xử lý một video khác, thử lại sau ít phút")
+    try:
+        if not as_owner:
+            denied = _take_quota(_VIDEO_QUOTA, str(turn.get("sender_uid") or ""), VIDEO_QUOTA_PER_HOUR, "xử lý video")
+            if denied:
+                VIDEO_EDIT_LOCK.release()
+                return denied
+        captured = {k: turn.get(k) for k in ("sender_uid", "sender_name", "thread_id", "is_group", "is_owner")}
+        captured["thread_id"] = thread_id
+        name = _bot_name()
+        phut = "3–8" if opts or len(doan) > 2 else "2–5"
+        await _send_wait(turn, f"🎬 {name} đang {'sửa' if opts else 'ghép'} video ({len(doan)} đoạn), bạn chờ khoảng "
+                               f"{phut} phút nhé — xong {name} tự gửi vào đây.")
+        threading.Thread(target=_video_edit_run, args=(captured, doan, opts, as_owner, str(args.get("caption") or "")),
+                         daemon=True, name="zalo-video-edit").start()
+    except BaseException:
+        VIDEO_EDIT_LOCK.release()
+        raise
+    return _ok({"status": "queued", "note": f"ĐÃ nhắn người dùng chờ {phut} phút; video sẽ tự gửi vào đây khi xong. "
+                                            "Trả lời ngắn, đừng gọi lại công cụ này."})
+
+
+async def zalo_video_ghep(args: Dict[str, Any], **_kw) -> str:
+    """Cắt rồi ghép các đoạn video (link hoặc video người dùng gửi) thành một video, không hiệu ứng."""
+    return await _video_edit_start(args, {})
+
+
+async def zalo_video_edit(args: Dict[str, Any], **_kw) -> str:
+    """Cắt ghép kèm chuyển cảnh, logo, nhạc nền, phụ đề."""
+    from . import media, video_edit
+
+    turn = _turn() or {}
+    opts: Dict[str, Any] = {}
+    try:
+        chuyen = str(args.get("chuyen_canh") or "khong")
+        if chuyen != "khong":
+            if chuyen not in video_edit.CHUYEN_CANH:
+                return _err(f"`chuyen_canh` là một trong: khong, {', '.join(video_edit.CHUYEN_CANH)}")
+            opts["chuyen"] = chuyen
+        if args.get("logo_tep"):
+            opts["logo"] = video_edit.chon_tep(turn.get("attachments") or [], "image", int(args["logo_tep"]))
+            opts["vi_tri_logo"] = str(args.get("logo_vi_tri") or "tren-phai")
+            if opts["vi_tri_logo"] not in video_edit.VI_TRI_LOGO:
+                return _err(f"`logo_vi_tri` là một trong: {', '.join(video_edit.VI_TRI_LOGO)}")
+        if args.get("nhac_tep"):
+            opts["nhac"] = video_edit.chon_tep(turn.get("attachments") or [], "audio", int(args["nhac_tep"]))
+        elif args.get("nhac_url"):
+            if not media.is_video_url(str(args["nhac_url"])):
+                return _err("`nhac_url` phải là link YouTube/TikTok/… có tiếng")
+            opts["nhac_url"] = str(args["nhac_url"]).strip()
+        if args.get("am_luong_nhac") is not None:
+            opts["am_luong_nhac"] = int(args["am_luong_nhac"])
+        if args.get("tat_tieng_goc"):
+            opts["tat_tieng_goc"] = True
+        if args.get("phu_de"):
+            video_edit.cues_hop_le(args["phu_de"])
+            opts["phu_de"] = args["phu_de"]
+    except (media.MediaError, ValueError, TypeError) as exc:
+        return _err(str(exc))
+    if not opts:
+        return _err("không có hiệu ứng, logo, nhạc hay phụ đề nào — ghép đơn thuần thì dùng zalo_video_ghep")
+    return await _video_edit_start(args, opts)
+
+
 # =====================================================================
 #  Nhóm 9 — Sổ hồ sơ người quen
 # =====================================================================
@@ -3983,6 +4171,43 @@ TOOLS = [
         },
         ["url"],
     ), zalo_video_info, TOOLSET_PUBLIC),
+
+    ("zalo_video_ghep", "✂️", _schema(
+        "zalo_video_ghep",
+        "Cắt và GHÉP ĐƠN THUẦN nhiều đoạn video thành một video rồi tự gửi vào cuộc trò chuyện (chạy nền, tự nhắn "
+        "chờ). Nguồn: link video hoặc video người dùng gửi vào Zalo. Tự đưa các đoạn về cùng khổ (dọc/ngang theo đa "
+        "số, hình lệch tỉ lệ đặt trên nền mờ). KHÔNG có hiệu ứng: người dùng muốn phụ đề, nhạc nền, logo hay hiệu ứng "
+        "chuyển cảnh thì dùng zalo_video_edit. Chỉ cắt một đoạn từ MỘT link thì dùng zalo_video_download (start/end). "
+        "Người trong nhóm: tối đa 5 đoạn, tổng 10 phút, 3 lần mỗi giờ.",
+        {"doan": {"type": "array", "maxItems": 10, "description": "Các đoạn theo đúng thứ tự ghép. Mỗi đoạn: `url` (link video) HOẶC `tep` (video người dùng gửi vào Zalo, đếm từ 1 theo thứ tự gửi), kèm `start`/`end` (giây hoặc phút:giây) nếu chỉ lấy một phần.", "items": {"type": "object", "properties": {"url": {"type": "string"}, "tep": {"type": "integer", "minimum": 1}, "start": {"type": "string"}, "end": {"type": "string"}}, "additionalProperties": False}},
+          "caption": {"type": "string", "description": "Lời nhắn kèm video (tuỳ chọn)."}},
+        ["doan"],
+    ), zalo_video_ghep, TOOLSET_PUBLIC),
+
+    ("zalo_video_edit", "🎞️", _schema(
+        "zalo_video_edit",
+        "Sửa video: cắt ghép các đoạn KÈM phụ đề, nhạc nền, logo và/hoặc hiệu ứng chuyển cảnh, rồi tự gửi vào cuộc "
+        "trò chuyện (chạy nền, tự nhắn chờ). Ghép đơn thuần thì dùng zalo_video_ghep. Phụ đề: tự soạn các câu kèm mốc "
+        "theo video KẾT QUẢ (video YouTube có phụ đề thì đọc lời và mốc bằng zalo_video_info trước); hiện chữ vàng viền "
+        "đen font Phudu. Logo, nhạc: tệp người dùng gửi (ảnh / tệp nhạc, đếm từ 1) hoặc link nhạc. Người trong nhóm: "
+        "tối đa 5 đoạn, tổng 10 phút, 3 lần mỗi giờ.",
+        {"doan": {"type": "array", "maxItems": 10, "description": "Các đoạn theo đúng thứ tự ghép. Mỗi đoạn: `url` (link video) HOẶC `tep` (video người dùng gửi vào Zalo, đếm từ 1 theo thứ tự gửi), kèm `start`/`end` (giây hoặc phút:giây) nếu chỉ lấy một phần.", "items": {"type": "object", "properties": {"url": {"type": "string"}, "tep": {"type": "integer", "minimum": 1}, "start": {"type": "string"}, "end": {"type": "string"}}, "additionalProperties": False}},
+          "chuyen_canh": {"type": "string", "enum": ["khong", "mo", "truot", "xoa", "tron", "phong"],
+                          "description": "Hiệu ứng chuyển giữa các đoạn: mo (mờ dần), truot (trượt), xoa (lau ngang), "
+                                         "tron (mở vòng tròn), phong (phóng to)."},
+          "logo_tep": {"type": "integer", "minimum": 1, "description": "Ảnh logo người dùng gửi (đếm từ 1)."},
+          "logo_vi_tri": {"type": "string", "enum": ["tren-phai", "tren-trai", "duoi-phai", "duoi-trai"]},
+          "nhac_tep": {"type": "integer", "minimum": 1, "description": "Tệp nhạc người dùng gửi (đếm từ 1)."},
+          "nhac_url": {"type": "string", "description": "Link YouTube/TikTok… lấy tiếng làm nhạc nền."},
+          "am_luong_nhac": {"type": "integer", "minimum": 0, "maximum": 100, "description": "Âm lượng nhạc nền, mặc định 25."},
+          "tat_tieng_goc": {"type": "boolean", "description": "Tắt tiếng gốc của video (chỉ còn nhạc nền)."},
+          "phu_de": {"type": "array", "maxItems": 300, "description": "Phụ đề theo mốc của video kết quả.",
+                     "items": {"type": "object", "properties": {"tu": {"type": "string"}, "den": {"type": "string"},
+                                                               "chu": {"type": "string"}},
+                               "required": ["tu", "den", "chu"], "additionalProperties": False}},
+          "caption": {"type": "string", "description": "Lời nhắn kèm video (tuỳ chọn)."}},
+        ["doan"],
+    ), zalo_video_edit, TOOLSET_PUBLIC),
 
     ("zalo_video_download", "⬇️", _schema(
         "zalo_video_download",
