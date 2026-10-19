@@ -2350,7 +2350,8 @@ _VIDEO_INFO_QUOTA: Dict[str, List[float]] = {}
 # "download" không tính) và cần cụm rõ nghĩa — "quá tải", "tải lên" không tính.
 _DOWNLOAD_INTENT = re.compile(
     r"\b(tải|tai)\s*(về|ve|video|clip|xuống|xuong|giúp|giup|dùm|dum|hộ|ho|lại|lai|file|mp4)\b"
-    r"|\bdownload\b|\b(gửi|gui|lưu|luu)\s*(file|video|clip)\b",
+    r"|\bdownload\b|\b(gửi|gui|lưu|luu)\s*(file|video|clip)\b"
+    r"|\b(cắt|cat|trích|trich)\s*(video|clip|đoạn|doan|lấy|lay|giúp|giup|dùm|dum|hộ|ho)\b",
     re.IGNORECASE,
 )
 
@@ -2517,8 +2518,10 @@ async def zalo_video_download(args: Dict[str, Any], **_kw) -> str:
                 return denied
         workdir = media.new_download_dir()
         try:
+            start, end = media.doc_moc(args.get("start")), media.doc_moc(args.get("end"))
+            cat = {k: v for k, v in (("start", start), ("end", end)) if v is not None}
             path = await media.download_video(
-                url, workdir, max_minutes=None if as_owner else media.VIDEO_MAX_MINUTES)
+                url, workdir, max_minutes=None if as_owner else media.VIDEO_MAX_MINUTES, **cat)
         except media.MediaError as exc:
             return _err(str(exc))
         caption = str(args.get("caption") or "").strip()
@@ -3984,12 +3987,18 @@ TOOLS = [
     ("zalo_video_download", "⬇️", _schema(
         "zalo_video_download",
         "Tải video (Full HD, không logo TikTok) rồi gửi tệp vào cuộc trò chuyện "
-        "này. CHỈ gọi khi người dùng nói rõ muốn tải/lấy file video — gửi link "
-        "hay nhờ tóm tắt thì dùng zalo_video_info. Người trong nhóm: video tối "
-        "đa 20 phút, 300 MB, 3 lần mỗi giờ.",
+        "này; CẮT ĐƯỢC một đoạn: truyền start/end thì chỉ tải và gửi đúng đoạn đó "
+        "(nhanh hơn tải cả video — video dài mà chỉ cần một đoạn thì luôn truyền "
+        "start/end). CHỈ gọi khi người dùng nói rõ muốn tải/lấy/cắt file video — "
+        "gửi link hay nhờ tóm tắt thì dùng zalo_video_info. Người trong nhóm: "
+        "video (hoặc đoạn cắt) tối đa 20 phút, 300 MB, 3 lần mỗi giờ.",
         {
             "url": {"type": "string", "description": "Link video."},
             "caption": {"type": "string", "description": "Lời nhắn kèm tệp (tuỳ chọn)."},
+            "start": {"type": "string", "description": "Mốc bắt đầu đoạn cắt: số giây (80) hoặc phút:giây (1:20) "
+                                                        "/ giờ:phút:giây. Bỏ trống = từ đầu. Người dùng viết "
+                                                        "\"1.20\" hay \"1p20\" thường là 1 phút 20 giây → \"1:20\"."},
+            "end": {"type": "string", "description": "Mốc kết thúc đoạn cắt, cùng cách viết. Bỏ trống = đến hết video."},
         },
         ["url"],
     ), zalo_video_download, TOOLSET_PUBLIC),

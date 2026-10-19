@@ -2,6 +2,16 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.54.1] — 2026-10-19
+
+### Thêm — Cắt video khi tải
+
+- `zalo_video_download` có thêm `start` / `end` (số giây, `phút:giây` hoặc `giờ:phút:giây`). Bot chỉ tải và gửi đúng đoạn cần, ví dụ "tải video về, giữ lại từ 0:00 đến 1:20".
+  - Dùng `yt-dlp --download-sections`, cắt chính xác ở mốc.
+  - Nhanh hơn nhiều so với tải cả video: đoạn 80 giây của một video 13 phút tải trong khoảng 80 giây trên VPS, trong khi tải cả video (177 MB) quá giới hạn 7 phút của một lần gọi công cụ.
+- Giới hạn cho người trong nhóm (20 phút, 300 MB) giờ tính trên đoạn cắt, nên lấy được một đoạn ngắn từ video dài.
+- Câu "cắt video", "cắt đoạn", "trích đoạn…" được nhận là yêu cầu tải.
+
 ## [2.54.0] — 2026-10-19
 
 ### Đổi — Video ngắn "nhịp hình" (2Anh Studio 6.3.2-vi.22)
