@@ -2322,7 +2322,7 @@ class ZaloToolSchemaTest(unittest.TestCase):
                 with self.subTest(tool=name, field=key):
                     self.assertEqual(item_spec.get("type"), "string")
 
-    def test_dangerous_owner_tools_expose_human_confirmation_code(self):
+    def test_message_recall_has_no_human_code_schema_but_other_dangerous_tools_keep_it(self):
         dangerous = {
             "zalo_lock_poll", "zalo_pin_conversation", "zalo_mute", "zalo_undo",
             "zalo_rename_group", "zalo_group_member_change", "zalo_group_deputy",
@@ -2333,8 +2333,15 @@ class ZaloToolSchemaTest(unittest.TestCase):
         schemas = {name: schema["parameters"] for name, _emoji, schema, _handler, _toolset in zalo_tools.TOOLS}
         for name in dangerous:
             with self.subTest(tool=name):
+                if name == "zalo_undo":
+                    self.assertNotIn("confirmation_code", schemas[name]["properties"])
+                    continue
                 self.assertNotIn("confirmation_code", schemas[name]["required"])
                 self.assertEqual(schemas[name]["properties"]["confirmation_code"]["type"], "string")
+
+        manifest = {row["name"]: row for row in zalo_tools.tools_manifest(friend_tools=False)["tools"]}
+        self.assertFalse(manifest["zalo_undo"]["confirm"])
+        self.assertTrue(manifest["zalo_group_member_change"]["confirm"])
 
     def test_cron_member_toolset_holds_only_safe_group_tools(self):
         from toolsets import resolve_toolset
@@ -2797,7 +2804,7 @@ class ZaloToolContractTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(member["success"])
         self.assertEqual(fake.calls, [("removeUserFromGroup", [["u1"], "g1"], True)])
 
-    async def test_undo_confirmation_keeps_the_quoted_target_on_the_later_turn(self):
+    async def test_owner_undo_skips_code_confirmation_but_remains_authorized(self):
         self.enterContext(patch.dict(os.environ, {"ZALO_CONFIRM_DANGEROUS": "true"}))
 
         class FakeAdapter:
@@ -2819,27 +2826,25 @@ class ZaloToolContractTest(unittest.IsolatedAsyncioTestCase):
             "reply_is_own": True,
         })
         try:
-            challenge = json.loads(await guarded(args))
+            result = json.loads(await guarded(args))
         finally:
             zalo_tools._TURN.reset(first_turn)
-
-        second_turn = zalo_tools._TURN.set({
-            "sender_uid": "owner-quoted", "thread_id": "2054797107487294899",
-            "is_group": True, "is_owner": True,
-            "text": f'XÁC NHẬN {challenge["confirmation_code"]}',
-        })
-        try:
-            result = json.loads(await guarded({
-                **args, "confirmation_code": challenge["confirmation_code"],
-            }))
-        finally:
-            zalo_tools._TURN.reset(second_turn)
 
         self.assertTrue(result["success"])
         self.assertEqual(fake.calls, [(
             "2054797107487294899", "8240551224624", "1788864027075",
             {"chat_type": "group"}, True,
         )])
+        member_turn = zalo_tools._TURN.set({
+            "sender_uid": "member", "thread_id": "2054797107487294899",
+            "is_group": True, "is_owner": False, "text": "thu hồi tin nhắn này",
+        })
+        try:
+            member_result = json.loads(await guarded(args))
+        finally:
+            zalo_tools._TURN.reset(member_turn)
+        self.assertFalse(member_result["success"])
+        self.assertEqual(len(fake.calls), 1)
 
     async def test_confirmation_guard_requires_code_in_a_later_owner_message(self):
         self.enterContext(patch.dict(os.environ, {"ZALO_CONFIRM_DANGEROUS": "true"}))

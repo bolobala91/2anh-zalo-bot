@@ -3602,7 +3602,7 @@ TOOLS = [
     # --- Nhóm 4: sửa sai & quản trị ---
     ("zalo_undo", "↩️", _schema(
         "zalo_undo",
-        "Thu hồi một tin do chính bot gửi. Bỏ trống mã tin để thu hồi tin "
+        "Thu hồi một tin do chính bot gửi. Lệnh của chủ nhân được thực hiện ngay, không cần mã xác nhận. Bỏ trống mã tin để thu hồi tin "
         "gần nhất của bot trong hội thoại; có thể truyền msg_id/cli_msg_id cụ thể.",
         {
             "thread_id": _THREAD_ID,
@@ -3929,6 +3929,8 @@ DANGEROUS_TOOL_NAMES = frozenset({
     "zalo_group_link", "zalo_join_group_link", "zalo_set_bio",
     "zalo_set_active_status", "zalo_friend_group",
 })
+# Chủ nhân đã yêu cầu thu hồi tin thì owner check là đủ; thao tác khác vẫn giữ mã.
+OWNER_NO_CODE_CONFIRMATION_TOOLS = frozenset({"zalo_undo"})
 
 # Kết bạn: gửi hàng loạt dễ bị Zalo khoá tính năng, nên chỉ đăng ký khi chủ bot
 # bật ZALO_FRIEND_TOOLS=true (sidecar cũng kiểm lại công tắc này).
@@ -3949,7 +3951,7 @@ _CONFIRM_SCHEMA = {
 # không cần mã, còn khi bật thì lần gọi đầu phải tạo challenge thay vì bị JSON
 # Schema chặn trước handler.
 for _name, _emoji, _tool_schema, _handler, _toolset in TOOLS:
-    if _name not in DANGEROUS_TOOL_NAMES:
+    if _name not in DANGEROUS_TOOL_NAMES or _name in OWNER_NO_CODE_CONFIRMATION_TOOLS:
         continue
     _parameters = _tool_schema["parameters"]
     _properties = _parameters.setdefault("properties", {})
@@ -3992,7 +3994,7 @@ def _confirmed_action(handler, tool_name: str):
         call_args = dict(args)
         required = _confirmation_required(tool_name, call_args)
         confirmed = False
-        if required and not _confirmation_codes_enabled():
+        if required and (tool_name in OWNER_NO_CODE_CONFIRMATION_TOOLS or not _confirmation_codes_enabled()):
             if not _turn().get("is_owner"):
                 return _err("thao tác này chỉ chủ nhân mới được thực hiện")
             if tool_name == "zalo_undo":
@@ -4496,7 +4498,7 @@ def tools_manifest(*, friend_tools: bool) -> Dict[str, Any]:
                                                               ("always" if name in group_permissions.ALWAYS_ON else None)),
             "registered": not (name in FRIEND_TOOL_NAMES and not friend_tools),
             "dmOnly": name in DM_ONLY_TOOLS,
-            "confirm": name in DANGEROUS_TOOL_NAMES,
+            "confirm": name in DANGEROUS_TOOL_NAMES and name not in OWNER_NO_CODE_CONFIRMATION_TOOLS,
         })
     return {"v": 1, "generatedAt": int(time.time() * 1000), "tools": rows}
 
