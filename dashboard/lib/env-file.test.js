@@ -16,6 +16,7 @@ test('chỉ đọc/ghi khoá được phép — khoá khác ném lỗi, không b
   // Kho tri thức tự học đọc địa chỉ OpenViking của provider zalo_memory.
   assert.equal(readEnvKey(f, 'OPENVIKING_ENDPOINT'), null);
   assert.throws(() => writeEnvKey(f, 'OPENAI_API_KEY', '1'), /không nằm trong danh sách/);
+  assert.throws(() => writeEnvKey(f, 'ZALO_CONTEXT_GATE_THRESHOLD', '0.6'), /không nằm trong danh sách/);
 });
 
 test('đọc như Hermes: export, dấu nháy, khoảng trắng, dòng sau cùng thắng; dòng chú thích bỏ qua', (t) => {

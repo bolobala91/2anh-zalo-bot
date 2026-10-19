@@ -1465,7 +1465,7 @@ class ZaloAdapter(BasePlatformAdapter):
 
     async def _classify_group_message(self, thread_id, current, frame, bot_uid, diagnostics=None) -> bool:
         details = diagnostics if diagnostics is not None else {}
-        details["reason"] = "probability"
+        details["reason"] = "classification"
         now = time.monotonic()
         recent = [{**item, "age_seconds": max(0, now - item.get("received_at", now))}
                   for item in self._recent_group_messages.get(thread_id, ()) if item is not current][-_context_gate.MAX_RECENT:]
@@ -1493,7 +1493,9 @@ class ZaloAdapter(BasePlatformAdapter):
             logger.warning("[zalo] context gate IGNORE (classification unavailable)")
             details["reason"] = "unavailable"
             respond = False
-        if details.get("reason") == "unavailable" and (tagged_bot or reply_bot):
+        unique_owner_call = (addressing["text_matches_call_word"]
+                             and not addressing["other_members_share_bot_name"])
+        if details.get("reason") == "unavailable" and (tagged_bot or reply_bot or unique_owner_call):
             details["reason"] = "direct_address_fallback"
             return True
         return respond is True

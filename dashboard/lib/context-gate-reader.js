@@ -5,6 +5,7 @@ import { REASONS, MODELS, STATUSES, PROVIDERS } from '../public/context-gate-dat
 const MAX_BYTES = 512 * 1024;
 const numeric = (v, max) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max;
 const known = (map, value, fallback) => Object.hasOwn(map, value) ? value : fallback;
+const CATEGORIES = new Set(['addressed_to_bot', 'follow_up', 'member_conversation', 'new_topic', 'ambiguous']);
 function tail(file) {
   let fd;
   try {
@@ -44,14 +45,15 @@ export function createContextGateReader({ file, store, now = Date.now, feedbackF
       if (!raw || raw.account !== account || (thread !== null && raw.thread !== thread) || !/^\d{1,32}$/.test(raw.thread) || !/^[a-f0-9]{32}$/.test(raw.id)
           || !numeric(raw.at, now() + 60_000) || !['RESPOND', 'IGNORE'].includes(raw.decision)) continue;
       const row = { id: raw.id, at: raw.at, thread: raw.thread, decision: raw.decision, reason: known(REASONS, raw.reason, 'unavailable'), stages: [] };
-      for (const [key, max] of [['probability', 1], ['threshold', 1], ['duration_ms', 60000]]) {
-        if (numeric(raw[key], max)) row[key] = raw[key];
-      }
+      if (CATEGORIES.has(raw.classification)) row.classification = raw.classification;
+      if (typeof raw.evidence_ref === 'string' && /^m[0-7]$/.test(raw.evidence_ref)) row.evidence_ref = raw.evidence_ref;
+      if (numeric(raw.duration_ms, 60000)) row.duration_ms = raw.duration_ms;
       for (const s of (Array.isArray(raw.stages) ? raw.stages : []).slice(0, 3)) {
         if (!s || typeof s !== 'object') continue;
         const stage = { provider: known(PROVIDERS, s.provider, 'custom'), model: known(MODELS, s.model, 'custom'), status: known(STATUSES, s.status, 'error') };
+        if (CATEGORIES.has(s.classification)) stage.classification = s.classification;
+        if (typeof s.evidence_ref === 'string' && /^m[0-7]$/.test(s.evidence_ref)) stage.evidence_ref = s.evidence_ref;
         if (numeric(s.duration_ms, 60000)) stage.duration_ms = s.duration_ms;
-        if (numeric(s.probability, 1)) stage.probability = s.probability;
         if (Number.isInteger(s.http_status) && s.http_status >= 100 && s.http_status <= 599) stage.http_status = s.http_status;
         row.stages.push(stage);
       }

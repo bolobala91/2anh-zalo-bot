@@ -5,8 +5,12 @@ export const REASONS = {
   no_context: 'Luật đã bỏ: chưa có cuộc trao đổi đang mở với bot', expired: 'Luật đã bỏ: cuộc trao đổi đã quá 5 phút',
   other_sender: 'Luật đã bỏ: khác người đang trao đổi với bot', other_target: 'Luật đã bỏ: tag hoặc reply người khác',
   missing_bot_context: 'Luật đã bỏ: câu trả lời của bot đã ngoài cửa sổ ngữ cảnh',
-  probability: 'Model đánh giá ngữ cảnh', unavailable: 'Không phân loại được — bỏ qua',
-  direct_address_fallback: 'Model lỗi — cho qua vì tag đúng UID hoặc reply trực tiếp bot',
+  classification: 'Model phân loại ngữ cảnh', probability: 'Kết quả xác suất của bản cũ', unavailable: 'Không phân loại được — bỏ qua',
+  direct_address_fallback: 'Model lỗi — cho qua vì tag/reply UID hoặc call word chủ nhân không trùng tên',
+};
+export const CLASSIFICATIONS = {
+  addressed_to_bot: 'Gọi bot', follow_up: 'Tiếp nối tin bot',
+  member_conversation: 'Trò chuyện giữa thành viên', new_topic: 'Chủ đề mới', ambiguous: 'Chưa rõ',
 };
 export const MODELS = {
   'gemini/gemini-3.8-flash': 'Gemini 3.8 Flash',

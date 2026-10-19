@@ -147,9 +147,9 @@ class ZaloContextGateFlowTest(unittest.IsolatedAsyncioTestCase):
         frame = await self.message("Ai đặt bàn chưa?")
         row = self.events.call_args.kwargs
         self.assertEqual((row["thread"], row["message"], row["respond"]), ("g1", frame["id"], False))
-        self.assertEqual(row["details"]["reason"], "probability")
+        self.assertEqual(row["details"]["reason"], "classification")
         await self.message("@Tuấn", mentions=[{"uid": "bot-uid"}])
-        self.assertEqual(self.events.call_args.kwargs["details"]["reason"], "probability")
+        self.assertEqual(self.events.call_args.kwargs["details"]["reason"], "classification")
         self.assertNotIn("text", self.events.call_args.kwargs)
 
     async def test_context_diagnostics_report_expired_and_classifier_failure(self):
@@ -332,11 +332,12 @@ class ZaloContextGateFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(evidence["other_members_share_bot_name"])
         self.assertFalse(evidence["tagged_bot"])
 
-    async def test_model_failure_does_not_bypass_name_only_call(self):
+    async def test_model_failure_still_allows_owner_call_word_fallback(self):
         self.judge.side_effect = TimeoutError()
         with patch.object(zalo_adapter._call_words, "owner_words", return_value=[{"text":"tuấn ơi","at":"any"}]):
             await self.message("Tuấn ơi", senderUid="owner")
-        self.assert_silent()
+        self.adapter.handle_message.assert_awaited_once()
+        self.assertEqual(self.events.call_args.kwargs["details"]["reason"], "direct_address_fallback")
 
     async def test_late_bot_reply_is_retained_after_ignored_interleaving(self):
         first = await self.message("Xem giúp", mentions=[{"uid":"bot-uid"}])

@@ -12,7 +12,9 @@ import uuid
 MAX_BYTES = 512 * 1024
 REASONS = frozenset(("tag_bot", "call_word", "reply_bot", "self", "empty", "ignored_sender",
                      "group_disabled", "owner_only", "no_context", "expired", "other_sender",
-                     "other_target", "missing_bot_context", "probability", "unavailable", "direct_address_fallback"))
+                     "other_target", "missing_bot_context", "probability", "classification",
+                     "unavailable", "direct_address_fallback"))
+CATEGORIES = frozenset(("addressed_to_bot", "follow_up", "member_conversation", "new_topic", "ambiguous"))
 MODELS = frozenset(("openrouter/typesafe/jev-1.13", "typesafe/jev-1.13", "typesafe/jev-1.14", "gemini/gemini-3.8-flash",
                     "gemini-3.8-flash-high",
                     "google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free"))
@@ -45,15 +47,26 @@ def record(*, account, thread, message, respond, details, cli_message="", path=N
                "reason": details.get("reason") if details.get("reason") in REASONS else "unavailable"}
         if not row["account"] or not row["thread"]:
             return
-        for key, maximum in (("probability", 1), ("threshold", 1), ("duration_ms", 60000)):
-            if _number(details.get(key), maximum):
-                row[key] = details[key]
+        category = details.get("classification")
+        if isinstance(category, str) and category in CATEGORIES:
+            row["classification"] = category
+        evidence_ref = details.get("evidence_ref")
+        if isinstance(evidence_ref, str) and re.fullmatch(r"m[0-7]", evidence_ref):
+            row["evidence_ref"] = evidence_ref
+        if _number(details.get("duration_ms"), 60000):
+            row["duration_ms"] = details["duration_ms"]
         row["stages"] = []
         for raw in details.get("stages", [])[:3]:
             stage = {"provider": raw.get("provider") if raw.get("provider") in {"9router", "openrouter", "cli"} else "custom",
                      "model": raw.get("model") if raw.get("model") in MODELS else "custom",
                      "status": raw.get("status") if raw.get("status") in STATUSES else "error"}
-            for key, maximum in (("duration_ms", 60000), ("http_status", 599), ("probability", 1)):
+            category = raw.get("classification")
+            if isinstance(category, str) and category in CATEGORIES:
+                stage["classification"] = category
+            evidence_ref = raw.get("evidence_ref")
+            if isinstance(evidence_ref, str) and re.fullmatch(r"m[0-7]", evidence_ref):
+                stage["evidence_ref"] = evidence_ref
+            for key, maximum in (("duration_ms", 60000), ("http_status", 599)):
                 if _number(raw.get(key), maximum):
                     stage[key] = raw[key]
             row["stages"].append(stage)

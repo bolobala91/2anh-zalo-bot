@@ -7,7 +7,7 @@ import { loginAs, makeDeps, startApp } from '../test-helpers.js';
 
 function withSettings(t) {
   const deps = makeDeps(t);
-  writeFileSync(join(deps.dir, 'hermes.env'), 'TELEGRAM_BOT_TOKEN=bi-mat\n');
+  writeFileSync(join(deps.dir, 'hermes.env'), 'TELEGRAM_BOT_TOKEN=bi-mat\nZALO_CONTEXT_GATE_THRESHOLD=0.72\n');
   writeFileSync(join(deps.dir, 'config.yaml'), 'platforms:\n  zalo:\n    extra:\n      dm_policy: owner-only\n');
   deps.settings = createSettings({ envFile: join(deps.dir, 'hermes.env'), configFile: join(deps.dir, 'config.yaml') });
   deps.welcomeFile = join(deps.dir, 'welcome.json');
@@ -18,7 +18,7 @@ test('context gate route saves all controls and only requests assistant restart'
   const deps = withSettings(t);
   const { call } = await startApp(t, deps);
   const admin = await loginAs(t, deps, call);
-  const values = { contextGateEnabled: true, contextGateThreshold: 0.75,
+  const values = { contextGateEnabled: true,
     contextGateFallbackEnabled: true, contextGateFallbackModel: 'google/gemma-4-31b-it:free',
     contextGateOpenrouterFallbackEnabled: true };
   const saved = await call('/api/admin/settings', { method: 'PUT', cookie: admin, body: { values } });
@@ -26,6 +26,8 @@ test('context gate route saves all controls and only requests assistant restart'
   for (const [id, value] of Object.entries(values)) assert.equal(saved.json.settings.find((s) => s.id === id).value, value);
   assert.ok(deps.restartFlags.get().assistant);
   assert.equal(deps.restartFlags.get().sidecar, null);
+  assert.equal(saved.json.settings.some((s) => s.id === 'contextGateThreshold'), false);
+  assert.match(readFileSync(join(deps.dir, 'hermes.env'), 'utf8'), /^ZALO_CONTEXT_GATE_THRESHOLD=0.72$/m);
   const invalid = await call('/api/admin/settings', { method: 'PUT', cookie: admin, body: { values: { contextGateThreshold: 2 } } });
   assert.equal(invalid.status, 400);
 });

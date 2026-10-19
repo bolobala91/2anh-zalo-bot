@@ -1,7 +1,7 @@
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Live, Spinner, PageHead } from '../ui.js';
-import { REASONS, MODELS, STATUSES, PROVIDERS } from '../context-gate-data.js';
+import { REASONS, CLASSIFICATIONS, MODELS, STATUSES, PROVIDERS } from '../context-gate-data.js';
 
 const when = (at) => new Date(at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
 const noAttemptLabel = (reason) => {
@@ -54,10 +54,10 @@ export function ContextGatePanel({ conv, onJump, onClose }) {
       <ol class="gate-list">${(data?.items || []).map((row) => html`<li class="gate-entry" key=${row.id}>
         <div class="gate-entry-head"><strong class=${row.decision === 'RESPOND' ? 'gate-respond' : 'gate-ignore'}>${row.decision === 'RESPOND' ? 'Cho qua bộ lọc' : 'Bỏ qua'}</strong>
           <time datetime=${new Date(row.at).toISOString()}>${when(row.at)}</time></div>
-        <p>${REASONS[row.reason] || REASONS.unavailable}</p>
-        ${Number.isFinite(row.probability) ? html`<p class="small">Xác suất <strong>${row.probability.toFixed(2)}</strong> / ngưỡng ${row.threshold?.toFixed(2) ?? '—'}${Number.isFinite(row.duration_ms) ? ` · ${row.duration_ms} ms` : ''}</p>` : null}
+        <p>${CLASSIFICATIONS[row.classification] || REASONS[row.reason] || REASONS.unavailable}${row.classification === 'follow_up' && row.evidence_ref ? ` · dựa trên tin bot ${row.evidence_ref}` : ''}</p>
+        ${Number.isFinite(row.duration_ms) ? html`<p class="small">Thời gian phân loại · ${row.duration_ms} ms</p>` : null}
         ${row.stages.length ? html`<ol class="gate-stages">${row.stages.map((stage, index) => html`<li key=${index}>
-          <span>${MODELS[stage.model]} · ${PROVIDERS[stage.provider]}</span>
+          <span>${MODELS[stage.model]} · ${PROVIDERS[stage.provider]}${stage.classification ? ` · ${CLASSIFICATIONS[stage.classification]}` : ''}${stage.classification === 'follow_up' && stage.evidence_ref ? ` (${stage.evidence_ref})` : ''}</span>
           <span class="muted small">${STATUSES[stage.status]}${stage.http_status ? ` ${stage.http_status}` : ''}${Number.isFinite(stage.duration_ms) ? ` · ${stage.duration_ms} ms` : ''}</span>
         </li>`)}</ol>` : html`<p class="muted small">${noAttemptLabel(row.reason)}</p>`}
         ${row.ref ? html`<button type="button" class="btn btn-ghost btn-sm" onClick=${() => onJump(row.ref)}>Xem tin nhắn →</button>` : html`<span class="muted small">Tin chưa có trong lịch sử lưu</span>`}
@@ -86,15 +86,15 @@ export function ContextGateTracking() {
     refresh(); return () => { gone = true; clearTimeout(timer); };
   }, []);
   return html`
-    <${PageHead} title="Lọc ngữ cảnh" sub="Theo dõi model nhận diện cuộc trao đổi với bot · cập nhật mỗi 5 giây." />
-    <div class="row"><a class="btn btn-secondary" href="#/chats">Xem quyết định trong Phiên chat</a><a class="btn btn-secondary" href="#/settings">Chọn model / chỉnh ngưỡng</a></div>
-    <p>Trong Phiên chat, chọn một nhóm rồi bấm <strong>Lọc ngữ cảnh</strong> ở góc trên khung tin. Dùng nút <strong>Đúng / Sai</strong> để chấm quyết định của bot.</p>
+    <${PageHead} title="Lọc ngữ cảnh" sub="Theo dõi nhãn phân loại, độ trễ và các quyết định đã chấm · cập nhật mỗi 5 giây." />
+    <div class="row"><a class="btn btn-secondary" href="#/chats">Xem quyết định trong Phiên chat</a><a class="btn btn-secondary" href="#/settings">Chọn model / dự phòng</a></div>
+    <p>Trong Phiên chat, chọn một nhóm rồi bấm <strong>Lọc ngữ cảnh</strong> ở góc trên khung tin. Dùng nút <strong>Đúng / Sai</strong> để chấm quyết định. Điểm xác suất/ngưỡng không còn được dùng.</p>
     <${Live} error=${error} />
     ${!data && !error ? html`<${Spinner} />` : null}
     ${data ? html`<section class="card">
-      <h2>Thống kê model</h2>
+      <h2>Theo dõi chạy thật — không phải bảng xếp hạng model</h2>
       <p class="muted small">${data.events} quyết định trong nhật ký còn lưu${data.from ? ` · từ ${when(data.from)}` : ''}. Thống kê gộp các nhóm của tài khoản bot hiện tại.</p>
-      ${!data.models.length ? html`<p>Chưa có lượt gọi model được ghi nhận. Tin bị loại theo luật hoặc tag/reply trực tiếp bot không cần gọi model.</p>` : html`
+      ${!data.models.length ? html`<p>Chưa có lượt gọi model được ghi nhận. Khi gate bật, mọi tin nhóm hợp lệ sẽ được phân loại trước khi chuyển vào trợ lý.</p>` : html`
         <div class="table-wrap"><table class="gate-metrics"><thead><tr><th>Model</th><th>Lượt gọi</th><th>Thành công / lỗi</th><th>Timeout</th><th>TB / P95</th><th>Đúng / đã chấm</th><th>Trả lời nhầm / bỏ sót</th></tr></thead>
           <tbody>${data.models.map((m) => html`<tr key=${`${m.provider}:${m.model}`}>
             <td><strong>${MODELS[m.model]}</strong><div class="muted small">${PROVIDERS[m.provider]}</div></td>
@@ -103,7 +103,7 @@ export function ContextGateTracking() {
             <td>${m.reviewed ? `${m.correct}/${m.reviewed} (${Math.round(m.correct * 100 / m.reviewed)}%)` : 'Chưa có đánh giá'}</td>
             <td>${m.falsePositive} / ${m.falseNegative}</td>
           </tr>`)}</tbody></table></div>`}
-      <p class="muted small">“Thành công” là nhận được kết quả hợp lệ. Tỷ lệ đúng chỉ tính trên các tin bạn đã chấm. P95 là thời gian mà 95% lượt gọi hoàn thành trong đó.</p>
-      <p class="muted small">Mỗi model có thể gặp tập tin khác nhau vì cơ chế fallback. So sánh cần xét cả số mẫu đã chấm; bảng không tự chọn model thắng và không gọi thêm model để lấy số liệu.</p>
+      <p class="muted small">“Thành công” là nhận được nhãn hợp lệ. Tỷ lệ đúng chỉ tính trên tin bạn đã chấm; trung bình/P95 chỉ là độ trễ.</p>
+      <p class="muted small">Các model trên traffic thật không xử lý cùng tập tin nhắn, nhất là khi có fallback. Muốn chọn model, chạy benchmark cùng bộ tình huống giả lập ở README; benchmark tách follow-up recall, trả lời nhầm, độ chính xác từng loại và độ trễ. Không tự chọn model thắng.</p>
     </section>` : null}`;
 }

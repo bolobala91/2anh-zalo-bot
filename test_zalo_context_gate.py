@@ -16,10 +16,14 @@ gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 
+def classification(category="follow_up", evidence_ref="m0"):
+    return {"category": category, "evidence_ref": evidence_ref}
+
+
 class ContextGateTest(unittest.IsolatedAsyncioTestCase):
     async def test_direct_reply_is_classified_and_does_not_short_circuit(self):
         details = {}
-        with patch.object(gate, '_request_sync', return_value=.1) as request:
+        with patch.object(gate, '_request_sync', return_value=classification("ambiguous", None)) as request:
             self.assertFalse(await gate.should_respond(**{**self.args, 'quote_is_own':True}, diagnostics=details))
         request.assert_called_once()
         self.assertTrue(request.call_args.kwargs['state']['current']['reply_to_bot'])
@@ -44,7 +48,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(req.full_url, 'https://cli.bolamarketing.com/v1/chat/completions')
             self.assertEqual(json.loads(req.data)['model'], 'gemini-3.8-flash-high')
             self.assertEqual(req.get_header('Authorization'), 'Bearer ' + self.secret)
-            return io.BytesIO(b'{"choices":[{"finish_reason":"stop","message":{"content":"{\\"should_respond\\":0.8}"}}]}')
+            return io.BytesIO(b'{"choices":[{"finish_reason":"stop","message":{"content":"{\\"category\\":\\"addressed_to_bot\\",\\"evidence_ref\\":null}"}}]}')
         with patch.object(gate, 'urlopen', side_effect=request):
             self.assertTrue(await gate.should_respond(**self.args, diagnostics=details))
         self.assertEqual(details['stages'][0]['provider'], 'cli')
@@ -62,7 +66,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(body['model'], 'gemini/gemini-3.8-flash')
             self.assertEqual(body['reasoning']['effort'], 'low')
             self.assertNotIn('tools', body)
-            return io.BytesIO(json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': '{"should_respond":0.89}'}}]}).encode())
+            return io.BytesIO(json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': '{"category":"addressed_to_bot","evidence_ref":null}'}}]}).encode())
         with patch.object(gate, 'urlopen', side_effect=request):
             self.assertTrue(await gate.should_respond(**self.args))
 
@@ -71,7 +75,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
                            ZALO_CONTEXT_GATE_FALLBACK_MODEL='gemini/gemini-3.8-flash',
                            ZALO_CONTEXT_GATE_OPENROUTER_FALLBACK_ENABLED='true')
         details = {}
-        with patch.object(gate, '_request_sync', side_effect=[TimeoutError(), .1]) as request:
+        with patch.object(gate, '_request_sync', side_effect=[TimeoutError(), classification("ambiguous", None)]) as request:
             self.assertFalse(await gate.should_respond(**self.args, diagnostics=details))
         self.assertEqual(request.call_count, 2)
         fallback = request.call_args.kwargs['extra']
@@ -82,19 +86,20 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
     async def test_diagnostics_capture_fallback_without_secret_or_text(self):
         details = {}
         self.values.update(ZALO_CONTEXT_GATE_FALLBACK_ENABLED="true")
-        with patch.object(gate, "_request_sync", side_effect=[TimeoutError(self.secret), 0.84]):
+        with patch.object(gate, "_request_sync", side_effect=[TimeoutError(self.secret), classification()]):
             self.assertTrue(await gate.should_respond(**self.args, diagnostics=details))
-        self.assertEqual(details["reason"], "probability")
-        self.assertEqual(details["probability"], 0.84)
-        self.assertEqual(details["threshold"], 0.72)
+        self.assertEqual(details["reason"], "classification")
+        self.assertEqual(details["classification"], "follow_up")
+        self.assertEqual(details["evidence_ref"], "m0")
         self.assertEqual([s["status"] for s in details["stages"]], ["timeout", "ok"])
         self.assertEqual(details["stages"][1]["model"], "google/gemma-4-26b-a4b-it:free")
         self.assertNotIn(self.secret, json.dumps(details))
         self.assertNotIn(self.args["text"], json.dumps(details))
         self.assertGreaterEqual(details["duration_ms"], 0)
 
-    async def test_diagnostics_fail_closed_and_low_probability_never_retries(self):
-        for result, reason in [(RuntimeError("private response"), "unavailable"), (0.1, "probability")]:
+    async def test_diagnostics_fail_closed_and_valid_ignore_never_retries(self):
+        for result, reason in [(RuntimeError("private response"), "unavailable"),
+                               (classification("member_conversation", None), "classification")]:
             details = {}
             with patch.object(gate, "_request_sync", side_effect=[result]) as request:
                 self.assertFalse(await gate.should_respond(**self.args, diagnostics=details))
@@ -112,20 +117,11 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
                          bot_uid="bot-1", bot_name="Tuấn MKT", quote_is_own=False,
                          recent=[{"sender_uid": "bot-1", "text": "Bạn muốn xem phần nào?"}])
 
-    async def test_threshold_boundaries_and_invalid_probabilities(self):
-        for probability, expected in [(0, False), (0.719, False), (0.72, True),
-                                      (1, True), (-0.1, False), (1.1, False),
-                                      (float("nan"), False), (float("inf"), False),
-                                      (True, False), ("0.99", False), (None, False)]:
-            with self.subTest(probability=probability), patch.object(gate, "_request_sync", return_value=probability):
-                self.assertIs(await gate.should_respond(**self.args), expected)
-
-    async def test_scoped_threshold_and_invalid_config_fail_closed(self):
-        for value, expected in [("0.95", False), ("0.72", True), ("nan", False),
-                                ("-1", False), ("1.1", False), ("broken", False)]:
+    async def test_legacy_probability_threshold_is_ignored(self):
+        for value in ("0.95", "0.72", "nan", "-1", "1.1", "broken"):
             self.values["ZALO_CONTEXT_GATE_THRESHOLD"] = value
-            with self.subTest(value=value), patch.object(gate, "_request_sync", return_value=0.9):
-                self.assertIs(await gate.should_respond(**self.args), expected)
+            with self.subTest(value=value), patch.object(gate, "_request_sync", return_value=classification()):
+                self.assertTrue(await gate.should_respond(**self.args))
 
     async def test_errors_are_silent_and_do_not_log_exception_secrets(self):
         errors = [TimeoutError(self.secret), RuntimeError(self.secret)]
@@ -137,13 +133,13 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(await gate.should_respond(**self.args))
                 self.assertNotIn(self.secret, " ".join(logs.output))
 
-    async def test_real_transport_validates_json_shape_and_range(self):
+    async def test_real_transport_validates_choice_shape_and_evidence(self):
         bad = [b"not json", b"[]", b"{}", b'{"answers": []}',
-               b'{"answers":{"should_respond":{"noul":null}}}',
-               b'{"answers":{"should_respond":{"noul":"0.99"}}}',
-               b'{"answers":{"should_respond":{"noul":true}}}',
-               b'{"answers":{"should_respond":{"noul":2}}}',
-               b'{"answers":{"should_respond":{"noul":NaN}}}']
+               b'{"answers":{"context_decision":{"type":"noul","noul":0.99}}}',
+               b'{"answers":{"context_decision":{"type":"choice","choice":null}}}',
+               b'{"answers":{"context_decision":{"type":"choice","choice":"made_up"}}}',
+               b'{"answers":{"context_decision":{"type":"choice","choice":"follow_up__m9"}}}',
+               b'{"answers":{"context_decision":{"type":"choice","choice":"follow_up__m0_extra"}}}']
         for body in bad:
             with self.subTest(body=body), patch.object(gate, "urlopen", return_value=io.BytesIO(body)):
                 self.assertFalse(await gate.should_respond(**self.args))
@@ -160,9 +156,11 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
             body = json.loads(req.data)
             self.assertEqual(body["model"], "openrouter/typesafe/jev-1.13")
             self.assertEqual(set(body), {"model", "state", "questions"})
-            self.assertEqual(set(body["questions"]), {"should_respond"})
+            self.assertEqual(set(body["questions"]), {"context_decision"})
+            self.assertEqual(body["questions"]["context_decision"]["type"], "choice")
+            self.assertIn("follow_up__m0", body["questions"]["context_decision"]["criteria"])
             self.assertNotIn(self.secret, req.data.decode())
-            return io.BytesIO(b'{"answers":{"should_respond":{"type":"noul","noul":0.9}}}')
+            return io.BytesIO(b'{"answers":{"context_decision":{"type":"choice","choice":"follow_up__m0"}}}')
         with patch.dict(os.environ, {"NINEROUTER_API_KEY": "wrong-profile"}), patch.object(gate, "urlopen", side_effect=request):
             self.assertTrue(await gate.should_respond(**self.args))
         self.assertEqual(len(captured), 1)
@@ -174,7 +172,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(req.full_url, "https://openrouter.ai/api/v1/systemone")
             self.assertEqual(json.loads(req.data)["model"], "typesafe/jev-1.14")
             self.assertEqual(req.get_header("Authorization"), "Bearer " + self.secret)
-            return io.BytesIO(b'{"answers":{"should_respond":{"noul":0.8}}}')
+            return io.BytesIO(b'{"answers":{"context_decision":{"type":"choice","choice":"addressed_to_bot"}}}')
         with patch.object(gate, "urlopen", side_effect=request):
             self.assertTrue(await gate.should_respond(**self.args))
 
@@ -197,17 +195,18 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("session", body)
                 self.assertEqual(body["response_format"], {"type": "json_object"})
                 return io.BytesIO(json.dumps({"choices": [{"finish_reason": "stop", "message": {
-                    "content": '{"should_respond":0.9}'}}]}).encode())
+                    "content": '{"category":"follow_up","evidence_ref":"m0"}'}}]}).encode())
             with self.subTest(model=model), patch.object(gate, "urlopen", side_effect=request):
                 self.assertTrue(await gate.should_respond(**self.args))
 
     async def test_gemma_rejects_non_json_tools_truncation_and_extra_fields(self):
         self.values.update(ZALO_CONTEXT_GATE_BASE_URL="https://openrouter.ai/api/v1",
                            ZALO_CONTEXT_GATE_MODEL="google/gemma-4-31b-it:free", OPENROUTER_API_KEY=self.secret)
-        cases = [("Hello", "stop", {}), ('{"should_respond":true}', "stop", {}),
-                 ('{"should_respond":0.99}', "length", {}),
-                 ('{"should_respond":0.99}', "stop", {"tool_calls": [{"id": "tool"}]}),
-                 ('{"should_respond":0.99,"answer":"Hello"}', "stop", {})]
+        cases = [("Hello", "stop", {}), ('{"category":"unknown","evidence_ref":null}', "stop", {}),
+                 ('{"category":"follow_up","evidence_ref":"m9"}', "stop", {}),
+                 ('{"category":"follow_up","evidence_ref":"m0"}', "length", {}),
+                 ('{"category":"follow_up","evidence_ref":"m0"}', "stop", {"tool_calls": [{"id": "tool"}]}),
+                 ('{"category":"addressed_to_bot","evidence_ref":null,"answer":"Hello"}', "stop", {})]
         for content, reason, extra in cases:
             body = json.dumps({"choices": [{"finish_reason": reason, "message": {"content": content, **extra}}]}).encode()
             with self.subTest(content=content, reason=reason), patch.object(gate, "urlopen", return_value=io.BytesIO(body)):
@@ -242,7 +241,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
     def test_settings_never_copy_unrelated_extra_or_secrets(self):
         values = gate.settings({"bridge_token": self.secret, "api_key": self.secret,
                                 "context_gate_threshold": 0.8}, self.reader)
-        self.assertEqual(values, {"context_gate_threshold": "0.8"})
+        self.assertEqual(values, {})
         self.assertNotIn(self.secret, repr(values))
 
     def test_redirects_never_forward_credentials(self):
@@ -256,7 +255,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_jev_error_uses_openrouter_gemma_fallback(self):
         self.values.update(ZALO_CONTEXT_GATE_FALLBACK_ENABLED="true", OPENROUTER_API_KEY=self.secret)
-        with patch.object(gate, "_request_sync", side_effect=[TimeoutError(self.secret), 0.9]) as request:
+        with patch.object(gate, "_request_sync", side_effect=[TimeoutError(self.secret), classification()]) as request:
             self.assertTrue(await gate.should_respond(**self.args))
         self.assertEqual(request.call_count, 2)
         fallback = request.call_args.kwargs["extra"]
@@ -267,13 +266,14 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_valid_jev_ignore_never_requests_second_opinion(self):
         self.values["ZALO_CONTEXT_GATE_FALLBACK_ENABLED"] = "true"
-        with patch.object(gate, "_request_sync", return_value=0.2) as request:
+        with patch.object(gate, "_request_sync", return_value=classification("ambiguous", None)) as request:
             self.assertFalse(await gate.should_respond(**self.args))
         self.assertEqual(request.call_count, 1)
 
-    async def test_invalid_jev_probability_can_fallback_but_both_fail_stays_closed(self):
+    async def test_invalid_jev_classification_can_fallback_but_both_fail_stays_closed(self):
         self.values["ZALO_CONTEXT_GATE_FALLBACK_ENABLED"] = "true"
-        for outcomes, expected in [([2, 0.9], True), ([None, 0.2], False),
+        for outcomes, expected in [([{"category": "unknown", "evidence_ref": None}, classification()], True),
+                                   ([None, classification("ambiguous", None)], False),
                                    ([TimeoutError(), RuntimeError()], False)]:
             with self.subTest(expected=expected), patch.object(gate, "_request_sync", side_effect=outcomes) as request:
                 self.assertIs(await gate.should_respond(**self.args), expected)
@@ -303,7 +303,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
     async def test_third_stage_uses_jev_openrouter_only_after_two_errors(self):
         self.values.update(ZALO_CONTEXT_GATE_FALLBACK_ENABLED="true",
                            ZALO_CONTEXT_GATE_OPENROUTER_FALLBACK_ENABLED="true")
-        with patch.object(gate, "_request_sync", side_effect=[TimeoutError(), RuntimeError(), 0.9]) as request:
+        with patch.object(gate, "_request_sync", side_effect=[TimeoutError(), RuntimeError(), classification()]) as request:
             self.assertTrue(await gate.should_respond(**self.args))
         self.assertEqual(request.call_count, 3)
         last = request.call_args.kwargs["extra"]
@@ -314,7 +314,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
     async def test_gemma_valid_ignore_stops_before_third_stage(self):
         self.values.update(ZALO_CONTEXT_GATE_FALLBACK_ENABLED="true",
                            ZALO_CONTEXT_GATE_OPENROUTER_FALLBACK_ENABLED="true")
-        with patch.object(gate, "_request_sync", side_effect=[TimeoutError(), 0.1]) as request:
+        with patch.object(gate, "_request_sync", side_effect=[TimeoutError(), classification("ambiguous", None)]) as request:
             self.assertFalse(await gate.should_respond(**self.args))
         self.assertEqual(request.call_count, 2)
 
@@ -336,7 +336,7 @@ class ContextGateTest(unittest.IsolatedAsyncioTestCase):
             if len(budgets) < 3:
                 clock[0] += kwargs["timeout_s"]
                 raise TimeoutError()
-            return 0.9
+            return classification()
         # Assert the real 8-second budget directly; millisecond wall-clock
         # deadlines test scheduler load rather than the allocation invariant.
         with patch.object(gate.asyncio, "get_running_loop", return_value=SimpleNamespace(time=lambda: clock[0])), \

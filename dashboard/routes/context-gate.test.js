@@ -12,7 +12,7 @@ async function setup(t) {
   deps.contextGate = createContextGateReader({ file, store: deps.store, now: () => 2000 });
   const account = deps.store.currentAccountId();
   const row = { id: 'a'.repeat(32), at: 1000, account, thread: '200', message: 'g1', decision: 'IGNORE',
-    reason: 'probability', probability: .2, threshold: .72, duration_ms: 50, stages: [], text: 'MUST-NOT-LEAK' };
+    reason: 'classification', classification: 'new_topic', duration_ms: 50, stages: [], text: 'MUST-NOT-LEAK' };
   const app = await startApp(t, deps);
   return { ...app, deps, file, row };
 }
@@ -29,7 +29,10 @@ test('context diagnostics require admin and never expose text or other accounts/
   assert.equal(result.status, 200);
   assert.equal(result.json.items.length, 1);
   assert.ok(result.json.items[0].ref.id);
-  assert.equal(result.json.items[0].probability, .2);
+  assert.equal(result.json.items[0].classification, 'new_topic');
+  assert.equal(result.json.items[0].duration_ms, 50);
+  assert.equal('probability' in result.json.items[0], false);
+  assert.equal('threshold' in result.json.items[0], false);
   assert.equal(JSON.stringify(result.json).includes('MUST-NOT-LEAK'), false);
   assert.equal('account' in result.json.items[0], false);
   assert.equal((await call(uri + '?filter=bad', { cookie: admin })).status, 400);
