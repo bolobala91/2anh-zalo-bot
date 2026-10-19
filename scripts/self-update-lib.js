@@ -91,8 +91,25 @@ export async function runSelfUpdate({ root, hermesHome, to, from = '', stateFile
   try {
     log(`Cập nhật 2anh-zalo-bot ${from || '(bản hiện tại)'} → ${to} (${useGit ? 'git' : 'gói phát hành'})`);
     if (useGit) {
-      const dirty = (await run('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: root })).trim();
-      if (dirty) throw new Error('Mã nguồn trên máy có sửa đổi chưa commit — người cài đặt cần xử lý trước khi cập nhật.');
+      const dirty = (await run('git', ['status', '--porcelain', '--untracked-files=normal'], { cwd: root })).trim();
+      if (dirty) throw new Error('Mã nguồn trên máy có sửa đổi hoặc tệp mới chưa commit — người cài đặt cần xử lý trước khi cập nhật.');
+      let installedVersion = String(from || '').replace(/^v/, '');
+      if (!installedVersion) {
+        try { installedVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version; }
+        catch { installedVersion = ''; }
+      }
+      const installedTag = `v${installedVersion}`;
+      if (TAG.test(installedTag)) {
+        let committedChanges;
+        try {
+          committedChanges = (await run('git', ['diff', '--name-only', installedTag, 'HEAD', '--'], { cwd: root })).trim();
+        } catch {
+          throw new Error(`Không thể so mã nguồn với tag ${installedTag}; dừng cập nhật để tránh mất tuỳ chỉnh.`);
+        }
+        if (committedChanges) {
+          throw new Error(`Mã nguồn có tuỳ chỉnh đã commit so với ${installedTag}; cập nhật tự động sẽ ghi đè chúng. Hãy ghép tuỳ chỉnh vào bản mới, kiểm thử và cài từ nhánh fork.`);
+        }
+      }
     }
     step('Sao lưu cài đặt');
     log(`Đã sao lưu: ${await deps.backup()}`);

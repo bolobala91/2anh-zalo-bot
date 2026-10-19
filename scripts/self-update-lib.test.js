@@ -11,6 +11,7 @@ function setup(t, { git = true, healthy = () => ({ ok: true }), runHook = () => 
   t.after(() => rmSync(root, { recursive: true, force: true }));
   if (git) mkdirSync(join(root, '.git'));
   writeFileSync(join(root, 'package-lock.json'), 'v1');
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '2.8.3' }));
   const tmp = join(root, 'tmp'); mkdirSync(tmp);
   const calls = []; const logs = [];
   let clock = 0;
@@ -45,7 +46,7 @@ test('bản cài git: sao lưu → checkout tag → cài bằng bộ cài mã m�
   assert.equal(st.status, 'done');
   const seq = calls.filter((c) => !c.startsWith('git status')).map((c) => (c.includes('install-hermes.js') ? c.replace(/^node \S+install-hermes\.js/, 'install').replace(/--sidecar-root \S+/, '--sidecar-root ROOT') : c));
   assert.deepEqual(seq, [
-    'git rev-parse HEAD', 'git fetch -q --tags origin', 'git checkout -q v2.9.0',
+    'git diff --name-only v2.8.3 HEAD --', 'git rev-parse HEAD', 'git fetch -q --tags origin', 'git checkout -q v2.9.0',
     'install --hermes-home /h --sidecar-root ROOT --no-dashboard',
     'restart sidecar', 'restart assistant', 'restart dashboard',
   ]);
@@ -86,6 +87,18 @@ test('mã nguồn có sửa đổi chưa commit → dừng trước khi đụng 
   assert.equal(st.status, 'failed');
   assert.match(st.error, /chưa commit/);
   assert.ok(!calls.some((c) => c.includes('checkout') || c.startsWith('restart')));
+});
+
+test('mã nguồn có tuỳ chỉnh đã commit khác tag đang cài → từ chối ghi đè', async (t) => {
+  const { calls, go, state } = setup(t, {
+    runHook: (line) => line.startsWith('git diff --name-only v2.8.3 HEAD --')
+      ? 'hermes-plugin/zalo_tools/tools.py\n' : '',
+  });
+  const result = await go();
+  assert.equal(result.status, 'failed');
+  assert.match(result.error, /tuỳ chỉnh đã commit/);
+  assert.ok(!calls.some((c) => c.includes('checkout') || c.startsWith('restart') || c.includes('install-hermes.js')));
+  assert.equal(state().status, 'failed');
 });
 
 test('bản cài không git: nén mã cũ, tải gói phát hành, giải nén đè; lỗi cài → giải nén lại mã cũ', async (t) => {
