@@ -280,6 +280,17 @@ class ValidateTest(unittest.TestCase):
                                  {"w1": r"..\images\w1.jpg"})
         self.assertIn(r'href="..\images\w1.jpg"', out)
 
+    def test_page_drops_only_images_that_could_not_be_fetched(self):
+        page = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720"><rect width="1" height="1"/>'
+                '<image href="img:w1" width="1" height="1"/><image x="2" xlink:href="img:a2" width="1"></image>'
+                "<image href='img:w3'\n width='1'></image ><image href=\"#local\"/></svg>")
+        out = validate.drop_missing_images(page, {"a2": "../images/a2.png"})
+        self.assertNotIn("img:w1", out)
+        self.assertNotIn("img:w3", out)
+        self.assertIn("img:a2", out)
+        self.assertIn('<image href="#local"/>', out)
+        self.assertIn("<rect", out)
+
     def test_engine_json_checks_type_and_keeps_only_allow_listed_keys(self):
         keys = recipes.ENGINE_KEYS["soan-van-ban-hanh-chinh"]
         data = validate.check_engine_json(json.dumps({"loai_van_ban": "thong_bao", "noi_dung": "A",
@@ -869,8 +880,17 @@ class AuthorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([p["role"] for p in got["pages"]], ["cover", "content", "ending"])
         too_many = {"pages": [{"role": "content"}] * 13}
         with self.assertRaises(validate.SourceError):
-            await author.write_outline(FakeLlm(json.dumps(too_many)), guides=[], brief="x", options={},
-                                       usage=author.Usage(), max_pages=12)
+            await author.write_outline(FakeLlm(json.dumps(too_many), json.dumps(too_many)), guides=[], brief="x",
+                                       options={}, usage=author.Usage(), max_pages=12)
+
+    async def test_bad_outline_is_repaired_once_instead_of_failing_the_job(self):
+        bad = {"pages": [{"role": "cover"}, {"role": "ending"}], "images": [{"id": "Ảnh-Bìa-AI-1", "web": "robot"}]}
+        good = {"pages": [{"role": "cover"}, {"role": "ending"}], "images": [{"id": "bia1", "web": "robot"}]}
+        llm = FakeLlm(json.dumps(bad), json.dumps(good))
+        got = await author.write_outline(llm, guides=[], brief="x", options={}, usage=author.Usage(), max_pages=12)
+        self.assertEqual([i["id"] for i in got["images"]], ["bia1"])
+        self.assertEqual(len(llm.calls), 2)
+        self.assertIn("mỗi ảnh cần `id` riêng", llm.calls[1]["messages"][-1]["content"])
 
     def test_read_guides_caps_each_file_and_the_total(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1427,8 +1447,7 @@ class BuilderImagesTest(unittest.IsolatedAsyncioTestCase):
                               "images": [{"id": "a1", "ai": "cell diagram"}, {"id": "w1", "web": "mitochondria"},
                                          {"id": "w2", "web": "hỏng"}]})
         llm = FakeLlm(outline, svg.format(r="cover", x='<image href="img:a1" width="9" height="9"/>'),
-                      svg.format(r="ending", x='<image href="img:w2" width="9" height="9"/>'),
-                      svg.format(r="ending", x='<image href="img:w1" width="9" height="9"/>'))
+                      svg.format(r="ending", x='<image href="img:w2" width="9" height="9"/>'))
 
         def behave(argv, job_dir, kw):
             script = Path(argv[1]).name
@@ -1448,7 +1467,12 @@ class BuilderImagesTest(unittest.IsolatedAsyncioTestCase):
         deck = self.job_dir / "deck_20261008"
         self.assertEqual(sorted(p.name for p in (deck / "images").iterdir()), ["a1.png", "w1.jpg"])
         self.assertIn('href="../images/a1.png"', (deck / "svg_output" / "01_cover.svg").read_text(encoding="utf-8"))
-        self.assertIn('href="../images/w1.jpg"', (deck / "svg_output" / "02_ending.svg").read_text(encoding="utf-8"))
+        # Trang trỏ tới ảnh hỏng (w2) không làm hỏng cả bộ: thẻ ảnh đó bị gỡ, không phải gọi AI viết lại.
+        ending = (deck / "svg_output" / "02_ending.svg").read_text(encoding="utf-8")
+        self.assertNotIn("<image", ending)
+        self.assertIn("<text>t</text>", ending)
+        self.assertEqual(len(llm.calls), 3)
+        self.assertNotIn('"w2"', llm.calls[1]["messages"][1]["content"], "ảnh hỏng cũng bị bỏ khỏi dàn ý gửi trang")
         self.assertEqual(out.images, 2)
         self.assertIn("không lấy được ảnh w2", out.notes[0])
         page_prompt = llm.calls[1]["messages"][0]["content"]
@@ -2496,6 +2520,124 @@ class IconTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(builder.images_used, 0)
         self.assertEqual(got["i1"]["path"], "../images/i1.png")
         self.assertIn("Icon: Some Set · CC BY 4.0", got["i1"]["note"])
+
+
+from xml.etree import ElementTree as ET  # noqa: E402
+
+from plugins.zalo_tools.studio import mau  # noqa: E402
+
+MAU_PAGE = ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1920 1080">'
+            '<rect width="1920" height="1080" fill="#5E5264"/><image href="../images/image1.jpeg" width="9" height="9"/>'
+            '<image href="https://evil.example/x.png"/><script>alert(1)</script>'
+            '<g data-pptx-frame="100 100 300 80"><text x="100" y="130" font-size="40" fill="#FFFFFF">'
+            '<tspan fill="#FFFFFF" font-family="Raleway">Emerging Trends</tspan></text></g>'
+            '<g data-pptx-frame="100 300 250 90"><text x="100" y="320" font-size="14">'
+            '<tspan font-family="Raleway">From self-driving cars to </tspan><tspan x="100" dy="17">personalized</tspan>'
+            '</text></g><g data-pptx-frame="100 500 80 50"><text x="140" y="530" font-size="36">01</text></g></svg>')
+
+
+class TemplateSlidesTest(unittest.TestCase):
+    def test_template_page_keeps_design_and_drops_foreign_refs(self):
+        root = mau.parse_page(MAU_PAGE)
+        out = ET.tostring(root, encoding="unicode")
+        self.assertIn("../images/image1.jpeg", out)
+        self.assertNotIn("evil.example", out)
+        self.assertNotIn("script", out)
+        with self.assertRaises(mau.TemplateError):
+            mau.parse_page('<!DOCTYPE svg [<!ENTITY a "x">]><svg xmlns="http://www.w3.org/2000/svg">&a;</svg>')
+        self.assertEqual([s["text"] for s in mau.slots(root)],
+                         ["Emerging Trends", "From self-driving cars to personalized", "01"])
+
+    def test_text_fills_slots_wraps_to_frame_and_is_escaped(self):
+        root = mau.parse_page(MAU_PAGE)
+        long = "Bot ghi nhớ bối cảnh từng nhóm và từng người, trả lời có dẫn nguồn <script>x</script> & hẹn giờ nhắc việc"
+        text, notes = mau.build_page(root, {"S1": "Xu hướng", "S2": long, "S3": ""})
+        page = ET.fromstring(text)
+        texts = page.findall(".//{http://www.w3.org/2000/svg}text")
+        self.assertEqual(len(texts), 2, "ô rỗng (S3) bị bỏ")
+        body = texts[1].findall("{http://www.w3.org/2000/svg}tspan")
+        self.assertGreater(len(body), 2, "chữ dài được ngắt nhiều dòng")
+        self.assertTrue(all(s.get("dy") for s in body[1:]))
+        self.assertTrue(all(mau.text_width(s.text, float(s.get("font-size"))) <= 250 for s in body))
+        self.assertIn("&lt;script&gt;", text)
+        self.assertIn("../images/image1.jpeg", text, "thiết kế (ảnh nền) giữ nguyên")
+        self.assertEqual(root.findall(".//{http://www.w3.org/2000/svg}text")[0][0].text, "Emerging Trends",
+                         "trang mẫu gốc không bị sửa")
+
+    def test_plan_must_use_real_template_pages(self):
+        pages = {1: None, 2: None}
+        self.assertEqual(mau.check_plan({"pages": [{"mau": "2", "o": {"S1": "A"}}]}, pages, 12),
+                         [{"mau": 2, "o": {"S1": "A"}}])
+        for bad in ({"pages": [{"mau": 5, "o": {}}]}, {"pages": []}, {"pages": [{"mau": 1}]}, []):
+            with self.assertRaises(validate.SourceError, msg=bad):
+                mau.check_plan(bad, pages, 12)
+
+    def test_template_path_only_from_hermes_document_cache(self):
+        with tempfile.TemporaryDirectory() as home:
+            docs = Path(home, "cache", "documents")
+            docs.mkdir(parents=True)
+            good = docs / "doc_ab12_Mau.pptx"
+            good.write_bytes(b"PK")
+            (docs / "doc_x.pdf").write_bytes(b"%PDF")
+            outside = Path(home, "bi-mat.pptx")
+            outside.write_bytes(b"PK")
+            with patch("hermes_constants.get_hermes_home", return_value=home):
+                self.assertEqual(zalo_tools._template_path(str(good)), str(good.resolve()))
+                for bad in (str(outside), str(docs / "doc_x.pdf"), str(docs / ".." / ".." / "bi-mat.pptx"),
+                            str(docs / "khong-co.pptx"), "", None):
+                    self.assertIsNone(zalo_tools._template_path(bad), bad)
+
+
+class TemplateDeckBuilderTest(unittest.IsolatedAsyncioTestCase):
+    fake_run = BuilderTest.fake_run
+
+    def setUp(self):
+        BuilderTest.setUp(self)
+
+    async def test_template_deck_imports_offline_fills_text_and_exports(self):
+        src = self.tmp / "cache" / "mau.pptx"
+        src.parent.mkdir(parents=True)
+        src.write_bytes(b"PK-mau")
+        plan = json.dumps({"pages": [{"mau": 1, "o": {"S1": "Hệ sinh thái 2Anh", "S2": "Mô tả ngắn", "S3": "01"}},
+                                     {"mau": 1, "o": {"S1": "Kết luận", "S2": "", "S3": ""}}]})
+        llm = FakeLlm(plan)
+
+        def behave(argv, job_dir, kw):
+            script = Path(argv[1]).name
+            self.assertFalse(kw.get("network"), f"{script} không cần mạng")
+            if script == "pptx_template_import.py":
+                self.assertEqual(Path(argv[2]).read_bytes(), b"PK-mau")
+                out = Path(argv[argv.index("-o") + 1])
+                (out / "svg").mkdir(parents=True)
+                (out / "images").mkdir()
+                (out / "svg" / "slide_01.svg").write_text(MAU_PAGE, encoding="utf-8")
+                (out / "images" / "image1.jpeg").write_bytes(JPG)
+            elif script == "project_manager.py":
+                (job_dir / "deck_20261019" / "svg_output").mkdir(parents=True)
+            elif script == "svg_quality_checker.py":
+                (Path(argv[2]) / "validation").mkdir(exist_ok=True)
+                (Path(argv[2]) / "validation" / "svg_quality_report.json").write_text('{"files": []}', encoding="utf-8")
+            elif script == "svg_to_pptx.py":
+                (Path(argv[2]) / "exports").mkdir()
+                (Path(argv[2]) / "exports" / "deck.pptx").write_bytes(b"PK")
+            return sandbox.Result(0, "", "", False)
+
+        job = make_job("slide", loai="bai-giang")
+        job.template = str(src)
+        with self.fake_run(behave):
+            out = await jobs.produce(job, llm, self.job_dir, self.where)
+        deck = self.job_dir / "deck_20261019"
+        self.assertEqual([p.name for p in out.files], ["deck.pptx"])
+        self.assertTrue((deck / "images" / "image1.jpeg").is_file(), "ảnh của mẫu đi theo trang")
+        pages = sorted((deck / "svg_output").iterdir())
+        self.assertEqual([p.name for p in pages], ["01_mau1.svg", "02_mau1.svg"])
+        first = pages[0].read_text(encoding="utf-8")
+        self.assertIn("Hệ sinh thái 2Anh", first)
+        self.assertNotIn("Emerging", first)
+        self.assertNotIn("evil.example", first)
+        self.assertEqual(len(llm.calls), 1)
+        self.assertEqual(llm.calls[0]["purpose"], "zalo-studio:slide-template")
+        self.assertIn("Emerging Trends", llm.calls[0]["messages"][1]["content"], "AI thấy chữ mẫu để biết vai trò ô")
 
 
 if __name__ == "__main__":

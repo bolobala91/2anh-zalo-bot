@@ -2,6 +2,57 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.58.0] — 2026-10-19
+
+### Thêm — Slide theo mẫu người dùng gửi
+
+- `zalo_studio kind=slide` có thêm tuỳ chọn `mau`: đường dẫn tệp `.pptx` mẫu mà người dùng đã gửi.
+  - Chỉ nhận tệp nằm trong bộ nhớ đệm tài liệu của Hermes, đuôi `.pptx`, tối đa 40 MB và 30 trang mẫu.
+- Xưởng đọc tệp mẫu trong hộp cát, không có mạng (`pptx_template_import.py`), rồi giữ nguyên thiết kế từng trang: nền, gradient, ảnh, hình trang trí, font, bố cục.
+  - AI chỉ chọn trang mẫu làm khuôn cho từng trang và viết chữ cho từng ô.
+  - Code tự ngắt dòng và co chữ theo bề rộng ô.
+  - Tham chiếu lạ trong mẫu (link ngoài, script) bị gỡ.
+- Bot được dặn: người dùng gửi `.pptx` và muốn "làm theo style này" thì dùng Xưởng kèm `mau`, không dùng `zalo_make_file`.
+
+### Thêm — Cảnh báo hành vi nguy hiểm trong nhóm
+
+- Mọi tin nhóm của thành viên (kể cả tin không tag bot) được lọc hai lớp:
+  - Lớp 1, lọc từ khoá: từ dễ trùng thì so trên chữ có dấu, để "lớn", "các", "từ từ" không bị bắt nhầm.
+  - Lớp 2: AI xác nhận, để không báo những tin như bài giảng "tác hại của ma tuý".
+- Bot nhắn riêng cho chủ nhân: tên nhóm, người gửi, loại, mức độ, lý do và trích tin.
+- Các loại được báo:
+  - tục tĩu / xúc phạm, bắt nạt;
+  - nội dung tình dục;
+  - chất cấm / thuốc lá điện tử;
+  - bạo lực / vũ khí;
+  - tự hại;
+  - cờ bạc / lừa đảo;
+  - can thiệp sâu vào bot: bảo bỏ quy tắc, đòi system prompt, khoá hoặc cấu hình, chạy lệnh trên máy chủ, đổi tính cách/bộ nhớ/phân quyền, giả làm chủ nhân.
+- Không báo trùng: cùng nhóm, người và loại chỉ báo 1 lần mỗi 30 phút. Tối đa 30 cảnh báo mỗi giờ. Khi AI không chạy thì chỉ báo hai loại dấu hiệu rõ là can thiệp bot và tự hại.
+- Bật/tắt ở Cài đặt › Kết bạn và an toàn ("Cảnh báo hành vi nguy hiểm trong nhóm về tin riêng"). Mặc định bật, áp dụng ngay khi lưu.
+
+## [2.57.0] — 2026-10-19
+
+### Sửa — Slide của Xưởng không còn hỏng cả bộ vì một lỗi nhỏ
+
+- **Ảnh minh hoạ không tìm được:** ảnh đó bị bỏ khỏi dàn ý, và trang nào còn trỏ tới nó thì chỉ gỡ ảnh đó ra. Trước đây bộ kiểm chặn trang, nên cả bộ slide hỏng ("trang 3 chưa dựng được").
+- **Dàn ý sai quy tắc** (mã ảnh lạ, số trang không hợp lệ): AI được viết lại dàn ý một lần. Trước đây việc dừng ngay ("chưa lập được dàn ý").
+- **`zalo_make_file` với PowerPoint:** mô tả và kết quả trả về nói rõ đây là slide chữ theo mẫu cố định, không có ảnh và không theo template người dùng gửi. Bot không được báo là "giống mẫu" hay "do Xưởng làm".
+  - Trước đây, khi slide của Xưởng hỏng, bot quay sang công cụ này rồi báo khách là "bám sát 100% phong cách mẫu".
+
+## [2.56.0] — 2026-10-19
+
+### Thêm — Dọn bản Hermes cũ (tự động và nút bấm)
+
+- Mỗi lần cập nhật, Hermes dựng thêm một môi trường Python mới (~1 GB) và không xoá bản cũ, nên ổ đĩa đầy dần (VPS từng lên 94%).
+- **Tự động:** dashboard dọn mỗi ngày một lần (lần đầu 10 phút sau khi chạy). Chỉ dọn khi có bản thừa, và ghi vào Nhật ký.
+- **Nút "Dọn ngay"** ở Bảo trì → Cập nhật → "Dọn bản Hermes cũ". Chỉ Quản trị thấy. Thẻ cho biết có bao nhiêu bản, bản nào được giữ và vì sao, ổ đĩa còn trống bao nhiêu, và lần dọn gần nhất.
+- Cả hai cách dùng chung một quy tắc giữ lại:
+  - bản Hermes đang dùng;
+  - mọi bản còn tiến trình chạy;
+  - 3 bản mới nhất.
+- Bản nào xoá lỗi thì ghi lại và dọn tiếp các bản khác. Không chạy hai lần dọn cùng lúc.
+
 ## [2.55.0] — 2026-10-19
 
 ### Thêm — Cắt ghép và sửa video ngay trên Zalo

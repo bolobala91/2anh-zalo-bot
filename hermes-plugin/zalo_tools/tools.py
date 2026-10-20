@@ -650,8 +650,14 @@ async def zalo_make_file(args: Dict[str, Any], **_kw) -> str:
             {"msg": caption, "attachments": [str(path)]},
             thread_id, _thread_type(kind),
         ])
-        if not is_owner and json.loads(sent).get("success"):
+        result = json.loads(sent)
+        if not is_owner and result.get("success"):
             _FILE_QUOTA.setdefault(uid, []).append(now)
+        if result.get("success") and args.get("format") == "pptx":
+            # Bot từng báo khách "đúng 100% style mẫu" với tệp này — nói thẳng nó là gì.
+            result["note"] = ("Đây là slide chữ theo mẫu cố định của bot (không ảnh, không theo template người dùng "
+                              "gửi). Báo đúng như vậy; đừng nói là giống mẫu hay do Xưởng/2Anh Studio làm.")
+            return json.dumps(result, ensure_ascii=False)
         return sent
     finally:
         shutil.rmtree(directory, ignore_errors=True)
@@ -844,7 +850,9 @@ def studio_turn_note(sender_uid: str, thread_id: str, is_group: bool) -> Optiona
     if kinds:
         left = max(0, rules["quota"] - _studio_ledger().used_today(sender_uid))
         notes.append(f"[Xưởng tạo sản phẩm: người này nhờ được bằng công cụ zalo_studio — {kinds}. Hôm nay còn {left} "
-                     f"lượt. Gom đủ yêu cầu vào `brief` rồi gọi một lần; không tự làm bằng cách khác.]")
+                     f"lượt. Gom đủ yêu cầu vào `brief` rồi gọi một lần; không tự làm bằng cách khác."
+                     + (" Slide làm theo tệp .pptx mẫu người dùng gửi → kind=slide kèm `mau`." if "slide (" in kinds else "")
+                     + "]")
     media = [label for f, label in (("studioImage", "vẽ ảnh AI (kind=image)"), ("studioAIVideo", "tạo video AI (kind=video)"))
              if rules["features"].get(f)]
     if media:
@@ -870,6 +878,23 @@ async def _send_wait(turn: Dict[str, Any], text: str) -> None:
                                       THREAD_GROUP if turn.get("is_group") else THREAD_USER])
     except Exception as exc:
         logger.info("[zalo] không gửi được tin báo chờ: %s", exc)
+
+
+def _template_path(ref: Any) -> Optional[str]:
+    """Tệp .pptx mẫu người dùng gửi: chỉ nhận tệp trong bộ nhớ đệm tài liệu của Hermes (nơi bot lưu tệp người dùng
+    gửi) — không cho trỏ tới tệp bất kỳ trên máy chủ."""
+    ref = str(ref or "").strip()
+    if not ref:
+        return None
+    try:
+        from hermes_constants import get_hermes_home
+        root = (Path(get_hermes_home()) / "cache" / "documents").resolve()
+        target = Path(ref).resolve()
+    except Exception:
+        return None
+    if target.suffix.lower() != ".pptx" or not target.is_relative_to(root) or not target.is_file():
+        return None
+    return str(target)
 
 
 async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
@@ -971,7 +996,16 @@ async def zalo_studio(args: Dict[str, Any], **_kw) -> str:
             if value not in allowed:
                 return _err(f"`options.{key}` phải là một trong: {', '.join(allowed)}")
             options[key] = value
-    job = jobs.Job(id=jobs.new_job_id(), kind=kind, brief=brief[:8000], options=options, turn=captured, script=script)
+    template = ""
+    if args.get("mau"):
+        if kind != "slide":
+            return _err("`mau` (tệp PowerPoint mẫu) chỉ dùng với kind=slide")
+        template = _template_path(args["mau"]) or ""
+        if not template:
+            return _err("`mau` phải là đường dẫn tệp .pptx người dùng vừa gửi (dòng \"It is saved at: …\" trong tin của "
+                        "họ). Chưa có thì nhờ họ gửi tệp PowerPoint mẫu vào cuộc trò chuyện")
+    job = jobs.Job(id=jobs.new_job_id(), kind=kind, brief=brief[:8000], options=options, turn=captured, script=script,
+                   template=template)
     if studio.pending_for(job.uid):
         return _err("người này đang có một việc ở xưởng chưa xong — chờ việc đó gửi xong rồi nhờ tiếp")
     left = studio.ledger.take(job_id=job.id, uid=job.uid, name=str(turn.get("sender_name") or ""), kind=kind,
@@ -3446,6 +3480,9 @@ TOOLS = [
         "Nghị định 30 (A4, Times New Roman, chữ đen — in nộp được), PDF/PowerPoint/Excel có màu, "
         "bảng tô nền, số trang. Soạn cho đẹp: chia mục bằng # rõ ràng, dữ liệu so sánh thì dùng bảng, "
         "mỗi slide 3–6 ý ngắn, slide chỉ có tiêu đề (bullets rỗng) làm slide chuyển phần. "
+        "PowerPoint ở đây là slide CHỮ theo một mẫu cố định (dải tiêu đề xanh + gạch đầu dòng): không có ảnh, "
+        "không theo được tệp mẫu/template hay phong cách người dùng gửi — slide đẹp có ảnh thì dùng zalo_studio "
+        "kind=slide; đừng nói tệp này giống mẫu của họ. "
         "Chỉ báo đã gửi khi kết quả trả về thành công.",
         {
             "thread_id": _THREAD_ID,
@@ -3526,6 +3563,10 @@ TOOLS = [
                                                          "plan để sửa bản đó."},
             "feedback": {"type": "string", "description": "Chỉ plan khi sửa: người dùng muốn sửa gì trong kịch bản."},
             "confirmed": {"type": "boolean", "description": "Chỉ video_bai_giang: người dùng đã chốt kiểu bài và dàn ý."},
+            "mau": {"type": "string", "description":
+                    "Chỉ slide: đường dẫn tệp PowerPoint (.pptx) MẪU người dùng đã gửi (lấy ở dòng \"It is saved at: …\") "
+                    "khi họ muốn làm theo phong cách/thiết kế của tệp đó — xưởng giữ nguyên thiết kế từng trang mẫu và "
+                    "thay bằng nội dung trong brief. Đừng dùng zalo_make_file cho việc này."},
         },
         ["kind"],
     ), zalo_studio, TOOLSET_PUBLIC),
