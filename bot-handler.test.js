@@ -178,6 +178,60 @@ function incoming({ text = '/sethome', senderUid = 'owner-123', threadId = 'dm-1
   };
 }
 
+test('untagged group follow-up received offline is replayed after hello exactly once', async (t) => {
+  const { listener, sent, server } = await harness(t);
+  const first = incoming({ text: 'Ai kêu', senderUid: 'member', threadId: 'group-1', type: ThreadType.Group });
+  const second = incoming({ text: 'Tiếp nhé', senderUid: 'member', threadId: 'group-1', type: ThreadType.Group });
+  second.data.msgId = 'second'; second.data.cliMsgId = 'second-cli';
+  listener.emit('message', first);
+  listener.emit('message', first);
+  listener.emit('message', second);
+  await new Promise((resolve) => setImmediate(resolve));
+  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}`);
+  t.after(() => ws.close());
+  const frames = [];
+  ws.on('message', (raw) => frames.push(JSON.parse(raw)));
+  await waitFor(() => frames.filter((f) => f.type === 'message').length === 2, 'offline replay');
+  assert.equal(frames[0].type, 'hello');
+  assert.deepEqual(frames.filter((f) => f.type === 'message').map((f) => f.text), ['Ai kêu', 'Tiếp nhé']);
+  assert.equal(sent.length, 0);
+  const closed = new Promise((resolve) => ws.once('close', resolve));
+  ws.close(); await closed;
+  const reconnect = new WebSocket(`ws://127.0.0.1:${server.address().port}`);
+  t.after(() => reconnect.close());
+  const replayed = [];
+  reconnect.on('message', (raw) => { if (JSON.parse(raw).type === 'message') replayed.push(raw); });
+  await onceMessage(reconnect, (f) => f.type === 'hello');
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.deepEqual(replayed, []);
+});
+
+test('offline queue excludes self echoes and retains the original attachment/quote metadata', async (t) => {
+  const { listener, server } = await harness(t);
+  const own = incoming({ text: 'own echo', type: ThreadType.Group });
+  own.isSelf = true;
+  listener.emit('message', own);
+  const attachment = incoming({ text: 'attached', type: ThreadType.Group });
+  attachment.data.msgId = 'media';
+  attachment.data.content = { href: 'https://example.com/photo.jpg' };
+  attachment.data.msgType = 'chat.photo';
+  attachment.data.mentions = [{ uid: 'bot-uid' }];
+  attachment.data.quote = { globalMsgId: 'quoted', ownerId: 'bot-uid', msg: 'previous reply' };
+  listener.emit('message', attachment);
+  await new Promise((resolve) => setImmediate(resolve));
+  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}`);
+  t.after(() => ws.close());
+  const frames = [];
+  ws.on('message', (raw) => frames.push(JSON.parse(raw)));
+  await waitFor(() => frames.some((f) => f.type === 'message'), 'queued attachment');
+  const messages = frames.filter((f) => f.type === 'message');
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].id, 'media');
+  assert.equal(messages[0].quote.id, 'quoted');
+  assert.deepEqual(messages[0].mentions, [{ uid: 'bot-uid' }]);
+  assert.deepEqual(messages[0].mediaUrls, ['https://example.com/photo.jpg']);
+});
+
 test('disconnected exact DM /sethome reveals the sender UID without granting owner access', async (t) => {
   const { listener, sent } = await harness(t);
 
@@ -213,7 +267,7 @@ test('disconnected group /sethome never bootstraps', async (t) => {
   assert.equal(sent.length, 0);
 });
 
-test('disconnected non-command DM from a non-owner remains ignored', async (t) => {
+test('disconnected non-command DM does not reply before Hermes checks permissions', async (t) => {
   const { listener, sent } = await harness(t);
 
   listener.emit('message', incoming({ text: 'xin chào', senderUid: 'public-1', threadId: 'public-1' }));

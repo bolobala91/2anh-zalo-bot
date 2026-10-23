@@ -77,6 +77,44 @@ test('bridge rejects browser-origin websocket clients even with the token', asyn
   assert.equal(status, 403);
 });
 
+test('account teardown clears pending inbound frames before another account connects', async (t) => {
+  const store = testStore(t);
+  const { forwardToHermes } = await import('./hermes-bridge.js');
+  let server = startHermesBridge({ api: {}, profile: { user_id: 'account-a' }, port: 0, store });
+  await new Promise((resolve) => server.once('listening', resolve));
+  forwardToHermes({ threadId: 'group', type: 1, data: { msgId: 'old-account', content: 'old context' } });
+  stopHermesBridge();
+  server = startHermesBridge({ api: {}, profile: { user_id: 'account-b' }, port: 0, store });
+  await new Promise((resolve) => server.once('listening', resolve));
+  forwardToHermes({ threadId: 'group', type: 1, data: { msgId: 'new-account', content: 'new context' } });
+  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}`);
+  t.after(() => { ws.close(); stopHermesBridge(); });
+  const received = [];
+  ws.on('message', (raw) => received.push(JSON.parse(raw)));
+  await onceMessage(ws, (f) => f.type === 'message');
+  assert.equal(received[0].self.user_id, 'account-b');
+  assert.deepEqual(received.filter((f) => f.type === 'message').map((f) => f.id), ['new-account']);
+});
+
+test('queued data survives an unauthenticated connection attempt and reaches only the authenticated client', async (t) => {
+  const server = startHermesBridge({ api: {}, profile: { user_id: 'bot' }, port: 0, store: testStore(t) });
+  await new Promise((resolve) => server.once('listening', resolve));
+  const { forwardToHermes } = await import('./hermes-bridge.js');
+  forwardToHermes({ threadId: 'group', type: 1, data: { msgId: 'pending', content: 'private queued text' } });
+  const rejected = new RawWebSocket(`ws://127.0.0.1:${server.address().port}`);
+  rejected.on('error', () => {});
+  const leaked = [];
+  rejected.on('message', (raw) => leaked.push(raw));
+  const status = await new Promise((resolve) => rejected.once('unexpected-response', (_req, res) => {
+    const code = res.statusCode; res.resume(); rejected.terminate(); resolve(code);
+  }));
+  assert.equal(status, 401);
+  assert.deepEqual(leaked, []);
+  const ws = new WebSocket(`ws://127.0.0.1:${server.address().port}`);
+  t.after(() => { ws.close(); stopHermesBridge(); });
+  assert.equal((await onceMessage(ws, (f) => f.type === 'message')).id, 'pending');
+});
+
 test('extractMediaUrls rút ảnh từ content, raw và quote', () => {
   const urls = extractMediaUrls({
     data: {

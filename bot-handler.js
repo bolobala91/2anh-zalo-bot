@@ -25,8 +25,8 @@ import { join } from 'node:path';
  * nào. Hermes rớt là hệ thống lặng lẽ hạ cấp sang bộ luật lỏng hơn — đúng lúc
  * không ai để ý.
  *
- * Nay Hermes rớt thì bot báo thẳng là chưa sẵn sàng. Im lặng hoặc trả lời sai
- * đều tệ hơn một câu nói thật.
+ * Hermes tạm ngắt thì giữ tin trong hàng đợi của bridge, chuyển lại khi nối.
+ * Chỉ gateway phân loại và kiểm quyền; Node không tự gọi một mô hình dự phòng.
  */
 
 let selfUid = '';
@@ -274,8 +274,7 @@ async function handleIncomingMessage(api, msg, stickers = null) {
   console.log(`[bot] 📩 [${where}] ${msg.data?.dName || '?'} (${senderUid}): ${content.slice(0, 80)}`);
 
   if (isHermesAttached()) {
-    forwardToHermes(msg);
-    console.log('[bot] ➡️ đã chuyển cho Hermes Agent');
+    if (forwardToHermes(msg)) console.log('[bot] ➡️ đã nhận để chuyển cho Hermes Agent');
     return;
   }
 
@@ -308,8 +307,14 @@ async function handleIncomingMessage(api, msg, stickers = null) {
     return;
   }
 
-  // Hermes chưa cắm. Chỉ báo cho người thật sự đang gọi bot — người khác nói
-  // chuyện với nhau trong nhóm thì không việc gì phải nghe.
+  // Giữ cả câu tiếp nối không tag để model của Hermes xét khi nối lại.
+  // /sethome ở trên vẫn trả UID ngay và không được phát lại thành một lượt khác.
+  if (forwardToHermes(msg)) {
+    console.log('[bot] ⏳ đã giữ tin, chờ Hermes kết nối lại');
+    return;
+  }
+
+  // Bridge chưa khởi tạo hoặc không nhận thêm được tin: giữ thông báo cũ.
   if (!isAddressedToBot(msg, isGroup, senderUid)) {
     console.log('[bot] ⚠️ Hermes chưa cắm — tin này không gọi bot, bỏ qua');
     return;

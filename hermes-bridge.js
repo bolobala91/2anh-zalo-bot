@@ -12,6 +12,7 @@ import { openZaloStore } from './zalo-store.js';
 import { authorizeBridgeCommand } from './zalo-policy.js';
 import { readWelcomeConfig, updateWelcomeGroup } from './zalo-welcome.js';
 import { friendToolsEnabled, getActiveFriendManager } from './zalo-friends.js';
+import { createInboundQueue } from './inbound-queue.js';
 
 const FRIEND_TOOLS_OFF = 'Tính năng kết bạn đang tắt — bật ZALO_FRIEND_TOOLS=true trong .env của Hermes';
 
@@ -166,6 +167,8 @@ let limiter = null;
 
 let wss = null;
 let clients = new Set();
+let inboundQueue = null;
+let inboundFlushTimer = null;
 let zaloApi = null;
 let selfProfile = null;
 let activeStore = null;
@@ -420,6 +423,30 @@ export function isHermesAttached() {
   return false;
 }
 
+function flushInboundQueue() {
+  const queue = inboundQueue;
+  if (!queue || !isHermesAttached()) return;
+  queue.drain(async (data) => {
+    const recipients = [...clients].filter((ws) => ws.readyState === 1);
+    if (!recipients.length) return false;
+    const sent = await Promise.all(recipients.map((ws) => new Promise((resolve) => {
+      const finish = (error) => {
+        if (error) {
+          try { ws.terminate(); } catch { /* already closed */ }
+        }
+        resolve(!error);
+      };
+      try { ws.send(data, finish); } catch (error) { finish(error); }
+    })));
+    return sent.some(Boolean);
+  }).finally(() => {
+    // A reconnect/arrival can occur while the previous drain is unwinding.
+    if (queue !== inboundQueue || !queue.size || !isHermesAttached() || inboundFlushTimer) return;
+    inboundFlushTimer = setTimeout(() => { inboundFlushTimer = null; flushInboundQueue(); }, 100);
+    inboundFlushTimer.unref?.();
+  });
+}
+
 // Danh bạ để gắn tag thật cho "@Tên" trong tin gửi vào nhóm (xem zalo-mentions.js).
 let memberDirectory = null;
 
@@ -442,6 +469,10 @@ export function startHermesBridge({
     .split(',').map((value) => value.trim()).filter(Boolean));
   activeDmRules = typeof dmRules === 'function' ? dmRules : null;
   activeHealth = health;
+  inboundQueue = createInboundQueue({ onDrop(reason) {
+    activeHealth?.recordError('inbound_queue_dropped', reason);
+    console.warn(`[bridge] inbound queue dropped an entry (${reason})`);
+  } });
   maxBackfillPages = Math.max(1, Number(pageLimit) || Number(process.env.ZALO_BACKFILL_MAX_PAGES) || 10);
   limiter = new RateLimiter({
     capacity: Number(process.env.ZALO_RATE_BURST || 5),
@@ -516,6 +547,7 @@ export function startHermesBridge({
     ws.on('error', (err) => {
       console.warn('[bridge] lỗi socket:', err?.message || err);
     });
+    flushInboundQueue();
   });
 
   wss.on('error', (err) => {
@@ -537,6 +569,10 @@ export function startHermesBridge({
 }
 
 export function stopHermesBridge() {
+  inboundQueue?.close();
+  inboundQueue = null;
+  if (inboundFlushTimer) clearTimeout(inboundFlushTimer);
+  inboundFlushTimer = null;
   for (const ws of clients) {
     try { ws.close(); } catch { /* đang đóng dở */ }
   }
@@ -671,9 +707,9 @@ function extractQuote(msg) {
   };
 }
 
-/** Đẩy một tin nhắn Zalo sang Hermes. Trả về true nếu có ai đó nhận. */
+/** Nhận tin để chuyển sang Hermes, gồm cả khi phải đợi gateway kết nối lại. */
 export function forwardToHermes(msg) {
-  if (!isHermesAttached()) return false;
+  if (!inboundQueue) return false;
   activeHealth?.markInbound();
 
   const mediaUrls = extractMediaUrls(msg);
@@ -707,8 +743,9 @@ export function forwardToHermes(msg) {
     raw: msg.data ?? null,
   };
 
-  broadcast(payload);
-  return true;
+  const accepted = inboundQueue.enqueue(payload);
+  if (accepted) flushInboundQueue();
+  return accepted;
 }
 
 function rememberOutboundResult(result, threadId, threadType, content = '', msgType = 'chat.text') {
