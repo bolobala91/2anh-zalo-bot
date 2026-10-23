@@ -12,6 +12,7 @@ export const CLASSIFICATIONS = {
   addressed_to_bot: 'Gọi bot', follow_up: 'Tiếp nối tin bot',
   member_conversation: 'Trò chuyện giữa thành viên', new_topic: 'Chủ đề mới', ambiguous: 'Chưa rõ',
 };
+export const DECISIONS = { RESPOND: 'Chuyển cho agent', IGNORE: 'Bỏ qua' };
 export const MODELS = {
   'gemini/gemini-3.8-flash': 'Gemini 3.8 Flash',
   'gemini-3.8-flash-high': 'Gemini 3.8 Flash (high)',

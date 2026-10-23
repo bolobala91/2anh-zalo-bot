@@ -49,7 +49,7 @@ CASES = (
     {"id": "member-dinner-chat", "expected": {"category": "member_conversation", "evidence_ref": None},
      "text": "Ai đặt bàn chưa?", "sender": MEMBER,
      "recent": [_message("dinner", "synthetic-member-2", "Tối nay mình đi ăn nhé.")]},
-    {"id": "new-topic-after-bot", "expected": {"category": "new_topic", "evidence_ref": None},
+    {"id": "new-topic-after-bot", "expected": {"category": "new_topic", "evidence_ref": None, "should_respond": False},
      "text": "Hôm nay mọi người ăn ở đâu?", "sender": MEMBER,
      "recent": [_message("old-answer", BOT, "Kế hoạch ngân sách đã được cập nhật.",
                           reply_to_sender_uid=MEMBER)]},
@@ -63,6 +63,9 @@ CASES = (
     {"id": "tag-other-member", "expected": {"category": "member_conversation", "evidence_ref": None},
      "text": "Bình xem giúp mình nhé.", "sender": MEMBER,
      "addressing": {"mentions_other": True}},
+    {"id": "new-topic-task-for-bot", "expected": {"category": "new_topic", "evidence_ref": None, "should_respond": True},
+     "text": "Làm báo cáo tiến độ tuần này giúp mình.", "sender": OWNER,
+     "recent": [_message("old-bot-answer", BOT, "Mình đã gợi ý món ăn trưa.", reply_to_sender_uid=OWNER)]},
 )
 
 
@@ -130,6 +133,9 @@ def run_benchmark(*, gate, models: Iterable[str], get_secret: Callable,
 
 
 def summarize(report: dict[str, Any]) -> dict[str, Any]:
+    def responds(value):
+        return value.get("should_respond") is True if value.get("category") == "new_topic" else value.get("category") in {"addressed_to_bot", "follow_up"}
+
     groups: dict[str, list[dict[str, Any]]] = {}
     for row in report.get("results", []):
         groups.setdefault(row["model_key"], []).append(row)
@@ -139,16 +145,11 @@ def summarize(report: dict[str, Any]) -> dict[str, Any]:
         exact = [row for row in ok if row.get("actual") == row.get("expected")]
         followups = [row for row in rows if row["expected"]["category"] == "follow_up"]
         followup_correct = [row for row in followups if row.get("actual") == row["expected"]]
-        negatives = [row for row in rows if row["expected"]["category"] not in {"addressed_to_bot", "follow_up"}]
-        routing_correct = [row for row in rows if (
-            row["expected"]["category"] in {"addressed_to_bot", "follow_up"}
-        ) == (
-            row.get("actual", {}).get("category") in {"addressed_to_bot", "follow_up"}
-        )]
-        predicted_responses = [row for row in ok if row["actual"]["category"] in {"addressed_to_bot", "follow_up"}]
-        false_positives = [row for row in negatives if row.get("actual", {}).get("category") in {"addressed_to_bot", "follow_up"}]
-        true_positives = [row for row in predicted_responses
-                          if row["expected"]["category"] in {"addressed_to_bot", "follow_up"}]
+        negatives = [row for row in rows if not responds(row["expected"])]
+        routing_correct = [row for row in rows if responds(row["expected"]) == responds(row.get("actual", {}))]
+        predicted_responses = [row for row in ok if responds(row["actual"])]
+        false_positives = [row for row in negatives if responds(row.get("actual", {}))]
+        true_positives = [row for row in predicted_responses if responds(row["expected"])]
         per_category = {}
         for category in sorted({row["expected"]["category"] for row in rows}):
             sample = [row for row in rows if row["expected"]["category"] == category]

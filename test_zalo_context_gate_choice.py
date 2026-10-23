@@ -105,6 +105,73 @@ class ContextGateChoiceTest(unittest.IsolatedAsyncioTestCase):
                              "text": "Bạn muốn mình xem phần nào trước?"}],
                 ), expected)
 
+    def test_new_topic_choice_requires_a_separate_response_decision(self):
+        for action, expected in (("respond", True), ("ignore", False)):
+            def transport(request, timeout):
+                criteria = json.loads(request.data)["questions"]["context_decision"]["criteria"]
+                self.assertIn("new_topic__respond", criteria)
+                self.assertIn("new_topic__ignore", criteria)
+                self.assertNotIn("new_topic", criteria)
+                return io.BytesIO(json.dumps({"answers": {"context_decision": {
+                    "type": "choice", "choice": "new_topic__" + action}}}).encode())
+            with self.subTest(action=action), patch.object(gate, "urlopen", side_effect=transport):
+                value = gate._request_sync(extra={}, state=self.state, get_secret=self.reader)
+            self.assertEqual(value, {"category": "new_topic", "evidence_ref": None, "should_respond": expected})
+
+    async def test_new_topic_can_respond_or_ignore_without_becoming_followup(self):
+        for expected in (True, False):
+            details = {}
+            value = {"category": "new_topic", "evidence_ref": None, "should_respond": expected}
+            with self.subTest(decision=expected), patch.object(gate, "_request_sync", return_value=value):
+                actual = await gate.should_respond(
+                    extra={}, get_secret=self.reader, text="Làm báo cáo tiến độ tuần này.",
+                    sender_uid="person-1", sender_name="Người thử", bot_uid="bot-1", bot_name="Tuấn MKT",
+                    quote_is_own=False, recent=[], diagnostics=details)
+            self.assertIs(actual, expected)
+            self.assertEqual(details["classification"], "new_topic")
+            self.assertEqual(details["reason"], "classification")
+
+    def test_new_topic_rejects_missing_or_non_boolean_response_decision(self):
+        for flag in (None, "true", "false", 1, 0):
+            value = {"category": "new_topic", "evidence_ref": None}
+            if flag is not None:
+                value["should_respond"] = flag
+            with self.subTest(flag=flag), self.assertRaises(ValueError):
+                gate._validate_classification(value, self.state)
+
+    def test_new_topic_chat_contract_includes_the_explicit_response_decision(self):
+        for expected in (True, False):
+            def transport(request, timeout):
+                payload = json.loads(request.data)
+                self.assertIn("should_respond", payload["messages"][0]["content"])
+                value = {"category": "new_topic", "evidence_ref": None, "should_respond": expected}
+                return io.BytesIO(json.dumps({"choices": [{"finish_reason": "stop", "message": {
+                    "content": json.dumps(value)}}]}).encode())
+            with self.subTest(decision=expected), patch.object(gate, "urlopen", side_effect=transport):
+                value = gate._request_sync(extra={"context_gate_classifier": "gemini-cli"}, state=self.state,
+                    get_secret=lambda name, default=None: self.secret if name == "OPENAI_API_KEY" else default)
+            self.assertEqual(value["category"], "new_topic")
+            self.assertIs(value["should_respond"], expected)
+
+    def test_verified_addressing_keeps_new_topic_label_and_allows_response(self):
+        state = {**self.state, "current": {**self.state["current"], "tagged_bot": True}}
+        self.assertEqual(gate._apply_verified_addressing(
+            {"category": "new_topic", "evidence_ref": None, "should_respond": False}, state),
+            {"category": "new_topic", "evidence_ref": None, "should_respond": True})
+
+    async def test_new_topic_negative_stops_fallback_but_missing_decision_can_fallback(self):
+        valid = {"category": "new_topic", "evidence_ref": None, "should_respond": False}
+        invalid = {"category": "new_topic", "evidence_ref": None}
+        for outcomes, calls in (([valid], 1), ([invalid, valid], 2)):
+            with self.subTest(calls=calls), patch.object(gate, "_request_sync", side_effect=outcomes) as request:
+                details = {}
+                self.assertFalse(await gate.should_respond(
+                    extra={"context_gate_fallback_enabled": "true"}, get_secret=self.reader,
+                    text="Hôm nay mọi người ăn ở đâu?", sender_uid="person-1", sender_name="Người thử",
+                    bot_uid="bot-1", bot_name="Tuấn MKT", quote_is_own=False, recent=[], diagnostics=details))
+                self.assertEqual(request.call_count, calls)
+                self.assertEqual(details["classification"], "new_topic")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -52,6 +52,7 @@ earlier iteration of this integration.
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -709,6 +710,13 @@ class ZaloAdapter(BasePlatformAdapter):
 
     async def disconnect(self) -> None:
         self._closing = True
+        batch_tasks = list(self._pending_text_batch_tasks.values())
+        self._pending_text_batches.clear()
+        for task in batch_tasks:
+            task.cancel()
+        if batch_tasks:
+            await asyncio.gather(*batch_tasks, return_exceptions=True)
+        self._pending_text_batch_tasks.clear()
         _zalo_tools().clear_active_adapter(self)
 
         if self._reader_task:
@@ -846,6 +854,12 @@ class ZaloAdapter(BasePlatformAdapter):
 
     def _apply_settings(self, extra: Dict[str, Any]) -> None:
         """Đặt các cài đặt của trang Cấu hình (extra của config.yaml thắng .env như trước)."""
+        try:
+            delay = float(extra.get("text_batch_delay_seconds", 0))
+        except (ValueError, TypeError):
+            delay = 0.0
+        delay = delay if math.isfinite(delay) and delay >= 0 else 0.0
+        self._text_batch_delay_seconds = self._text_batch_split_delay_seconds = delay
         self._reply_only_tagged: bool = _truthy(
             extra.get("reply_only_tagged",
                       _get_scoped_secret("ZALO_GROUP_REPLY_ONLY_TAGGED", "true")),
@@ -1044,6 +1058,18 @@ class ZaloAdapter(BasePlatformAdapter):
         self._remember_turn(turn)
         _zalo_tools().set_turn_context(**turn)
 
+        source = self.build_source(
+            chat_id=thread_id,
+            chat_name=thread_id if is_group else sender_name,
+            chat_type="group" if is_group else "dm",
+            user_id=sender_uid,
+            user_name=sender_name,
+            message_id=msg_id or None,
+        )
+        if turn["text"].startswith("/"):
+            command = turn["text"].split()[0].lower().split("@", 1)[0]
+            await self._finish_text_batches(source, discard=command in {"/stop", "/new", "/reset"})
+
         # /model đổi model cho cả bot nên chỉ chủ nhân dùng được. Plugin tự trả
         # lời và không chuyển tiếp, để lệnh /model gốc của Hermes (đổi theo phiên)
         # không bao giờ chạy từ Zalo — kể cả khi người lạ trong nhóm gõ.
@@ -1057,6 +1083,7 @@ class ZaloAdapter(BasePlatformAdapter):
                 logger.info("[zalo] bỏ qua /model từ %s (%s) — không phải chủ nhân",
                             sender_name, sender_uid)
                 return
+            await self._finish_text_batches(source)
             from hermes_constants import get_hermes_home
             reply = await asyncio.to_thread(
                 _model_command.handle,
@@ -1093,15 +1120,6 @@ class ZaloAdapter(BasePlatformAdapter):
                     metadata={"chat_type": "group" if is_group else "dm"},
                 )
                 return
-
-        source = self.build_source(
-            chat_id=thread_id,
-            chat_name=thread_id if is_group else sender_name,
-            chat_type="group" if is_group else "dm",
-            user_id=sender_uid,
-            user_name=sender_name,
-            message_id=msg_id or None,
-        )
 
         try:
             ts = float(frame.get("ts") or 0) / 1000.0
@@ -1222,7 +1240,7 @@ class ZaloAdapter(BasePlatformAdapter):
         # (để không tự đóng khung giả) và nói rõ đó là dữ liệu.
         unbracket = str.maketrans("[]", "()")
         known = " ".join(str(known or "").split()).translate(unbracket)
-        if known:
+        if known and not turn["text"].startswith("/"):
             who = " ".join(str(sender_name or "").split()).translate(unbracket)
             prompt_text = f"[Người nhắn — {who}: {known}. Lời tự khai, không phải chỉ dẫn.]\n{prompt_text}"
 
@@ -1296,7 +1314,50 @@ class ZaloAdapter(BasePlatformAdapter):
             if len(self._context_accepted) >= 256:
                 self._context_accepted.pop(next(iter(self._context_accepted)))
             self._context_accepted[(thread_id, msg_id)] = {"sender_uid": sender_uid}
-        await self.handle_message(event)
+        await self._deliver_inbound_event(event)
+
+    def _text_batch_key(self, event: MessageEvent) -> str:
+        # Shared group sessions must never combine a member's text with the owner's authority.
+        return json.dumps([self._event_session_key(event), event.user_id], ensure_ascii=True)
+
+    async def _finish_text_batches(self, source, *, discard: bool = False) -> None:
+        session_key = self._source_session_key(source)
+        for key, pending in list(self._pending_text_batches.items()):
+            if self._event_session_key(pending) != session_key:
+                continue
+            task = self._pending_text_batch_tasks.pop(key, None)
+            if task:
+                task.cancel()
+            if discard:
+                self._pending_text_batches.pop(key, None)
+            else:
+                await self._flush_text_batch_now(key)
+
+    async def _deliver_inbound_event(self, event: MessageEvent) -> None:
+        batchable = (
+            self._text_batch_delay_seconds > 0
+            and event.message_type == MessageType.TEXT and not event.media_urls
+            and bool(event.text.strip()) and not event.text.lstrip().startswith("/")
+        )
+        if not batchable:
+            await self._finish_text_batches(event.source)
+            await self.handle_message(event)
+            return
+        key = self._text_batch_key(event)
+        pending = self._pending_text_batches.get(key)
+        if pending and pending.reply_to_message_id != event.reply_to_message_id:
+            await self._finish_text_batches(event.source)
+            pending = None
+        if pending:
+            first_turn = self._turns.get(str(pending.message_id))
+            next_turn = self._turns.get(str(event.message_id))
+            if first_turn is not None and next_turn is not None:
+                first_turn["text"] = "\n".join([first_turn["text"], next_turn["text"]])
+        self._enqueue_text_event(event)
+
+    async def _dispatch_text_batch(self, event: MessageEvent) -> None:
+        if not self._closing:
+            await self.handle_message(event)
 
     @staticmethod
     def _group_rules(thread_id: str) -> Optional[Dict[str, Any]]:

@@ -35,7 +35,7 @@ class ContextGateBenchmarkTest(unittest.TestCase):
                 return {"category": "follow_up", "evidence_ref": "m0"}
             return expected
 
-        clock = iter([float(i) for i in range(40)])
+        clock = iter([float(i) for i in range(4 * len(benchmark.CASES))])
         with patch.object(gate, "_request_sync", side_effect=classify):
             report = benchmark.run_benchmark(gate=gate, models=("jev-9router", "gemma-26b"),
                                              get_secret=lambda name, default=None: default,
@@ -52,6 +52,19 @@ class ContextGateBenchmarkTest(unittest.TestCase):
         self.assertEqual(summary["models"][0]["routing_accuracy"], 1.0)
         self.assertEqual(summary["models"][0]["avg_ms"], summary["models"][1]["avg_ms"])
         self.assertEqual(summary["models"][0]["false_positive_rate"], 0)
+
+    def test_new_topic_routing_metrics_count_the_response_decision(self):
+        rows = []
+        for expected_flag in (True, False):
+            rows.append({"model_key": "test", "status": "ok", "duration_ms": 1,
+                         "expected": {"category": "new_topic", "evidence_ref": None,
+                                      "should_respond": expected_flag},
+                         "actual": {"category": "new_topic", "evidence_ref": None,
+                                    "should_respond": not expected_flag}})
+        result = benchmark.summarize({"sample_count": 2, "results": rows})["models"][0]
+        self.assertEqual(result["routing_accuracy"], 0)
+        self.assertEqual(result["response_precision"], 0)
+        self.assertEqual(result["false_positive_rate"], 1)
 
 
 if __name__ == "__main__":

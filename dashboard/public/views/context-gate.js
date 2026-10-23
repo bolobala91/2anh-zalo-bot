@@ -1,7 +1,7 @@
 import { useEffect, useState } from '../vendor/hooks.mjs';
 import { api } from '../api.js';
 import { html, Icon, Live, Spinner, PageHead } from '../ui.js';
-import { REASONS, CLASSIFICATIONS, MODELS, STATUSES, PROVIDERS } from '../context-gate-data.js';
+import { REASONS, CLASSIFICATIONS, DECISIONS, MODELS, STATUSES, PROVIDERS } from '../context-gate-data.js';
 
 const when = (at) => new Date(at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
 const noAttemptLabel = (reason) => {
@@ -41,7 +41,7 @@ export function ContextGatePanel({ conv, onJump, onClose }) {
       <button type="button" class="btn btn-ghost btn-sm" onClick=${onClose} aria-label="Đóng bảng lọc ngữ cảnh"><${Icon} name="close" /></button>
     </header>
     <div class="side-body">
-      <p class="muted small">Quyết định cho nhóm này · tự cập nhật mỗi 5 giây. “Cho qua” nghĩa là đã qua bộ lọc; trợ lý còn kiểm tra quyền và xử lý yêu cầu.</p>
+      <p class="muted small">Quyết định cho nhóm này · tự cập nhật mỗi 5 giây. “Chuyển cho agent” nghĩa là đã qua bộ lọc; trợ lý còn kiểm tra quyền và xử lý yêu cầu. Chủ đề mới vẫn được xét có cần bot tham gia hay không.</p>
       <p><a href="#/context-gate">Theo dõi chất lượng từng model →</a></p>
       <label class="gate-filter">Hiển thị
         <select value=${filter} onChange=${(e) => setFilter(e.currentTarget.value)}>
@@ -52,12 +52,12 @@ export function ContextGatePanel({ conv, onJump, onClose }) {
       ${!data && !error ? html`<${Spinner} />` : null}
       ${data && !data.items.length ? html`<p class="muted">${data.available ? 'Chưa có quyết định phù hợp cho nhóm này.' : 'Chưa có nhật ký. Các tin mới sẽ xuất hiện sau khi gateway chạy bản có ghi nhận quyết định.'}</p>` : null}
       <ol class="gate-list">${(data?.items || []).map((row) => html`<li class="gate-entry" key=${row.id}>
-        <div class="gate-entry-head"><strong class=${row.decision === 'RESPOND' ? 'gate-respond' : 'gate-ignore'}>${row.decision === 'RESPOND' ? 'Cho qua bộ lọc' : 'Bỏ qua'}</strong>
+        <div class="gate-entry-head"><strong class=${row.decision === 'RESPOND' ? 'gate-respond' : 'gate-ignore'}>${DECISIONS[row.decision]}</strong>
           <time datetime=${new Date(row.at).toISOString()}>${when(row.at)}</time></div>
         <p>${CLASSIFICATIONS[row.classification] || REASONS[row.reason] || REASONS.unavailable}${row.classification === 'follow_up' && row.evidence_ref ? ` · dựa trên tin bot ${row.evidence_ref}` : ''}</p>
         ${Number.isFinite(row.duration_ms) ? html`<p class="small">Thời gian phân loại · ${row.duration_ms} ms</p>` : null}
         ${row.stages.length ? html`<ol class="gate-stages">${row.stages.map((stage, index) => html`<li key=${index}>
-          <span>${MODELS[stage.model]} · ${PROVIDERS[stage.provider]}${stage.classification ? ` · ${CLASSIFICATIONS[stage.classification]}` : ''}${stage.classification === 'follow_up' && stage.evidence_ref ? ` (${stage.evidence_ref})` : ''}</span>
+          <span>${MODELS[stage.model]} · ${PROVIDERS[stage.provider]}${stage.classification ? ` · ${CLASSIFICATIONS[stage.classification]}` : ''}${stage.classification === 'follow_up' && stage.evidence_ref ? ` (${stage.evidence_ref})` : ''}${stage.status === 'ok' && index === row.stages.length - 1 ? ` · ${DECISIONS[row.decision]}` : ''}</span>
           <span class="muted small">${STATUSES[stage.status]}${stage.http_status ? ` ${stage.http_status}` : ''}${Number.isFinite(stage.duration_ms) ? ` · ${stage.duration_ms} ms` : ''}</span>
         </li>`)}</ol>` : html`<p class="muted small">${noAttemptLabel(row.reason)}</p>`}
         ${row.ref ? html`<button type="button" class="btn btn-ghost btn-sm" onClick=${() => onJump(row.ref)}>Xem tin nhắn →</button>` : html`<span class="muted small">Tin chưa có trong lịch sử lưu</span>`}

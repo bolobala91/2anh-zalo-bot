@@ -3779,5 +3779,152 @@ class AttachmentDownloadTimeoutTests(unittest.IsolatedAsyncioTestCase):
         cache.assert_called_once_with(b"\xff\xd8\xff anh")
 
 
+class ZaloTextBatchTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.adapter = ZaloAdapterMediaContextTest.make_adapter(self)
+        self.adapter._apply_settings({**self.adapter.config.extra, "text_batch_delay_seconds": 0.06})
+        self.adapter._is_owner = lambda uid: uid == "owner"
+        self.adapter._dm_allowed = lambda uid: True
+        self.adapter.handle_message = AsyncMock()
+        self.tools = SimpleNamespace(set_turn_context=Mock(), clear_active_adapter=Mock())
+        self.enterContext(patch.object(zalo_adapter, "_zalo_tools", return_value=self.tools))
+        self.serial = 0
+
+    async def asyncTearDown(self):
+        await self.adapter.disconnect()
+
+    async def flushed(self):
+        tasks = list(self.adapter._pending_text_batch_tasks.values())
+        if tasks:
+            await asyncio.wait_for(asyncio.gather(*tasks), timeout=4)
+
+    async def message(self, text, sender="owner", chat="dm1", **extra):
+        self.serial += 1
+        await self.adapter._on_message({
+            "id": f"batch-{self.serial}", "type": "message", "text": text,
+            "threadId": chat, "threadType": zalo_adapter.THREAD_TYPE_USER,
+            "senderUid": sender, "senderName": sender, **extra,
+        })
+
+    async def test_last_message_restarts_quiet_period_and_keeps_order(self):
+        await self.message("Hỏi giúp lịch chiều nay")
+        await asyncio.sleep(0.04)
+        await self.message("Nhớ nhắn riêng")
+        await asyncio.sleep(0.04)
+        self.adapter.handle_message.assert_not_awaited()
+        await self.flushed()
+        self.adapter.handle_message.assert_awaited_once()
+        event = self.adapter.handle_message.call_args.args[0]
+        self.assertIn("Hỏi giúp lịch chiều nay\nNhớ nhắn riêng", event.text)
+        self.assertEqual(event.user_id, "owner")
+        self.assertEqual(event.message_id, "batch-1")
+        self.assertEqual(self.adapter._turns[event.message_id]["text"],
+                         "Hỏi giúp lịch chiều nay\nNhớ nhắn riêng")
+
+    async def test_senders_and_chats_never_share_a_batch(self):
+        await self.message("one")
+        await self.message("two", sender="member")
+        await self.message("three", chat="dm2")
+        await self.flushed()
+        events = [call.args[0] for call in self.adapter.handle_message.call_args_list]
+        self.assertEqual(len(events), 3)
+        self.assertEqual({(e.source.chat_id, e.user_id, e.text) for e in events},
+                         {("dm1", "owner", "one"), ("dm1", "member", "two"),
+                          ("dm2", "owner", "three")})
+
+    async def test_stop_discards_pending_input_only_in_its_session(self):
+        await self.message("cancel me")
+        await self.message("keep me", chat="dm2")
+        await self.message("/stop")
+        self.adapter.handle_message.assert_awaited_once()
+        self.assertEqual(self.adapter.handle_message.call_args.args[0].text, "/stop")
+        await self.flushed()
+        self.assertEqual([c.args[0].text for c in self.adapter.handle_message.call_args_list],
+                         ["/stop", "keep me"])
+
+    async def test_new_and_reset_are_immediate_and_discard_pending_text(self):
+        for command in ("/new", "/reset"):
+            await self.message("old input")
+            await self.message(command)
+        await asyncio.sleep(0.10)
+        self.assertEqual([c.args[0].text for c in self.adapter.handle_message.call_args_list],
+                         ["/new", "/reset"])
+
+    async def test_other_commands_flush_earlier_text_before_dispatch(self):
+        await self.message("first")
+        await self.message("/busy")
+        self.assertEqual([c.args[0].text for c in self.adapter.handle_message.call_args_list],
+                         ["first", "/busy"])
+
+    async def test_reply_target_changes_flush_separate_events(self):
+        await self.message("first", quote={"id": "quoted-a", "text": "A"})
+        await self.message("second", quote={"id": "quoted-b", "text": "B"})
+        self.adapter.handle_message.assert_awaited_once()
+        await self.flushed()
+        self.assertEqual([c.args[0].reply_to_message_id for c in self.adapter.handle_message.call_args_list],
+                         ["quoted-a", "quoted-b"])
+
+    async def test_shared_group_session_still_separates_senders(self):
+        self.adapter.config.extra["group_sessions_per_user"] = False
+        self.adapter._reply_only_tagged = False
+        await self.message("owner text", chat="group1", threadType=zalo_adapter.THREAD_TYPE_GROUP)
+        await self.message("member text", sender="member", chat="group1",
+                           threadType=zalo_adapter.THREAD_TYPE_GROUP)
+        await self.flushed()
+        self.assertEqual({c.args[0].text for c in self.adapter.handle_message.call_args_list},
+                         {"owner text", "member text"})
+
+    async def test_command_is_not_hidden_by_known_person_context(self):
+        with patch.object(zalo_adapter, "_zalo_people", return_value=SimpleNamespace(
+                turn_scope=Mock(return_value="dm1"), describe_person=Mock(return_value="known person"))):
+            await self.message("/stop")
+        self.adapter.handle_message.assert_awaited_once()
+        self.assertEqual(self.adapter.handle_message.call_args.args[0].text, "/stop")
+
+    async def test_media_flushes_previous_text_without_merging_attachments(self):
+        await self.message("first")
+        self.adapter._cache_attachments = AsyncMock(return_value=(
+            ["/cache/synthetic.jpg"], ["image/jpeg"], [], []))
+        await self.message("photo", msgType="chat.photo", mediaUrls=["https://example.com/photo.jpg"])
+        self.assertEqual(self.adapter.handle_message.await_count, 2)
+        first, second = [c.args[0] for c in self.adapter.handle_message.call_args_list]
+        self.assertEqual(first.text, "first")
+        self.assertEqual(first.media_urls, [])
+        self.assertEqual(second.media_urls, ["/cache/synthetic.jpg"])
+
+    async def test_disconnect_cancels_buffered_input(self):
+        await self.message("pending")
+        await self.adapter.disconnect()
+        await asyncio.sleep(0.10)
+        self.adapter.handle_message.assert_not_awaited()
+        self.assertFalse(self.adapter._pending_text_batches)
+        self.assertFalse(self.adapter._pending_text_batch_tasks)
+
+    async def test_denied_sender_cannot_enter_buffer(self):
+        self.adapter._dm_allowed = lambda uid: False
+        await self.message("denied", sender="stranger")
+        await asyncio.sleep(0.10)
+        self.adapter.handle_message.assert_not_awaited()
+        self.assertFalse(self.adapter._pending_text_batches)
+
+    async def test_three_second_config_and_disabled_or_invalid_values(self):
+        self.adapter._apply_settings({**self.adapter.config.extra, "text_batch_delay_seconds": 3})
+        self.assertEqual(self.adapter._text_batch_delay_seconds, 3)
+        self.assertEqual(self.adapter._text_batch_split_delay_seconds, 3)
+        started = time.monotonic()
+        await self.message("wait three seconds")
+        await asyncio.sleep(0.1)
+        self.adapter.handle_message.assert_not_awaited()
+        await self.flushed()
+        self.assertGreaterEqual(time.monotonic() - started, 2.95)
+        self.adapter.handle_message.assert_awaited_once()
+        self.adapter.handle_message.reset_mock()
+        for value in (0, -1, "bad", float("inf"), float("nan")):
+            self.adapter._apply_settings({**self.adapter.config.extra, "text_batch_delay_seconds": value})
+            self.assertEqual(self.adapter._text_batch_delay_seconds, 0)
+        await self.message("immediate")
+        self.adapter.handle_message.assert_awaited_once()
+
+
 if __name__ == "__main__":
     unittest.main()
