@@ -18,12 +18,14 @@ import shutil
 import sys
 import zipfile
 import zlib
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 _REAL_STDOUT = sys.stdout
 
 SKILL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")  # tên skill mới (tải lên) — cũng là tên thư mục
-EXISTING_NAME = re.compile(r"^[^\x00-\x1f\x7f/\\]{1,64}$")  # skill sẵn có có thể mang tên có dấu cách
+# Skill sẵn có có thể mang tên có dấu cách; skill trùng tên được Hermes gọi theo đường dẫn "nhóm/tên" (load_name) —
+# cho "/" ở giữa nhưng không ở đầu/cuối, không có đoạn "." hay "..".
+EXISTING_NAME = re.compile(r"^(?!/)(?!.*(?:^|/)\.{1,2}(?:/|$))[^\x00-\x1f\x7f\\]{1,128}(?<!/)$")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9@_.:/-]{1,200}$")
 PLATFORM = "zalo"
 MAX_SKILL_MD = 200_000
@@ -113,6 +115,14 @@ def _skill_dirs():
     from agent.skill_utils import get_external_skills_dirs, iter_skill_index_files
     from tools.skills_tool import _parse_frontmatter
     out = {}
+    # Skill trùng tên: Hermes liệt kê theo load_name "nhóm/tên" — lấy đúng bảng tên đó từ danh mục của Hermes.
+    try:
+        from tools.skills_tool import _skill_catalog
+        for entry in _skill_catalog(skip_disabled=True, include_hidden=True):
+            if entry.get("load_name") and entry.get("path"):
+                out.setdefault(str(entry["load_name"]), Path(entry["path"]).parent)
+    except Exception:  # Hermes cũ chưa có _skill_catalog — vẫn còn bảng theo tên khai báo bên dưới
+        pass
     for base in [_skills_root(), *get_external_skills_dirs()]:
         if not base.exists():
             continue
@@ -150,8 +160,12 @@ def skills_list(_args):
     config = load_config()
     zalo_off, everywhere = _platform_off(config), _global_off(config)
     try:
-        from tools.skill_usage import _read_bundled_manifest_names, activity_count, load_usage
-        usage, bundled = load_usage(), _read_bundled_manifest_names()
+        from tools import skill_usage
+        # Hermes đổi tên hàm này qua các bản (_read_bundled_manifest_names → _read_bundled_names); import cứng một tên
+        # làm cả khối rơi vào nhánh dự phòng — số lượt dùng luôn 0, mọi skill thành "Tự tạo".
+        read_bundled = (getattr(skill_usage, "_read_bundled_names", None)
+                        or getattr(skill_usage, "_read_bundled_manifest_names", None) or (lambda: set()))
+        usage, bundled, activity_count = skill_usage.load_usage(), set(read_bundled()), skill_usage.activity_count
     except Exception:
         usage, bundled, activity_count = {}, set(), (lambda _u: 0)
     dirs, by_dir = _skill_dirs(), _lock_by_dir(_hub_entries())

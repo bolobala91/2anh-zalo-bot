@@ -530,12 +530,17 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
         adapter.handle_message = lambda event: asyncio.sleep(0)
         sent = []
 
+        reads = []
+
         async def command(payload, expect_ack=False):
+            if payload.get("type") == "invoke":
+                reads.append(payload)
+                return {"ok": True, "result": {"gridInfoMap": {"g1": {"name": "Lớp 10A1"}}}}
             sent.append(payload)
             return {"ok": True}
 
         async def invoke(method, args, confirmed=False):
-            return {"ok": True, "result": {"gridInfoMap": {"g1": {"name": "Lớp 10A1"}}}}
+            raise AssertionError("tên nhóm phải đọc bằng quyền chủ nhân, không theo lượt nền")
 
         judge = SimpleNamespace(complete=lambda messages, **kw: SimpleNamespace(
             text='{"bao": true, "loai": "can_thiep", "muc_do": "cao", "ly_do": "đòi bot bỏ quy tắc"}'))
@@ -554,6 +559,9 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Lớp 10A1", alert["text"])
         self.assertIn("Tùng (u7)", alert["text"])
         self.assertIn("can thiệp sâu vào bot", alert["text"])
+        # Lượt nền không có người gửi: lệnh đọc tên nhóm (quyền chủ nhân) phải tự mang quyền chủ nhân.
+        self.assertEqual(reads[0]["method"], "getGroupInfo")
+        self.assertEqual((reads[0]["auth"]["actorRole"], reads[0]["auth"]["actorUid"]), ("owner", "4032503529991691000"))
 
     async def test_bare_tag_after_a_sticker_looks_at_what_was_just_sent(self):
         # Trong nhóm đệ ruột lúc 01:11 ngày 13/9: gửi sticker rồi tag trơ
@@ -2152,6 +2160,8 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
                 zalo_tools._FILE_QUOTA.clear()
                 pptx = json.loads(await zalo_tools.zalo_make_file(dict(spec, format="pptx", content=None,
                                                                        slides=[{"title": "Ý", "bullets": ["a"]}])))
+                md = json.loads(await zalo_tools.zalo_make_file(dict(spec, format="md", title="Hướng dẫn MCP",
+                                                                     content="## Bước 1\n```js\nrun()\n```")))
             finally:
                 zalo_tools._TURN.reset(token)
             token = zalo_tools._TURN.set(dict(member, is_group=False, thread_id="9000000000000000001"))
@@ -2168,7 +2178,9 @@ class ZaloAdapterMediaContextTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("5 tệp mỗi giờ", results[5]["error"])
         self.assertFalse(other_group["success"])
         self.assertFalse(dm["success"])
-        self.assertEqual(len(fake.calls), 6)
+        self.assertEqual(len(fake.calls), 7)
+        self.assertTrue(md["success"])
+        self.assertTrue(fake.calls[6][3].endswith(".md"), "tệp Markdown thật, không dán chữ vào tin")
         self.assertNotIn("note", results[0])
         self.assertIn("không theo template", pptx["note"], "slide chữ cố định: bot phải nói đúng, không nhận là giống mẫu")
         method, args, existed, path = fake.calls[0]
@@ -2304,6 +2316,34 @@ class BusyStatusFilterTest(unittest.TestCase):
         result = asyncio.run(adapter.send("123", "⚡ Interrupting current task. I'll respond to your message shortly."))
         self.assertTrue(result.success)
 
+    def test_model_fallback_notice_is_hidden(self):
+        # Model chính lỗi, Hermes đổi sang model dự phòng và báo bằng tiếng Anh — không gửi câu đó vào Zalo.
+        text = ("⚠️ Model fallback: gpt-5.5 via custom unavailable (provider error); using deepseek-v4.1-flash via custom. "
+                "Primary retry eligible in ~60 s; recovery is not guaranteed.")
+        self.assertTrue(zalo_adapter._is_busy_status(text))
+        self.assertFalse(zalo_adapter._is_busy_status("⚠️ Model này trả lời chậm, anh chờ chút nhé."))
+
+    def test_session_lease_notices_are_hidden_or_said_in_vietnamese(self):
+        # Hermes 0.22 (turn_facade_lease.py): khách nhắn dồn ảnh + PDF thì lượt sau chờ khoá phiên của lượt trước.
+        for text in ("Stopped waiting for another Hermes process on this session. Your message was not processed.",
+                     "⏳ Another Hermes process is using this session; waiting for it to finish before starting your turn...",
+                     "⏳ Still waiting for the other Hermes process on this session (30s)..."):
+            self.assertTrue(zalo_adapter._is_busy_status(text), text)
+        adapter = zalo_adapter.ZaloAdapter.__new__(zalo_adapter.ZaloAdapter)
+        adapter._skip_inactive_group_cron = lambda chat_id, metadata: False
+        adapter._guess_thread_type = lambda chat_id, metadata: zalo_adapter.THREAD_TYPE_USER
+        adapter._chunk = lambda part: [part]
+        sent = []
+
+        async def command(payload, expect_ack=False):
+            sent.append(payload["text"])
+            return {"ok": True, "msgId": "1"}
+
+        adapter._command = command
+        asyncio.run(adapter.send("123", "⏳ Another Hermes process kept this session busy too long. Your message was not "
+                                        "processed - wait for the other process to finish, then send it again."))
+        self.assertEqual(sent, [zalo_adapter._LEASE_TIMEOUT_VI])
+
 
 class ZaloToolSchemaTest(unittest.TestCase):
     def test_every_zalo_tool_has_one_unique_public_or_owner_assignment(self):
@@ -2313,7 +2353,7 @@ class ZaloToolSchemaTest(unittest.TestCase):
         self.assertEqual(set(assignments), {
             zalo_tools.TOOLSET_PUBLIC, zalo_tools.TOOLSET_OWNER, zalo_tools.TOOLSET_CRON,
         })
-        self.assertEqual(assignments.count(zalo_tools.TOOLSET_PUBLIC), 29)
+        self.assertEqual(assignments.count(zalo_tools.TOOLSET_PUBLIC), 31)
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_OWNER), 41)
         self.assertEqual(assignments.count(zalo_tools.TOOLSET_CRON), 1)
 

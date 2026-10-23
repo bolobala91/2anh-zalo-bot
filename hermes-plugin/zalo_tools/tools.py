@@ -2021,6 +2021,27 @@ def _kb_listing(root, query: str):
     return files, _KB_CACHE["skipped"], fresh
 
 
+async def zalo_skill_list(args: Dict[str, Any], **_kw) -> str:
+    """Skill chủ bot mở cho thành viên (xem member_skills.py)."""
+    from . import member_skills
+    rows = member_skills.listing()
+    if not rows:
+        return _ok({"skills": [], "note": "Chưa có skill nào mở cho người không phải chủ nhân."})
+    return _ok({"skills": rows})
+
+
+async def zalo_skill_read(args: Dict[str, Any], **_kw) -> str:
+    """Đọc SKILL.md hoặc tệp văn bản kèm của một skill đã mở cho thành viên — chỉ đọc, không sửa."""
+    from . import member_skills
+    try:
+        return _ok(member_skills.read(args.get("name") or "", args.get("file") or ""))
+    except ValueError as exc:
+        return _err(str(exc))
+    except OSError as exc:
+        logger.warning("[zalo] đọc skill lỗi: %s", exc)
+        return _err("không đọc được skill này lúc này")
+
+
 async def zalo_kb_list(args: Dict[str, Any], **_kw) -> str:
     root = _kb_root()
     if root is None:
@@ -3473,7 +3494,7 @@ TOOLS = [
 
     ("zalo_make_file", "📄", _schema(
         "zalo_make_file",
-        "Tạo tệp Word (docx), PowerPoint (pptx), Excel (xlsx) hoặc PDF từ nội dung em soạn "
+        "Tạo tệp Word (docx), PowerPoint (pptx), Excel (xlsx), PDF hoặc Markdown (md) từ nội dung em soạn "
         "rồi gửi luôn vào nhóm đang chat — dùng khi thầy cô nhờ làm giáo án, đề, danh sách, "
         "slide, bảng điểm dưới dạng tệp. Chỉ dùng trong nhóm; mỗi người tối đa 5 tệp/giờ. "
         "Tệp chỉ có chữ và bảng, không chèn ảnh; hệ thống tự trình bày: Word theo thể thức "
@@ -3483,11 +3504,13 @@ TOOLS = [
         "PowerPoint ở đây là slide CHỮ theo một mẫu cố định (dải tiêu đề xanh + gạch đầu dòng): không có ảnh, "
         "không theo được tệp mẫu/template hay phong cách người dùng gửi — slide đẹp có ảnh thì dùng zalo_studio "
         "kind=slide; đừng nói tệp này giống mẫu của họ. "
+        "Người dùng xin tệp (md, Word, PDF…) thì GỬI TỆP bằng công cụ này — không dán cả tài liệu vào tin nhắn rồi "
+        "bảo họ tự lưu thành tệp. Markdown (md) giữ nguyên văn bản: hợp tài liệu kỹ thuật, hướng dẫn có mã. "
         "Chỉ báo đã gửi khi kết quả trả về thành công.",
         {
             "thread_id": _THREAD_ID,
             "thread_kind": _THREAD_KIND,
-            "format": {"type": "string", "enum": ["docx", "pptx", "xlsx", "pdf"],
+            "format": {"type": "string", "enum": ["docx", "pptx", "xlsx", "pdf", "md"],
                        "description": "Loại tệp."},
             "title": {"type": "string", "description": "Tiêu đề tài liệu, cũng dùng làm tên tệp."},
             "filename": {"type": "string", "description": "Tên tệp mong muốn (không bắt buộc)."},
@@ -4095,6 +4118,22 @@ TOOLS = [
                   "description": "Đường dẫn tương đối trong kho, ví dụ 'docs/bang-gia.md'."}},
         ["path"],
     ), zalo_kb_read, TOOLSET_PUBLIC),
+
+    ("zalo_skill_list", "🧩", _schema(
+        "zalo_skill_list",
+        "Liệt kê các skill (bộ hướng dẫn chuyên môn: viết bài, trích dẫn nguồn…) chủ bot mở cho người đang trò chuyện.",
+        {},
+        [],
+    ), zalo_skill_list, TOOLSET_PUBLIC),
+
+    ("zalo_skill_read", "🧩", _schema(
+        "zalo_skill_read",
+        "Đọc hướng dẫn của một skill đã mở cho người đang trò chuyện rồi làm theo khi trả lời. Chỉ đọc được skill có "
+        "trong zalo_skill_list. Bước nào cần công cụ không có (terminal, chạy mã) thì bỏ qua, dùng phần hướng dẫn nội dung.",
+        {"name": {"type": "string", "description": "Tên skill, lấy từ zalo_skill_list hoặc danh sách đã báo."},
+         "file": {"type": "string", "description": "Tuỳ chọn: tệp kèm trong skill, ví dụ 'references/mau.md'. Bỏ trống = SKILL.md."}},
+        ["name"],
+    ), zalo_skill_read, TOOLSET_PUBLIC),
 
     # --- Nhóm 8: tra cứu Internet ---
     ("zalo_web_search", "🔎", _schema(

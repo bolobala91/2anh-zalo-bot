@@ -2,6 +2,100 @@
 
 Theo chuẩn [Keep a Changelog](https://keepachangelog.com/vi/1.1.0/).
 
+## [2.63.0] — 2026-10-23
+
+### Thêm — Bảng giá model khi đổi model (cổng Stali)
+
+- Cổng AI nào trả giá trong danh sách model (như Stali) thì trang **Khoá API & Model** hiện giá:
+  - Cạnh tên mỗi model trong ô chọn.
+  - Một dòng giá của model đang dùng, kèm ước tính chi phí mỗi lượt gọi AI.
+  - Nút **"Xem bảng giá"**: toàn bộ model xếp rẻ trước, lọc theo tên, giá vào/ra trên 1 triệu token hoặc giá mỗi lượt, mức tối thiểu, ước tính mỗi lượt gọi AI, kèm nút **"Dùng model này"** để đổi ngay.
+- Giá lấy trực tiếp từ cổng AI mỗi lần mở trang nên luôn theo giá hiện hành.
+- Ước tính dựa trên một lượt gọi điển hình của bot (khoảng 25.000 token vào, 600 token ra). Một tin có tra cứu, đọc ảnh, tạo tệp có thể cần 2–4 lượt.
+
+## [2.62.2] — 2026-10-23
+
+### Sửa — Skill trùng tên báo "Không tìm thấy" khi bật/tắt
+
+- Dashboard tra thư mục skill theo tên khai báo, còn Hermes liệt kê skill trùng tên theo đường dẫn "nhóm/tên". Nay dashboard tra theo đúng danh mục của Hermes, nên bật/tắt, xem, gỡ được những skill này.
+
+## [2.62.1] — 2026-10-23
+
+### Sửa — Bật/tắt được skill tên dạng "nhóm/tên"
+
+- Khi hai skill trùng tên, Hermes gọi chúng theo đường dẫn, ví dụ `software-development/systematic-debugging`. Dashboard trước đây không nhận dấu "/", nên không bật/tắt được những skill này. Một lô bật/tắt hàng loạt có lẫn tên như vậy bị từ chối cả lô.
+- Nay tên có "/" ở giữa được nhận, vẫn chặn "/" ở đầu hoặc cuối, đoạn "." hay "..", và dấu "\\".
+
+## [2.62.0] — 2026-10-23
+
+### Thêm — Skill cho thành viên
+
+- Trước đây chỉ chủ nhân dùng được skill. Thành viên (học sinh, người trong nhóm) chỉ có bộ công cụ công khai, không có công cụ đọc skill, nên trợ lý không hề biết có skill khi trả lời họ.
+- Trang Skill có thêm ô **"Cho thành viên dùng"** trên từng thẻ. Skill được mở cho thành viên đọc qua hai công cụ chỉ-đọc mới:
+  - `zalo_skill_list`: liệt kê skill dùng được.
+  - `zalo_skill_read`: đọc SKILL.md và tệp kèm, không ra ngoài thư mục skill.
+- Mỗi lượt của thành viên, trợ lý được báo danh sách skill dùng được, với lời dặn đọc skill trước khi trả lời.
+- Nút bật/tắt theo nhóm và theo người đi chung với tính năng **"Kho tài liệu và skill"** ở Phân quyền Bot.
+- Mở hay đóng skill có hiệu lực ngay, không cần khởi động lại trợ lý.
+- Skill riêng của chủ bot hoặc thao tác hệ thống (zalo-*, hermes-*, tin nhắn theo giọng chủ bot, email, Google, GitHub, công cụ lập trình…) không mở cho thành viên được. Danh sách cấm được kiểm ở cả dashboard lẫn plugin.
+
+### Sửa — Số lượt dùng skill luôn hiện 0
+
+- Hermes bản mới đổi tên hàm đọc danh sách skill có sẵn, làm dashboard rơi vào nhánh dự phòng: số lượt dùng luôn 0 và mọi skill bị ghi "Tự tạo". Nay dashboard đọc đúng cả bản cũ và bản mới.
+
+## [2.61.0] — 2026-10-22
+
+### Thêm — Trang Skill tiếng Việt, lọc theo lĩnh vực và mục đích, dạng lưới
+
+- Mô tả của 273 skill (skill đã cài và danh mục chính thức của Hermes) được viết lại bằng tiếng Việt dễ hiểu. Tên skill giữ nguyên để khớp với trợ lý.
+- Hai hàng nút lọc: **Lĩnh vực** (Giáo dục, Văn bản & hành chính, Văn phòng, Truyền thông, Thiết kế – ảnh – video, Nghiên cứu, Dữ liệu & AI, Lập trình, Máy chủ & bảo mật, Tác tử & tự động hoá, Đời sống) và **Mục đích** (tạo tệp, soạn thảo, dạy học – ra đề, tra cứu, ảnh – video, phân tích dữ liệu, gửi tin – email, quản lí việc, tự động hoá, lập trình).
+  - Mỗi nút hiện số skill khớp.
+  - Hai hàng lọc kết hợp được với nhau và với ô tìm kiếm.
+- Danh sách chuyển sang lưới thẻ: tên, mô tả, nhãn lĩnh vực, nút Bật, Xem, Gỡ. Áp dụng cho cả tab "Đã cài" lẫn danh mục chính thức và kết quả tìm trên kho.
+- Skill mới chưa có bản dịch vẫn hiện, kèm mô tả gốc và lĩnh vực đoán theo nhóm của Hermes.
+
+## [2.60.1] — 2026-10-21
+
+### Sửa — Không gửi câu báo đổi model dự phòng vào Zalo
+
+- Khi model chính lỗi và Hermes tự chuyển sang model dự phòng (`fallback_providers` trong config.yaml), gateway gửi câu tiếng Anh "⚠️ Model fallback: … unavailable; using …" ra kênh chat.
+- Plugin Zalo giờ bỏ câu này. Người dùng chỉ nhận câu trả lời từ model dự phòng; việc đổi model vẫn ghi trong nhật ký gateway.
+
+## [2.60.0] — 2026-10-21
+
+### Thêm — Quản lí thiết bị đăng nhập dashboard, đăng xuất từ xa
+
+- Trang **Tài khoản của tôi** có thẻ "Thiết bị đang đăng nhập". Mỗi thiết bị hiện:
+  - trình duyệt · hệ điều hành (ví dụ "Chrome · Windows", "Safari · iPhone");
+  - IP gần nhất, lần hoạt động cuối, thời điểm và cách đăng nhập (mật khẩu hay mã Zalo).
+- Thiết bị đang dùng có nhãn "Thiết bị này"; các thiết bị khác có nút **Đăng xuất** riêng.
+- Trang **Người dùng** (Quản trị) có nút "Thiết bị (n)" cho từng tài khoản: xem và đăng xuất từ xa từng thiết bị của người đó.
+- Mỗi lần đăng xuất từ xa được ghi vào Nhật ký hoạt động ("Đăng xuất từ xa một thiết bị").
+- Phiên đăng nhập trước bản này vẫn dùng được, hiện là "Thiết bị không rõ".
+- Mã thiết bị là mã băm riêng, không lộ token đăng nhập. Chủ bot chỉ thấy và đăng xuất được thiết bị của chính mình.
+
+## [2.59.1] — 2026-10-21
+
+### Sửa — Câu báo khoá phiên tiếng Anh của Hermes không lọt vào Zalo
+
+- Hermes 0.22 có thêm các câu báo khi một lượt phải chờ lượt khác của cùng phiên. Trường hợp hay gặp: người dùng gửi dồn ảnh rồi PDF rồi câu hỏi. Máy khách đã hiện nguyên câu "Stopped waiting for another Hermes process on this session. Your message was not processed."
+- Cách xử lý mới:
+  - Ẩn các câu đang chờ / vẫn đang chờ / thôi chờ. Tin mới của người dùng vẫn được xử lý ngay sau.
+  - Câu "chờ quá lâu, tin chưa được xử lý" được báo bằng tiếng Việt, để người dùng biết gửi lại.
+
+## [2.59.0] — 2026-10-21
+
+### Thêm — Tạo tệp Markdown
+
+- `zalo_make_file` có thêm định dạng `md`: giữ nguyên văn bản bot soạn (tài liệu kỹ thuật, hướng dẫn có mã), mã hoá UTF-8, tự thêm tiêu đề nếu thiếu.
+- Bot được dặn: người dùng xin tệp thì gửi tệp, không dán cả tài liệu vào tin nhắn rồi bảo họ tự lưu thành tệp. Trước đây thành viên nhóm xin "file md" thì nhận về 6.400 ký tự chữ thô.
+
+### Sửa — Cảnh báo nhóm ghi đúng tên nhóm
+
+- Cảnh báo hành vi nguy hiểm trước đây ghi mã nhóm thay vì tên nhóm. Bộ lọc chạy nền không có người gửi, nên cầu nối chặn lệnh đọc thông tin nhóm (lệnh này chỉ chủ nhân được dùng).
+  - Giờ riêng lệnh đọc tên nhóm cho cảnh báo mang quyền chủ nhân.
+  - Lỗi tạm thời không còn bị nhớ suốt 1 giờ.
+
 ## [2.58.0] — 2026-10-19
 
 ### Thêm — Slide theo mẫu người dùng gửi

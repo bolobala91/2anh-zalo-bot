@@ -357,7 +357,17 @@ _FILE_CONTEXT_RE = re.compile(
 # viết thường, thêm dấu câu hay để chung dòng — dấu này không được lọt vào tin.
 # Câu báo bận của gateway Hermes (locales/en.yaml › busy: interrupting/queued/steered/redirected/subagent/compressing).
 _BUSY_STATUS_HEADS = ("⚡ Interrupting current task", "⏳ Queued for the next turn", "⏩ Steered into current run",
-                      "↪ Redirected current run", "⏳ Subagent working", "⏳ Compressing context")
+                      "↪ Redirected current run", "⏳ Subagent working", "⏳ Compressing context",
+                      # Khoá phiên (Hermes 0.22, agent/turn_facade_lease.py): đang chờ lượt khác của cùng phiên, hoặc
+                      # thôi chờ vì người dùng vừa nhắn tin mới — tin mới đó vẫn được xử lý ngay sau.
+                      "⏳ Another Hermes process is using this session", "⏳ Still waiting for the other Hermes process",
+                      "Stopped waiting for another Hermes process",
+                      # Đổi sang model dự phòng (agent/chat_completion_helpers.py) khi model chính lỗi: câu trả lời
+                      # vẫn tới từ model dự phòng, người dùng Zalo không cần biết chuyện đổi model.
+                      "⚠️ Model fallback:")
+# Chờ khoá phiên quá lâu: tin của người dùng KHÔNG được xử lý — phải báo để họ gửi lại, nhưng bằng tiếng Việt.
+_LEASE_TIMEOUT_HEAD = "⏳ Another Hermes process kept this session busy too long"
+_LEASE_TIMEOUT_VI = "⏳ Em đang bận xử lý việc trước nên chưa làm được tin vừa rồi — gửi lại giúp em sau ít phút nhé."
 
 
 def _is_busy_status(content: Optional[str]) -> bool:
@@ -1759,8 +1769,16 @@ class ZaloAdapter(BasePlatformAdapter):
                 except Exception:
                     return None
 
+            async def owner_read(method: str, args: list) -> Optional[Dict[str, Any]]:
+                # getGroupInfo là quyền đọc của chủ nhân; lượt nền này không có người gửi (vai trò system chỉ được
+                # gửi chữ). Cảnh báo là việc của chủ nhân nên lệnh đọc tên nhóm mang quyền chủ nhân — chỉ lệnh này.
+                uid = (_split_ids(_get_scoped_secret("ZALO_ALLOWED_USERS", "") or "") or [""])[0]
+                return await self._command({"type": "invoke", "method": method, "args": args, "auth": {
+                    "actorUid": uid, "actorRole": "owner", "sourceThreadId": uid,
+                    "sourceThreadType": THREAD_TYPE_USER, "confirmed": False}}, expect_ack=True)
+
             watcher = self._safety = safety.Watcher(
-                send=send, llm=llm, group_name=lambda gid: safety.group_name_via(self.invoke, gid))
+                send=send, llm=llm, group_name=lambda gid: safety.group_name_via(owner_read, gid))
         task = asyncio.ensure_future(watcher.check(thread_id=thread_id, sender_uid=sender_uid,
                                                    sender_name=sender_name, text=text, owners=list(owners)))
         self._message_tasks.add(task)
@@ -2266,6 +2284,8 @@ class ZaloAdapter(BasePlatformAdapter):
             if wrapped:
                 content = wrapped.group("body").strip()
 
+        if content and content.lstrip().startswith(_LEASE_TIMEOUT_HEAD):
+            content = _LEASE_TIMEOUT_VI
         if _is_busy_status(content):
             # "⚡ Interrupting current task…", "⏳ Queued for the next turn…": câu báo bận tiếng Anh của gateway khi
             # người dùng nhắn dồn. Vào nhóm Zalo chỉ lộ ra là bot; tin mới vẫn được xử lý bình thường. Lọc ở đây
