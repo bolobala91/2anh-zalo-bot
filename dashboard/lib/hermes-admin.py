@@ -18,6 +18,7 @@ import shutil
 import sys
 import zipfile
 import zlib
+from collections import Counter
 from pathlib import Path, PurePosixPath
 
 _REAL_STDOUT = sys.stdout
@@ -110,10 +111,33 @@ def _skills_root():
     return get_hermes_home() / "skills"
 
 
-def _skill_dirs():
-    """tên (frontmatter, như Hermes hiển thị) → thư mục skill. Đi đúng các thư mục Hermes quét, tên đầu tiên thắng."""
+def _scanned_skills():
+    """Skill paths for Hermes versions that list duplicate frontmatter names only once."""
     from agent.skill_utils import get_external_skills_dirs, iter_skill_index_files
-    from tools.skills_tool import _parse_frontmatter
+    from tools.skills_tool import _parse_frontmatter, skill_matches_environment, skill_matches_platform
+
+    found = []
+    for base in [_skills_root(), *get_external_skills_dirs()]:
+        if not base.exists():
+            continue
+        for md in iter_skill_index_files(base, "SKILL.md"):
+            try:
+                fm, body = _parse_frontmatter(md.read_text(encoding="utf-8-sig", errors="replace")[:4000])
+                if not skill_matches_platform(fm) or not skill_matches_environment(fm):
+                    continue
+                name = str(fm.get("name") or md.parent.name)[:64]
+                relative = md.parent.relative_to(base).as_posix()
+                description = fm.get("description") or next(
+                    (line.strip() for line in body.splitlines() if line.strip() and not line.lstrip().startswith("#")), "")
+                category = md.parent.parent.name if md.parent.parent != base else ""
+                found.append((name, relative, md.parent, description, category))
+            except Exception:
+                continue
+    return found
+
+
+def _skill_dirs(scanned=None):
+    """tên (frontmatter, như Hermes hiển thị) → thư mục skill. Đi đúng các thư mục Hermes quét, tên đầu tiên thắng."""
     out = {}
     # Skill trùng tên: Hermes liệt kê theo load_name "nhóm/tên" — lấy đúng bảng tên đó từ danh mục của Hermes.
     try:
@@ -121,17 +145,15 @@ def _skill_dirs():
         for entry in _skill_catalog(skip_disabled=True, include_hidden=True):
             if entry.get("load_name") and entry.get("path"):
                 out.setdefault(str(entry["load_name"]), Path(entry["path"]).parent)
+        if out:
+            return out
     except Exception:  # Hermes cũ chưa có _skill_catalog — vẫn còn bảng theo tên khai báo bên dưới
         pass
-    for base in [_skills_root(), *get_external_skills_dirs()]:
-        if not base.exists():
-            continue
-        for md in iter_skill_index_files(base, "SKILL.md"):
-            try:
-                fm, _ = _parse_frontmatter(md.read_text(encoding="utf-8-sig", errors="replace")[:4000])
-            except Exception:
-                continue
-            out.setdefault(str(fm.get("name") or md.parent.name)[:64], md.parent)
+    if scanned is None:
+        scanned = _scanned_skills()
+    counts = Counter(name for name, *_ in scanned)
+    for name, relative, path, *_ in scanned:
+        out.setdefault(relative if counts[name] > 1 else name, path)
     return out
 
 
@@ -168,9 +190,26 @@ def skills_list(_args):
         usage, bundled, activity_count = skill_usage.load_usage(), set(read_bundled()), skill_usage.activity_count
     except Exception:
         usage, bundled, activity_count = {}, set(), (lambda _u: 0)
-    dirs, by_dir = _skill_dirs(), _lock_by_dir(_hub_entries())
+    listed = _find_all_skills(skip_disabled=True)
+    try:
+        from tools.skills_tool import _skill_catalog
+    except ImportError:
+        _skill_catalog = None
+    if callable(_skill_catalog):
+        dirs = _skill_dirs()
+    else:
+        scanned = _scanned_skills()
+        dirs = _skill_dirs(scanned)
+        duplicates = {name for name, count in Counter(row[0] for row in scanned).items() if count > 1}
+        for name in duplicates:
+            if not any(s.get("name") == name for s in listed):
+                continue
+            listed = [s for s in listed if s.get("name") != name]
+            listed.extend({"name": relative, "description": description, "category": category}
+                          for bare, relative, _path, description, category in scanned if bare == name)
+    by_dir = _lock_by_dir(_hub_entries())
     out = []
-    for s in _find_all_skills(skip_disabled=True):
+    for s in listed:
         name = s.get("name") or ""
         path = dirs.get(name)
         lock_name, h = by_dir.get(os.path.normcase(str(path)), (None, None)) if path else (None, None)
