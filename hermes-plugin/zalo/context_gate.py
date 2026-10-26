@@ -49,10 +49,13 @@ INSTRUCTIONS = (
     "Chọn đúng MỘT loại cho tin nhắn hiện tại dựa trên toàn bộ state. "
     "addressed_to_bot: tin hiện tại gọi bot rõ ràng; metadata tagged_bot/reply_to_bot đã xác thực là bằng chứng mạnh, "
     "còn text_matches_call_word chỉ là khớp chữ. Nếu nhiều thành viên trùng tên bot, tên gọi chung chưa đủ để chọn bot. "
-    "follow_up: tin hiện tại trả lời hoặc tiếp tục trực tiếp một tin bot cụ thể trong recent_messages; chọn mã follow_up__mN "
-    "của chính tin bot đó. Không chọn theo cùng chủ đề chung. Nếu không chỉ ra được tin bot cụ thể thì không chọn follow_up. "
+    "follow_up: tin hiện tại trả lời, giao bước tiếp theo hoặc bổ sung dữ liệu cho việc bot vừa nói trong "
+    "recent_messages; chọn mã follow_up__mN của đúng tin bot đó. Sau khi bot trả lời người gửi, lời dặn 'hỏi @Minh "
+    "để có thêm thông tin' vẫn là việc giao bot làm, dù tag Minh; khác với '@Minh ơi, bạn trả lời giúp' là nói với Minh. "
+    "Không chọn chỉ vì cùng chủ đề hoặc cùng người gửi; nếu không chỉ ra được tin bot cụ thể thì không chọn follow_up. "
     "member_conversation: đang trả lời thành viên khác hoặc trò chuyện nhóm, không có cuộc trao đổi bot gần đây bị đổi đề tài. "
-    "new_topic: chuyển sang chủ đề khác rõ rệt so với tin bot gần nhất. Với chủ đề mới, phải đánh giá riêng "
+    "new_topic: chuyển sang chủ đề khác rõ rệt so với tin bot gần nhất; gửi thêm nguồn hoặc bước tiếp theo "
+    "cho việc bot đang làm không phải chủ đề mới. Với chủ đề mới, phải đánh giá riêng "
     "bot có cần tham gia trao đổi không: chọn new_topic__respond khi đó là câu hỏi/yêu cầu cần trợ lý xử lý "
     "theo vai trò và ngữ cảnh nhóm, kể cả không tag (ví dụ giao làm báo cáo tuần sau một chuyện khác); "
     "chọn new_topic__ignore khi chỉ là chuyện giữa thành viên, hướng tới người khác hoặc chưa đủ bằng chứng cần bot. "
@@ -167,13 +170,14 @@ def _choice_criteria(state: Dict[str, Any]) -> Dict[str, str]:
     criteria = {key: value for key, value in CATEGORY_TEXT.items() if key != "new_topic"}
     criteria.update({
         "new_topic__respond": "Đổi chủ đề nhưng tin đang hỏi/giao việc cần trợ lý tham gia theo ngữ cảnh, kể cả không tag bot.",
-        "new_topic__ignore": "Đổi chủ đề nhưng là chuyện giữa thành viên, nói với người khác hoặc chưa đủ bằng chứng cần trợ lý.",
+        "new_topic__ignore": "Đổi chủ đề nhưng là chuyện giữa thành viên, nói trực tiếp với người khác hoặc chưa đủ bằng chứng cần trợ lý; không dùng cho bước tiếp của việc bot đang làm.",
     })
     for message in state.get("recent_messages", []):
         if message.get("is_bot") is True and isinstance(message.get("message_ref"), str):
             ref = message["message_ref"]
             criteria[f"follow_up__{ref}"] = (
                 f"Tin hiện tại là câu trả lời hoặc phần tiếp nối trực tiếp của đúng tin bot {ref}. "
+                "Gồm việc giao bot bước tiếp theo hoặc bổ sung nguồn cho việc vừa nói; tag người cần hỏi không tự biến tin thành lời nhắn cho người đó. "
                 "Nội dung tham chiếu nằm trong state.recent_messages."
             )
     return criteria
