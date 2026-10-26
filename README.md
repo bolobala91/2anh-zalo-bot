@@ -321,6 +321,10 @@ Nếu không có cờ này, bộ cài không tải, không cấu hình và khôn
 
 Nếu Hermes nằm ở vị trí chuẩn hoặc biến `HERMES_HOME` đã có, có thể bỏ tham số `--hermes-home`. Bộ cài sẽ tạo `.env` nếu thiếu, sinh khóa bí mật cho bridge, cài đủ `zalo-platform` và `zalo-tools`, cập nhật các khóa Zalo còn thiếu trong `config.yaml`, cài `websockets` và `pillow-jxl-plugin` vào Python của Hermes rồi tự chạy kiểm tra. Chạy lại cùng lệnh để nâng cấp; cấu hình, phiên Zalo và SQLite được giữ nguyên.
 
+Nếu `HERMES_HOME` là profile tách khỏi mã Hermes, đặt thêm biến `HERMES_REPO` trỏ tới checkout chứa `gateway/`, `plugins/` và `pyproject.toml` khi chạy `doctor`; chỉ `--hermes-home` không đủ để công cụ tìm mã Hermes trong bố trí này.
+
+Trên máy nhiều profile, khi tự khởi động sidecar phải đặt `HERMES_HOME` của tiến trình đúng profile: biến đã có trong môi trường được ưu tiên hơn giá trị trong `.env` của bot. Sau khi bật, kiểm tra `authorization.ownerConfigured` tại `/api/health` để chắc chắn sidecar đã nạp danh sách chủ nhân.
+
 Sau khi `doctor` đạt, chạy sidecar:
 
 ```bash
