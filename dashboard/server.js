@@ -21,6 +21,7 @@ import { createSidecarClient } from './lib/sidecar-client.js';
 import { createTelegramLinker } from './lib/telegram.js';
 import { createStoreReader } from './lib/store-reader.js';
 import { createContextGateReader } from './lib/context-gate-reader.js';
+import { createAuditCleaner } from './lib/audit-cleaner.js';
 import { createThreadNames } from './lib/thread-names.js';
 import { createPermissionsStore, makeDmEnv, makeGlobalReplyOnlyTagged } from './lib/permissions.js';
 import { createWatchdog } from './lib/watchdog.js';
@@ -103,6 +104,7 @@ export function buildDeps({ env = process.env, sidecarRoot = join(here, '..'), i
     paths, config, sidecar, linker,
     store,
     contextGate: createContextGateReader({ file: join(paths.hermesHome, 'zalo', 'context-gate-events.jsonl'), feedbackFile: join(paths.hermesHome, 'zalo', 'context-gate-feedback.json'), store }),
+    auditCleaner: createAuditCleaner({ path: paths.sqliteFile }),
     botUses: createBotUses({
       hermesHome: paths.hermesHome, stateDb: paths.hermesStateDb, zaloDb: paths.sqliteFile,
       owners: () => [...owners.list(), ...owners.overrideUids()],

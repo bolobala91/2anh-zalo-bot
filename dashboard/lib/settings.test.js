@@ -61,8 +61,8 @@ test('legacy probability threshold is hidden and preserved without affecting cat
 });
 
 test('danh sách cố định: không khoá bí mật nào; mỗi mục có kiểu, nhóm, đích khởi động lại', () => {
-  assert.equal(SETTINGS.length, 21);
-  assert.deepEqual(SETTINGS.filter((s) => s.restart.length).map((s) => s.id), ['friendTools', 'historyDays', 'contextGateEnabled', 'contextGateClassifier', 'contextGateFallbackEnabled', 'contextGateFallbackModel', 'contextGateOpenrouterFallbackEnabled'], 'gate cần nạp lại scope của gateway');
+  assert.equal(SETTINGS.length, 22);
+  assert.deepEqual(SETTINGS.filter((s) => s.restart.length).map((s) => s.id), ['friendTools', 'historyDays', 'auditDays', 'contextGateEnabled', 'contextGateClassifier', 'contextGateFallbackEnabled', 'contextGateFallbackModel', 'contextGateOpenrouterFallbackEnabled']);
   for (const s of SETTINGS) {
     assert.doesNotMatch(s.env, /KEY|TOKEN|SECRET|PASSWORD/, s.env);
     assert.ok(['bool', 'int', 'float', 'enum', 'ids', 'names', 'patterns'].includes(s.type), s.id);
