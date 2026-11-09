@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Chạy 12 test suite Python của repo (test_zalo_adapter.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_open_data.py, test_zalo_memory_drift.py, test_zalo_reply_style.py, test_zalo_memory_tags.py, test_zalo_freshness.py, test_zalo_model_command.py, test_zalo_permissions.py, test_zalo_studio.py, test_zalo_insight.py, test_zalo_memory.py, test_zalo_keypool.py, test_dashboard_hermes_admin.py, scripts/test_lay_token_facebook.py,
+// Chạy 12 test suite Python của repo (test_zalo_adapter.py, test_zalo_self_knowledge.py, test_zalo_media.py, test_zalo_pdf.py, test_zalo_academic.py, test_zalo_open_data.py, test_zalo_memory_drift.py, test_zalo_reply_style.py, test_zalo_memory_tags.py, test_zalo_freshness.py, test_zalo_model_command.py, test_zalo_permissions.py, test_zalo_studio.py, test_zalo_insight.py, test_zalo_memory.py, test_zalo_keypool.py, test_dashboard_hermes_admin.py, scripts/test_lay_token_facebook.py,
 // tts/test_vieneu_provider.py) mà `node --test` không bao giờ đụng tới.
 //
 // Dò Python theo thứ tự: biến PYTHON (nếu đặt, dùng đúng nó, không âm thầm rơi xuống lựa chọn
@@ -79,6 +79,7 @@ const suites = [
   { label: 'test_zalo_media.py', module: 'test_zalo_media', cwd: REPO_ROOT, requires: 'import gateway, lxml, httpx' },
   { label: 'test_zalo_video_edit.py', module: 'test_zalo_video_edit', cwd: REPO_ROOT, requires: 'import gateway, lxml, httpx' },
   { label: 'test_zalo_group_safety.py', module: 'test_zalo_group_safety', cwd: REPO_ROOT, requires: 'import gateway' },
+  { label: 'test_zalo_burn_alert.py', module: 'test_zalo_burn_alert', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_pdf.py', module: 'test_zalo_pdf', cwd: REPO_ROOT, requires: 'import gateway, pymupdf, pdf2docx' },
   { label: 'test_zalo_academic.py', module: 'test_zalo_academic', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_open_data.py', module: 'test_zalo_open_data', cwd: REPO_ROOT, requires: 'import gateway' },
@@ -87,6 +88,7 @@ const suites = [
   { label: 'test_zalo_member_skills.py', module: 'test_zalo_member_skills', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_memory_tags.py', module: 'test_zalo_memory_tags', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_freshness.py', module: 'test_zalo_freshness', cwd: REPO_ROOT, requires: 'import gateway' },
+  { label: 'test_zalo_self_knowledge.py', module: 'test_zalo_self_knowledge', cwd: REPO_ROOT, requires: 'import gateway' },
   { label: 'test_zalo_media_engines.py', module: 'test_zalo_media_engines', cwd: REPO_ROOT, requires: 'import gateway, requests' },
   { label: 'test_zalo_model_command.py', module: 'test_zalo_model_command', cwd: REPO_ROOT, requires: 'import gateway, yaml' },
   { label: 'test_zalo_permissions.py', module: 'test_zalo_permissions', cwd: REPO_ROOT, requires: 'import gateway' },

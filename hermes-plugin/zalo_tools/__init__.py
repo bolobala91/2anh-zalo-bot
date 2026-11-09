@@ -68,6 +68,13 @@ def register(ctx) -> None:
         ctx.register_hook("pre_llm_call", freshness.pre_llm_call)
     except Exception:  # cố hết sức — thiếu thì bot vẫn trả lời, chỉ không tự tra trước
         logger.warning("[zalo] không bật được tra cứu trước khi trả lời", exc_info=True)
+    # Hỏi về tính năng/phiên bản của chính bot: đính các bản gần đây từ CHANGELOG.md trên máy, không để mô hình tra web
+    # rồi đoán (sự cố 03/11/2026) — xem self_knowledge.py.
+    try:
+        from . import self_knowledge
+        ctx.register_hook("pre_llm_call", self_knowledge.pre_llm_call)
+    except Exception:  # cố hết sức — thiếu thì bot vẫn trả lời, chỉ không biết bản đang chạy
+        logger.warning("[zalo] không bật được thông tin phiên bản của bot", exc_info=True)
     # Skill chủ bot mở cho thành viên (dashboard › Skill › "Thành viên"): báo trợ lý danh sách ở lượt của thành viên.
     try:
         from . import member_skills
@@ -102,6 +109,13 @@ def register(ctx) -> None:
         media_engines.register(ctx)
     except Exception:  # cố hết sức — thiếu thì image_generate/video_generate dùng nguồn khác đã cấu hình
         logger.warning("[zalo] không đăng ký được nguồn tạo ảnh/video", exc_info=True)
+    # Bot đang đốt tiền model (công cụ lỗi lặp, token tăng vọt): báo người vận hành qua bot của họ — xem burn_alert.py.
+    try:
+        from . import burn_alert
+        ctx.register_hook("post_tool_call", burn_alert.post_tool_call)
+        ctx.register_hook("post_api_request", burn_alert.post_api_request)
+    except Exception:  # cố hết sức — thiếu thì chỉ không có cảnh báo
+        logger.warning("[zalo] không bật được cảnh báo đốt tiền", exc_info=True)
     # Phải chạy sau register_tools: định nghĩa dựa trên bộ công cụ lõi và
     # cần dọn bộ nhớ đệm của resolve_toolset sau khi registry đã đổi.
     define_platform_composite()
